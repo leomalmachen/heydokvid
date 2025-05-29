@@ -32,16 +32,17 @@ class Settings(BaseSettings):
         "http://localhost:3000",
         "http://localhost:3001",
         "http://localhost:8000",
-        "https://f2f9-217-138-216-222.ngrok-free.app"
+        "https://f2f9-217-138-216-222.ngrok-free.app",
+        "https://video-meeting-app-two.vercel.app"
     ]
     
     # Frontend
     FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:3000")
     
-    # LiveKit
-    LIVEKIT_API_KEY: str = os.getenv("LIVEKIT_API_KEY", "devkey")
-    LIVEKIT_API_SECRET: str = os.getenv("LIVEKIT_API_SECRET", "secret")
-    LIVEKIT_URL: str = os.getenv("LIVEKIT_URL", "ws://localhost:7880")
+    # LiveKit - Updated with Cloud Configuration
+    LIVEKIT_API_KEY: str = os.getenv("LIVEKIT_API_KEY", "APIM4pxPvXu6uF4")
+    LIVEKIT_API_SECRET: str = os.getenv("LIVEKIT_API_SECRET", "FWueZ5yBMWcnYmC9uOyzBjeKIFz9kmN7mmogeaPcWr1A")
+    LIVEKIT_URL: str = os.getenv("LIVEKIT_URL", "wss://malmachen-8s6xtzpq.livekit.cloud")
     
     # Database
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./heydok_video.db")
