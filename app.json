@@ -1,0 +1,42 @@
+{
+  "name": "Video Meeting Platform",
+  "description": "A secure video conferencing platform with LiveKit integration",
+  "repository": "https://github.com/your-username/your-repo",
+  "logo": "https://cdn.jsdelivr.net/npm/simple-icons@v3/icons/video.svg",
+  "keywords": ["python", "fastapi", "video", "meeting", "livekit", "webrtc"],
+  "image": "heroku/python",
+  "stack": "heroku-22",
+  "buildpacks": [
+    {
+      "url": "heroku/python"
+    }
+  ],
+  "env": {
+    "LIVEKIT_URL": {
+      "description": "LiveKit server URL (use wss://livekit-demo.livekit.cloud for demo)",
+      "value": "wss://livekit-demo.livekit.cloud"
+    },
+    "LIVEKIT_API_KEY": {
+      "description": "LiveKit API Key (get from LiveKit Cloud)",
+      "value": "devkey"
+    },
+    "LIVEKIT_API_SECRET": {
+      "description": "LiveKit API Secret (get from LiveKit Cloud)",
+      "value": "secret"
+    },
+    "FRONTEND_URL": {
+      "description": "Frontend URL (will be set automatically by Heroku)",
+      "required": false
+    }
+  },
+  "formation": {
+    "web": {
+      "quantity": 1,
+      "size": "basic"
+    }
+  },
+  "addons": [],
+  "scripts": {
+    "postdeploy": "echo 'Video Meeting Platform deployed successfully!'"
+  }
+} 

@@ -1,0 +1,22 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "api/index.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "api/index.py"
+    }
+  ],
+  "env": {
+    "LIVEKIT_API_KEY": "APIM4pxPvXu6uF4",
+    "LIVEKIT_API_SECRET": "FWueZ5yBMWcnYmC9uOyzBjeKIFz9kmN7mmogeaPcWr1A",
+    "LIVEKIT_URL": "wss://malmachen-8s6xtzpq.livekit.cloud",
+    "ENVIRONMENT": "production",
+    "PORT": "10000"
+  }
+} 

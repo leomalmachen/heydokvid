@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  # LiveKit Server
+  livekit:
+    image: livekit/livekit-server:latest
+    ports:
+      - "7880:7880"
+      - "7881:7881"
+      - "7882:7882/udp"
+    environment:
+      LIVEKIT_KEYS: "devkey: secret"
+    restart: unless-stopped
+    networks:
+      - heydok-network
+
+  # Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8002:8002"
+    environment:
+      - PORT=8002
+      - LIVEKIT_API_KEY=devkey
+      - LIVEKIT_API_SECRET=secret
+      - LIVEKIT_URL=ws://livekit:7880
+      - ENVIRONMENT=development
+      - DEBUG=true
+    volumes:
+      - ./backend:/app
+      - ./logs:/app/logs
+      - ../frontend:/app/frontend
+    depends_on:
+      - livekit
+    restart: unless-stopped
+    networks:
+      - heydok-network
+
+  # Redis (for session management and caching)
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./data/redis:/data
+    restart: unless-stopped
+    networks:
+      - heydok-network
+
+  # PostgreSQL (for persistent data)
+  postgres:
+    image: postgres:15-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=heydok_video
+      - POSTGRES_USER=heydok
+      - POSTGRES_PASSWORD=heydok_dev_password
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - heydok-network
+
+networks:
+  heydok-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data: 

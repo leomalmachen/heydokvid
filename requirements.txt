@@ -1,0 +1,13 @@
+# Core Framework
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6
+
+# Authentication & Security
+pyjwt==2.8.0
+
+# Validation & Serialization
+pydantic==2.4.2
+
+# Utilities
+python-dotenv==1.0.0 

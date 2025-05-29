@@ -1,0 +1,80 @@
+services:
+  # Full-Stack Video Meeting App (Simple Version)
+  - type: web
+    name: video-meeting-app
+    runtime: python3
+    buildCommand: pip install -r backend/backend/requirements-production.txt
+    startCommand: python backend/backend/main.py
+    envVars:
+      - key: LIVEKIT_API_KEY
+        value: APIM4pxPvXu6uF4
+      - key: LIVEKIT_API_SECRET
+        value: FWueZ5yBMWcnYmC9uOyzBjeKIFz9kmN7mmogeaPcWr1A
+      - key: LIVEKIT_URL
+        value: wss://malmachen-8s6xtzpq.livekit.cloud
+      - key: ENVIRONMENT
+        value: production
+      - key: PORT
+        value: 10000
+      - key: FRONTEND_URL
+        value: https://video-meeting-app.onrender.com
+    healthCheckPath: /health
+    autoDeploy: true
+
+  # Backend API (Full Version with Database)
+  - type: web
+    name: heydok-video-backend
+    runtime: docker
+    dockerfilePath: ./backend/backend/Dockerfile
+    dockerContext: ./backend/backend
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: heydok-video-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: heydok-video-redis
+          property: connectionString
+      - key: LIVEKIT_API_KEY
+        value: APIwkvkVSaRyTE3
+      - key: LIVEKIT_API_SECRET
+        value: 7FVh4h09qkZyejvgtV4Mc5Yo6uNgaMNVofxvCQBnRgf
+      - key: LIVEKIT_URL
+        value: wss://google-meet-replacer-fcw5apmd.livekit.cloud
+      - key: SECRET_KEY
+        generateValue: true
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ENCRYPTION_KEY
+        generateValue: true
+      - key: CORS_ORIGINS
+        value: https://heydok-video-frontend.netlify.app,https://heydok-video-backend.onrender.com
+      - key: ALLOWED_HOSTS
+        value: heydok-video-backend.onrender.com,localhost
+      - key: ENVIRONMENT
+        value: production
+      - key: DEBUG
+        value: false
+      - key: LOG_LEVEL
+        value: info
+      - key: FRONTEND_URL
+        value: https://heydok-video-frontend.netlify.app
+      - key: PROMETHEUS_ENABLED
+        value: false
+    healthCheckPath: /health
+    autoDeploy: false
+
+  # Redis Cache
+  - type: redis
+    name: heydok-video-redis
+    ipAllowList: []
+    plan: starter
+
+databases:
+  # PostgreSQL Database
+  - name: heydok-video-db
+    databaseName: heydok_video
+    user: heydok
+    plan: starter 

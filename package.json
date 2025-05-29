@@ -1,0 +1,34 @@
+{
+  "name": "simple-meet-video-platform",
+  "version": "1.0.0",
+  "description": "Video meeting platform with WebRTC",
+  "main": "simple-meet/backend/server.js",
+  "scripts": {
+    "start": "cd simple-meet/backend && npm start",
+    "build": "cd simple-meet/frontend && npm install && npm run build",
+    "dev": "concurrently \"cd simple-meet/backend && npm start\" \"cd simple-meet/frontend && npm run dev\"",
+    "install-all": "cd simple-meet/backend && npm install && cd ../frontend && npm install",
+    "heroku-postbuild": "cd simple-meet/frontend && npm install && npm run build"
+  },
+  "engines": {
+    "node": ">=16.0.0",
+    "npm": ">=8.0.0"
+  },
+  "dependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "devDependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/leomalmachen/video-meeting-app.git"
+  },
+  "keywords": [
+    "video",
+    "meeting",
+    "webrtc",
+    "react",
+    "nodejs"
+  ],
+  "author": "Leo Pöppel",
+  "license": "MIT"
+}
