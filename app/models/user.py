@@ -44,8 +44,8 @@ class User(BaseModel):
     last_login = Column(DateTime(timezone=True), nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
     
-    # Additional metadata
-    metadata = Column(JSON, default=dict, nullable=False)
+    # Additional user metadata (renamed from metadata to avoid SQLAlchemy conflict)
+    user_metadata = Column(JSON, default=dict, nullable=False)
     
     # Relationships
     created_rooms = relationship(
