@@ -1,1 +1,1 @@
-web: cd backend && python -m uvicorn simple_meetings_api:app --host 0.0.0.0 --port $PORT --workers 1 
+web: uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} 

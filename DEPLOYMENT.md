@@ -1,280 +1,193 @@
-# Deployment Guide - Video Meeting App
+# Deployment Guide
 
-This guide explains how to deploy your video meeting application to Render.com.
+This guide covers deployment options for the Video Meeting Platform.
 
-## 🏗️ Architecture Overview
+## 🚀 Deployment Options
 
-The application consists of two main services:
+### 1. Render.com (Recommended)
 
-1. **Simple Video Meeting App** (`video-meeting-app`)
-   - Runtime: Python 3.11
-   - Entry point: `backend/main.py`
-   - Standalone FastAPI application
-   - No database dependencies
+Render provides easy deployment with automatic SSL and scaling.
 
-2. **Full Backend API** (`heydok-video-backend`)
-   - Runtime: Docker
-   - Entry point: `backend/app/main.py`
-   - Full-featured application with database and Redis
-   - HIPAA/GDPR compliant features
+#### Prerequisites
+- Render account
+- GitHub repository
+- Environment variables ready
 
-## 🚀 Quick Deployment
+#### Steps
 
-### Prerequisites
-
-1. GitHub account with your code repository
-2. Render.com account
-3. LiveKit account and credentials
-
-### Step 1: Prepare Your Repository
-
-1. Ensure all changes are committed and pushed to GitHub
-2. Run the deployment preparation script:
+1. **Prepare your repository**
    ```bash
    ./deploy-render.sh
    ```
 
-### Step 2: Deploy to Render
+2. **Create services on Render**
+   - Go to [render.com](https://render.com)
+   - Create a new Web Service
+   - Connect your GitHub repository
+   - Use the following settings:
+     - Build Command: `pip install -r requirements.txt`
+     - Start Command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
 
-1. Go to [Render Dashboard](https://dashboard.render.com)
-2. Click "New" → "Blueprint"
-3. Connect your GitHub repository
-4. Render will automatically detect the `render.yaml` file
-5. Review the services and click "Apply"
+3. **Configure environment variables**
+   Add these in Render dashboard:
+   ```
+   LIVEKIT_URL=your_livekit_url
+   LIVEKIT_API_KEY=your_api_key
+   LIVEKIT_API_SECRET=your_api_secret
+   DATABASE_URL=your_postgres_url
+   REDIS_URL=your_redis_url
+   SECRET_KEY=your_secret_key
+   ```
 
-## 📋 Services Configuration
+4. **Deploy**
+   - Click "Deploy"
+   - Wait for build to complete
+   - Your app will be available at `https://your-app.onrender.com`
 
-### Simple App (video-meeting-app)
+### 2. Docker Deployment
 
-- **URL**: `https://video-meeting-app.onrender.com`
-- **Health Check**: `/health`
-- **Auto Deploy**: Enabled
-- **Environment Variables**:
-  - `LIVEKIT_API_KEY`: Your LiveKit API key
-  - `LIVEKIT_API_SECRET`: Your LiveKit API secret
-  - `LIVEKIT_URL`: Your LiveKit WebSocket URL
-  - `ENVIRONMENT`: production
-  - `PORT`: 10000
+Docker provides consistent deployment across any platform.
 
-### Full Backend (heydok-video-backend)
+#### Local Docker
 
-- **URL**: `https://heydok-video-backend.onrender.com`
-- **Health Check**: `/health`
-- **Auto Deploy**: Disabled (manual deployment)
-- **Dependencies**: PostgreSQL database, Redis cache
-- **Environment Variables**:
-  - Database and Redis URLs (auto-configured)
-  - LiveKit credentials
-  - Security keys (auto-generated)
-  - CORS and host settings
+1. **Build the image**
+   ```bash
+   docker build -t video-meeting-app .
+   ```
 
-### Database (heydok-video-db)
+2. **Run the container**
+   ```bash
+   docker run -p 8000:8000 \
+     -e LIVEKIT_URL=your_livekit_url \
+     -e LIVEKIT_API_KEY=your_api_key \
+     -e LIVEKIT_API_SECRET=your_api_secret \
+     -e DATABASE_URL=your_postgres_url \
+     -e REDIS_URL=your_redis_url \
+     -e SECRET_KEY=your_secret_key \
+     video-meeting-app
+   ```
 
-- **Type**: PostgreSQL
-- **Plan**: Starter
-- **Database Name**: heydok_video
-- **User**: heydok
+#### Docker Compose
 
-### Cache (heydok-video-redis)
+1. **Start all services**
+   ```bash
+   docker-compose -f docker-compose.dev.yml up -d
+   ```
 
-- **Type**: Redis
-- **Plan**: Starter
-- **IP Allow List**: Empty (accessible by services)
+2. **Check logs**
+   ```bash
+   docker-compose logs -f
+   ```
 
-## 🔧 Configuration Files
+3. **Stop services**
+   ```bash
+   docker-compose down
+   ```
 
-### Requirements Files
+## 📋 Environment Variables
 
-- `backend/requirements.txt`: Full development dependencies
-- `backend/requirements-production.txt`: Production-only dependencies (optimized)
+### Required Variables
 
-### Docker Configuration
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `LIVEKIT_URL` | LiveKit server URL | `wss://your-livekit.com` |
+| `LIVEKIT_API_KEY` | LiveKit API key | `APIxxxxxxxx` |
+| `LIVEKIT_API_SECRET` | LiveKit API secret | `secret-key-here` |
+| `DATABASE_URL` | PostgreSQL connection | `postgresql://user:pass@host/db` |
+| `REDIS_URL` | Redis connection | `redis://localhost:6379` |
+| `SECRET_KEY` | App secret key | `your-secret-key` |
 
-- `backend/Dockerfile`: Optimized for production deployment
-- Uses Python 3.11 slim image
-- Non-root user for security
-- Health checks included
+### Optional Variables
 
-### Render Configuration
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `PORT` | Server port | `8000` |
+| `LOG_LEVEL` | Logging level | `INFO` |
+| `CORS_ORIGINS` | Allowed origins | `["*"]` |
 
-- `render.yaml`: Complete service definitions
-- Environment variables
-- Service dependencies
-- Health check endpoints
+## 🔍 Health Checks
 
-## 🔍 Monitoring and Debugging
-
-### Health Checks
-
-Both services expose health check endpoints:
-
+### API Health
 ```bash
-# Simple app
-curl https://video-meeting-app.onrender.com/health
-
-# Full backend
-curl https://heydok-video-backend.onrender.com/health
+curl https://your-app.com/health
 ```
 
-### Logs
-
-View logs in the Render dashboard:
-1. Go to your service
-2. Click on "Logs" tab
-3. Monitor real-time logs
-
-### API Documentation
-
-For the full backend (when DEBUG=true):
-- API Docs: `https://heydok-video-backend.onrender.com/api/docs`
-- ReDoc: `https://heydok-video-backend.onrender.com/api/redoc`
-
-## 🔐 Security Considerations
-
-### Environment Variables
-
-The following are auto-generated for security:
-- `SECRET_KEY`: Application secret key
-- `JWT_SECRET`: JWT signing secret
-- `ENCRYPTION_KEY`: Data encryption key
-
-### CORS Configuration
-
-Update CORS origins in `render.yaml` to match your frontend domains:
-```yaml
-- key: CORS_ORIGINS
-  value: https://your-frontend.netlify.app,https://your-backend.onrender.com
-```
-
-### Allowed Hosts
-
-Configure allowed hosts for the full backend:
-```yaml
-- key: ALLOWED_HOSTS
-  value: your-backend.onrender.com,localhost
+### LiveKit Connection
+```bash
+curl https://your-app.com/api/v1/health/livekit
 ```
 
 ## 🚨 Troubleshooting
 
 ### Common Issues
 
-1. **Build Failures**
-   - Check that all dependencies in `requirements-production.txt` are valid
-   - Ensure Python version compatibility (3.11)
+1. **Port conflicts**
+   - Change the PORT environment variable
+   - Check for other services on the same port
 
-2. **Service Won't Start**
-   - Check environment variables are set correctly
-   - Verify health check endpoint is accessible
-   - Review logs for error messages
+2. **LiveKit connection errors**
+   - Verify credentials are correct
+   - Check LiveKit server is accessible
+   - Ensure WebSocket connections are allowed
 
-3. **Database Connection Issues**
-   - Ensure database service is running
-   - Check `DATABASE_URL` environment variable
-   - Verify database credentials
+3. **Database connection issues**
+   - Verify DATABASE_URL format
+   - Check network connectivity
+   - Ensure database is running
 
-4. **LiveKit Connection Issues**
-   - Verify LiveKit credentials are correct
-   - Check LiveKit URL format (should start with `wss://`)
-   - Ensure LiveKit service is active
+### Logs
 
-### Debug Commands
+- **Render**: Check logs in Render dashboard
+- **Docker**: `docker logs container-name`
+- **Local**: Check `logs/` directory
 
-```bash
-# Check service status
-curl -I https://your-app.onrender.com/health
+## 🔒 Security Considerations
 
-# Test database connection (from app logs)
-# Look for database connection messages in logs
+1. **Use HTTPS in production**
+2. **Set strong SECRET_KEY**
+3. **Restrict CORS origins**
+4. **Use environment variables for secrets**
+5. **Enable rate limiting**
+6. **Regular security updates**
 
-# Test Redis connection (from app logs)
-# Look for Redis connection messages in logs
-```
+## 📊 Monitoring
 
-## 📈 Scaling and Performance
+### Recommended Tools
+- **Sentry** for error tracking
+- **Prometheus** for metrics
+- **Grafana** for visualization
+- **Uptime monitoring** services
 
-### Resource Limits
-
-Render Starter plans include:
-- 512 MB RAM
-- 0.1 CPU
-- 10 GB bandwidth/month
-
-### Optimization Tips
-
-1. **Use Production Requirements**
-   - Excludes development and testing dependencies
-   - Faster build times
-   - Smaller container size
-
-2. **Enable Caching**
-   - Docker layer caching
-   - Pip cache for dependencies
-
-3. **Monitor Performance**
-   - Use health check endpoints
-   - Monitor response times
-   - Check resource usage in dashboard
+### Key Metrics
+- Response times
+- Error rates
+- Active connections
+- Room usage
+- API usage
 
 ## 🔄 Updates and Maintenance
 
 ### Updating Dependencies
-
-1. Update `requirements-production.txt`
-2. Test locally
-3. Commit and push changes
-4. Redeploy services
+```bash
+pip install --upgrade -r requirements.txt
+```
 
 ### Database Migrations
+```bash
+alembic upgrade head
+```
 
-For the full backend with database:
-1. Create migration files
-2. Deploy backend service
-3. Migrations run automatically on startup
-
-### Rolling Back
-
-1. Go to Render dashboard
-2. Select service
-3. Go to "Deploys" tab
-4. Click "Redeploy" on previous successful deployment
+### Rolling Updates
+1. Deploy new version
+2. Run health checks
+3. Switch traffic
+4. Monitor for issues
 
 ## 📞 Support
 
-### Render Support
-
-- [Render Documentation](https://render.com/docs)
-- [Render Community](https://community.render.com)
-- [Render Status](https://status.render.com)
-
-### Application Support
-
-- Check application logs in Render dashboard
-- Review health check endpoints
-- Monitor service dependencies
-
----
-
-## 🎯 Next Steps
-
-After successful deployment:
-
-1. **Test the Application**
-   - Visit the deployed URLs
-   - Test video meeting functionality
-   - Verify LiveKit integration
-
-2. **Configure Frontend**
-   - Update frontend to use production API URLs
-   - Deploy frontend to Netlify or similar
-
-3. **Set Up Monitoring**
-   - Configure alerts for service downtime
-   - Set up log aggregation if needed
-   - Monitor performance metrics
-
-4. **Security Review**
-   - Review environment variables
-   - Check CORS settings
-   - Verify SSL certificates
-
-Happy deploying! 🚀 
+For deployment issues:
+1. Check logs first
+2. Review environment variables
+3. Test locally with same config
+4. Check GitHub issues
+5. Contact support if needed 
