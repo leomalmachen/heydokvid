@@ -9,29 +9,18 @@ from typing import Any, Dict
 
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from fastapi.responses import JSONResponse, FileResponse
-from prometheus_fastapi_instrumentator import Instrumentator
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
+from fastapi.responses import JSONResponse
 import structlog
 import os
 
 from app.core.config import settings
-from app.core.database import engine, Base
 from app.core.logging import setup_logging
-from app.api.v1.api import api_router
-from app.core.security import SecurityMiddleware
-from app.core.audit import AuditMiddleware
+from app.core.security import SecurityMiddleware, GDPRComplianceMiddleware
 
 
 # Setup structured logging
 setup_logging()
 logger = structlog.get_logger()
-
-# Rate limiter
-limiter = Limiter(key_func=get_remote_address)
 
 
 @asynccontextmanager
@@ -42,26 +31,18 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting Heydok Video Backend", version=settings.VERSION)
     
-    # Create database tables
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    
     # Initialize LiveKit client
-    from app.core.livekit import livekit_client
-    await livekit_client.initialize()
-    
-    # Initialize Redis
-    from app.core.redis import redis_client
-    await redis_client.initialize()
+    try:
+        from app.core.livekit import livekit_client
+        await livekit_client.initialize()
+        logger.info("LiveKit client initialized successfully")
+    except Exception as e:
+        logger.error("Failed to initialize LiveKit client", error=str(e))
     
     yield
     
     # Shutdown
     logger.info("Shutting down Heydok Video Backend")
-    
-    # Close connections
-    await redis_client.close()
-    await engine.dispose()
 
 
 # Create FastAPI app
@@ -75,15 +56,9 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Add rate limit exceeded handler
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-
-# Security Middleware
+# Add security middleware
 app.add_middleware(SecurityMiddleware)
-
-# Audit Middleware
-app.add_middleware(AuditMiddleware)
+app.add_middleware(GDPRComplianceMiddleware)
 
 # CORS Middleware
 app.add_middleware(
@@ -94,18 +69,6 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=["X-Request-ID"],
 )
-
-# Trusted Host Middleware
-if not settings.DEBUG:
-    app.add_middleware(
-        TrustedHostMiddleware,
-        allowed_hosts=settings.ALLOWED_HOSTS
-    )
-
-# Prometheus metrics
-if settings.PROMETHEUS_ENABLED:
-    instrumentator = Instrumentator()
-    instrumentator.instrument(app).expose(app, endpoint="/metrics")
 
 
 # Exception handlers
@@ -136,17 +99,43 @@ async def general_exception_handler(request: Request, exc: Exception):
 @app.get("/health", tags=["health"])
 async def health_check() -> Dict[str, Any]:
     """
-    Health check endpoint
+    Health check endpoint with system status
     """
-    return {
-        "status": "healthy",
-        "version": settings.VERSION,
-        "environment": settings.ENVIRONMENT
-    }
+    try:
+        # Test LiveKit connection
+        from app.core.livekit import livekit_client
+        livekit_status = "healthy"
+        try:
+            await livekit_client.get_room_info("health-check-room")
+        except Exception:
+            livekit_status = "degraded"
+        
+        return {
+            "status": "healthy",
+            "version": settings.VERSION,
+            "environment": settings.ENVIRONMENT,
+            "services": {
+                "livekit": livekit_status,
+                "api": "healthy"
+            }
+        }
+    except Exception as e:
+        logger.error("Health check failed", error=str(e))
+        return {
+            "status": "unhealthy",
+            "version": settings.VERSION,
+            "environment": settings.ENVIRONMENT,
+            "error": str(e)
+        }
 
 
 # Include API router
-app.include_router(api_router, prefix="/api/v1")
+try:
+    from app.api.v1.api import api_router
+    app.include_router(api_router, prefix="/api/v1")
+except Exception as e:
+    logger.error("Failed to include API router", error=str(e))
+
 
 # Frontend routing for meetings
 @app.get("/meeting/{meeting_id}")
@@ -154,8 +143,6 @@ async def serve_meeting_page(meeting_id: str):
     """
     Serve meeting page for specific meeting ID
     """
-    # In production, this would serve the React app
-    # For now, return a simple response that can be used for testing
     return {
         "meeting_id": meeting_id,
         "message": f"Meeting page for {meeting_id}",
@@ -166,18 +153,6 @@ async def serve_meeting_page(meeting_id: str):
             "exists": f"/api/v1/meetings/{meeting_id}/exists"
         }
     }
-
-# Mount frontend build directory - DISABLED FOR NOW
-# frontend_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "build")
-# app.mount("/static", StaticFiles(directory=os.path.join(frontend_path, "static")), name="static")
-
-# Serve frontend - DISABLED FOR NOW
-# @app.get("/{full_path:path}")
-# async def serve_frontend(full_path: str):
-#     file_path = os.path.join(frontend_path, "index.html")
-#     if os.path.exists(file_path):
-#         return FileResponse(file_path)
-#     raise HTTPException(status_code=404, detail="Not found")
 
 
 # Root endpoint

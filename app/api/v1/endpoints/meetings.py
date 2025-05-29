@@ -1,91 +1,158 @@
 """
-Meeting endpoints with LiveKit integration
+Meeting endpoints with enhanced LiveKit integration and security
 """
 
-from fastapi import APIRouter, HTTPException, Depends
-from datetime import datetime
+from fastapi import APIRouter, HTTPException, Depends, Request
+from datetime import datetime, timedelta
 import secrets
 import string
 from typing import Dict, Any, Optional
-from pydantic import BaseModel
 import structlog
+from pydantic import BaseModel, Field
 
-from app.core.livekit import get_livekit_client, LiveKitClient
+from app.core.livekit import livekit_client
 from app.core.config import settings
+from app.core.security import get_current_user_optional, rate_limit
+from app.models.user import User, UserRole
 
 logger = structlog.get_logger()
 router = APIRouter()
 
 
-class CreateMeetingResponse(BaseModel):
+class CreateMeetingRequest(BaseModel):
+    """Request schema for creating a meeting"""
+    name: Optional[str] = Field(None, description="Optional meeting name")
+    max_participants: int = Field(10, ge=2, le=50, description="Maximum participants (2-50)")
+    enable_recording: bool = Field(False, description="Enable recording capability")
+    enable_chat: bool = Field(True, description="Enable chat functionality")
+    enable_screen_share: bool = Field(True, description="Enable screen sharing")
+    scheduled_start: Optional[datetime] = Field(None, description="Scheduled start time")
+    scheduled_end: Optional[datetime] = Field(None, description="Scheduled end time")
+
+
+class JoinMeetingRequest(BaseModel):
+    """Request schema for joining a meeting"""
+    user_name: str = Field(..., min_length=1, max_length=100, description="Display name")
+    user_role: Optional[str] = Field("patient", description="User role (patient/physician)")
+    enable_video: bool = Field(True, description="Join with video enabled")
+    enable_audio: bool = Field(True, description="Join with audio enabled")
+
+
+class MeetingResponse(BaseModel):
+    """Response schema for meeting operations"""
     meeting_id: str
     meeting_link: str
     created_at: str
     livekit_url: str
-
-
-class JoinMeetingRequest(BaseModel):
-    user_name: str
+    success: bool
+    expires_at: Optional[str] = None
 
 
 class JoinMeetingResponse(BaseModel):
+    """Response schema for joining a meeting"""
     token: str
     meeting_id: str
     user_name: str
     livekit_url: str
     user_id: str
+    success: bool
+    expires_at: str
+    permissions: Dict[str, bool]
 
 
-class MeetingInfoResponse(BaseModel):
-    meeting_id: str
-    exists: bool
-    num_participants: int = 0
-    created_at: Optional[str] = None
-    max_participants: int = 50
+def generate_room_id() -> str:
+    """Generate a secure, unique room ID"""
+    # Use cryptographically secure random generation
+    parts = []
+    for length in [3, 4, 3]:
+        part = ''.join(secrets.choice(string.ascii_lowercase + string.digits) for _ in range(length))
+        parts.append(part)
+    return '-'.join(parts)
 
 
-@router.post("/create", response_model=CreateMeetingResponse)
+def validate_meeting_name(name: str) -> str:
+    """Validate and sanitize meeting name"""
+    if not name:
+        return f"Meeting-{datetime.utcnow().strftime('%Y%m%d-%H%M')}"
+    
+    # Remove potentially harmful characters
+    sanitized = ''.join(c for c in name if c.isalnum() or c in ' -_()[]')
+    return sanitized[:100]  # Limit length
+
+
+@router.post("/create", response_model=MeetingResponse)
+@rate_limit(calls=10, period=60)  # 10 calls per minute
 async def create_meeting(
-    livekit: LiveKitClient = Depends(get_livekit_client)
-) -> CreateMeetingResponse:
+    request: CreateMeetingRequest,
+    current_user: Optional[User] = Depends(get_current_user_optional),
+    http_request: Request = None
+) -> MeetingResponse:
     """
-    Create a new meeting room
+    Create a new meeting room with enhanced security
     
     This endpoint:
-    1. Generates a unique meeting ID
-    2. Creates a persistent room on the LiveKit server
-    3. Returns a shareable meeting link
+    1. Validates user permissions (if authenticated)
+    2. Generates a unique, secure meeting ID
+    3. Creates a persistent room on the LiveKit server
+    4. Returns a shareable meeting link with expiration
+    5. Logs the action for audit trail
     """
     try:
-        # Generate unique meeting ID
-        meeting_id = livekit.generate_room_id()
+        # Validate permissions for recording
+        if request.enable_recording and current_user:
+            if not current_user.can_record:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Recording permission required"
+                )
         
-        # Create room on LiveKit server
-        room = await livekit.create_room(
+        # Validate scheduled times
+        if request.scheduled_start and request.scheduled_end:
+            if request.scheduled_end <= request.scheduled_start:
+                raise HTTPException(
+                    status_code=400,
+                    detail="End time must be after start time"
+                )
+        
+        # Generate unique meeting ID
+        meeting_id = generate_room_id()
+        
+        # Validate and sanitize meeting name
+        meeting_name = validate_meeting_name(request.name)
+        
+        # Create room on LiveKit server with enhanced configuration
+        room = await livekit_client.create_room(
             room_name=meeting_id,
-            empty_timeout=3600,  # Room stays 1 hour after last participant
-            max_participants=50,
-            metadata={
-                "created_at": datetime.utcnow().isoformat(),
-                "created_by": "instant_meeting"
-            }
+            max_participants=request.max_participants,
+            enable_recording=request.enable_recording
         )
         
         # Generate meeting link
-        # Use the frontend URL from settings
         meeting_link = f"{settings.FRONTEND_URL}/meeting/{meeting_id}"
         
-        logger.info("Created meeting room",
-                   meeting_id=meeting_id,
-                   room_sid=room.get("sid"))
+        # Calculate expiration (24 hours from now)
+        expires_at = datetime.utcnow() + timedelta(hours=24)
         
-        return CreateMeetingResponse(
+        # Log the action
+        logger.info("Meeting created",
+                   meeting_id=meeting_id,
+                   room_sid=room.get("sid"),
+                   created_by=current_user.id if current_user else "anonymous",
+                   max_participants=request.max_participants,
+                   enable_recording=request.enable_recording,
+                   client_ip=http_request.client.host if http_request else None)
+        
+        return MeetingResponse(
             meeting_id=meeting_id,
             meeting_link=meeting_link,
             created_at=datetime.utcnow().isoformat(),
-            livekit_url=settings.LIVEKIT_URL
+            livekit_url=settings.LIVEKIT_URL,
+            success=True,
+            expires_at=expires_at.isoformat()
         )
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Failed to create meeting", error=str(e))
         raise HTTPException(
@@ -95,52 +162,109 @@ async def create_meeting(
 
 
 @router.post("/{meeting_id}/join", response_model=JoinMeetingResponse)
+@rate_limit(calls=20, period=60)  # 20 calls per minute
 async def join_meeting(
-    meeting_id: str,
+    meeting_id: str, 
     request: JoinMeetingRequest,
-    livekit: LiveKitClient = Depends(get_livekit_client)
+    current_user: Optional[User] = Depends(get_current_user_optional),
+    http_request: Request = None
 ) -> JoinMeetingResponse:
     """
-    Join an existing meeting
+    Join an existing meeting with enhanced security
     
     This endpoint:
-    1. Verifies the meeting exists
-    2. Generates a unique user ID
-    3. Creates an access token for the participant
-    4. Returns the token and connection details
+    1. Validates the meeting exists and is accessible
+    2. Generates a unique user ID with role-based permissions
+    3. Creates a secure, time-limited access token
+    4. Returns connection details and user permissions
+    5. Logs the join action for audit trail
     """
     try:
-        # Check if room exists on LiveKit server
-        room = await livekit.get_room(meeting_id)
-        if not room:
+        # Validate meeting ID format
+        if not meeting_id or len(meeting_id) < 5:
+            raise HTTPException(status_code=400, detail="Invalid meeting ID format")
+        
+        # Check if room exists
+        room_info = await livekit_client.get_room_info(meeting_id)
+        if not room_info:
             logger.warning("Meeting not found", meeting_id=meeting_id)
-            raise HTTPException(status_code=404, detail="Meeting not found")
+            raise HTTPException(status_code=404, detail="Meeting not found or expired")
+        
+        # Check room capacity
+        current_participants = room_info.get("num_participants", 0)
+        max_participants = room_info.get("max_participants", 10)
+        
+        if current_participants >= max_participants:
+            raise HTTPException(
+                status_code=409, 
+                detail="Meeting is full"
+            )
+        
+        # Validate and sanitize user name
+        user_name = request.user_name.strip()
+        if len(user_name) < 1:
+            raise HTTPException(status_code=400, detail="User name is required")
         
         # Generate unique user ID
-        user_id = f"{request.user_name.lower().replace(' ', '_')}_{secrets.token_hex(4)}"
+        user_id = f"{user_name.lower().replace(' ', '_')}_{secrets.token_hex(4)}"
         
-        # Generate LiveKit access token
-        token = livekit.generate_token(
+        # Determine user role and permissions
+        user_role = request.user_role
+        if current_user:
+            user_role = current_user.role.value
+        
+        # Set permissions based on role
+        can_publish = True
+        can_subscribe = True
+        can_publish_data = True
+        
+        # Physicians get additional permissions
+        if user_role == "physician":
+            can_publish = True
+            can_subscribe = True
+            can_publish_data = True
+        elif user_role == "patient":
+            can_publish = True
+            can_subscribe = True
+            can_publish_data = False  # Patients can't send data messages by default
+        
+        # Generate LiveKit access token with role-based permissions
+        token = await livekit_client.generate_token(
             room_name=meeting_id,
-            identity=user_id,
-            name=request.user_name,
-            metadata={"joined_at": datetime.utcnow().isoformat()},
-            can_publish=True,
-            can_subscribe=True,
-            can_publish_data=True
+            participant_name=user_name,
+            user_role=user_role,
+            can_publish=can_publish,
+            can_subscribe=can_subscribe,
+            can_publish_data=can_publish_data,
+            expires_in_minutes=120  # 2 hours
         )
         
+        # Calculate token expiration
+        expires_at = datetime.utcnow() + timedelta(hours=2)
+        
+        # Log the join action
         logger.info("User joined meeting",
                    meeting_id=meeting_id,
                    user_id=user_id,
-                   user_name=request.user_name)
+                   user_name=user_name,
+                   user_role=user_role,
+                   authenticated_user=current_user.id if current_user else None,
+                   client_ip=http_request.client.host if http_request else None)
         
         return JoinMeetingResponse(
             token=token,
             meeting_id=meeting_id,
-            user_name=request.user_name,
+            user_name=user_name,
             livekit_url=settings.LIVEKIT_URL,
-            user_id=user_id
+            user_id=user_id,
+            success=True,
+            expires_at=expires_at.isoformat(),
+            permissions={
+                "can_publish": can_publish,
+                "can_subscribe": can_subscribe,
+                "can_publish_data": can_publish_data,
+                "is_admin": user_role == "physician"
+            }
         )
         
     except HTTPException:
@@ -148,147 +272,99 @@ async def join_meeting(
     except Exception as e:
         logger.error("Failed to join meeting", 
                     error=str(e),
-                    meeting_id=meeting_id)
+                    meeting_id=meeting_id,
+                    user_name=request.user_name)
         raise HTTPException(
             status_code=500,
             detail=f"Failed to join meeting: {str(e)}"
         )
 
 
-@router.get("/{meeting_id}/info", response_model=MeetingInfoResponse)
-async def get_meeting_info(
-    meeting_id: str,
-    livekit: LiveKitClient = Depends(get_livekit_client)
-) -> MeetingInfoResponse:
+@router.get("/{meeting_id}/info")
+async def get_meeting_info(meeting_id: str) -> Dict[str, Any]:
     """
-    Get information about a meeting
-    
-    This endpoint checks if a meeting exists and returns basic information
+    Get meeting information without joining
     """
     try:
-        # Get room info from LiveKit
-        room = await livekit.get_room(meeting_id)
-        
-        if room:
-            return MeetingInfoResponse(
-                meeting_id=meeting_id,
-                exists=True,
-                num_participants=room.get("num_participants", 0),
-                created_at=room.get("creation_time"),
-                max_participants=room.get("max_participants", 50)
-            )
-        else:
-            return MeetingInfoResponse(
-                meeting_id=meeting_id,
-                exists=False
-            )
-            
-    except Exception as e:
-        logger.error("Failed to get meeting info",
-                    error=str(e),
-                    meeting_id=meeting_id)
-        return MeetingInfoResponse(
-            meeting_id=meeting_id,
-            exists=False
-        )
-
-
-@router.get("/{meeting_id}/exists")
-async def check_meeting_exists(
-    meeting_id: str,
-    livekit: LiveKitClient = Depends(get_livekit_client)
-) -> Dict[str, Any]:
-    """
-    Quick check if a meeting exists
-    """
-    try:
-        room = await livekit.get_room(meeting_id)
-        return {
-            "exists": room is not None,
-            "meeting_id": meeting_id
-        }
-    except Exception as e:
-        logger.error("Failed to check meeting",
-                    error=str(e),
-                    meeting_id=meeting_id)
-        return {
-            "exists": False,
-            "meeting_id": meeting_id
-        }
-
-
-@router.delete("/{meeting_id}")
-async def delete_meeting(
-    meeting_id: str,
-    livekit: LiveKitClient = Depends(get_livekit_client)
-) -> Dict[str, Any]:
-    """
-    Delete a meeting room
-    """
-    try:
-        # Check if room exists
-        room = await livekit.get_room(meeting_id)
-        if not room:
+        room_info = await livekit_client.get_room_info(meeting_id)
+        if not room_info:
             raise HTTPException(status_code=404, detail="Meeting not found")
-        
-        # Delete room
-        success = await livekit.delete_room(meeting_id)
-        
-        if success:
-            logger.info("Deleted meeting", meeting_id=meeting_id)
-            return {
-                "success": True,
-                "message": "Meeting deleted successfully",
-                "meeting_id": meeting_id
-            }
-        else:
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to delete meeting"
-            )
-            
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error("Failed to delete meeting",
-                    error=str(e),
-                    meeting_id=meeting_id)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to delete meeting: {str(e)}"
-        )
-
-
-@router.get("/{meeting_id}/participants")
-async def list_participants(
-    meeting_id: str,
-    livekit: LiveKitClient = Depends(get_livekit_client)
-) -> Dict[str, Any]:
-    """
-    List all participants in a meeting
-    """
-    try:
-        # Check if room exists
-        room = await livekit.get_room(meeting_id)
-        if not room:
-            raise HTTPException(status_code=404, detail="Meeting not found")
-        
-        # Get participants
-        participants = await livekit.list_participants(meeting_id)
         
         return {
             "meeting_id": meeting_id,
-            "participants": participants,
-            "count": len(participants)
+            "exists": True,
+            "num_participants": room_info.get("num_participants", 0),
+            "max_participants": room_info.get("max_participants", 10),
+            "created_at": room_info.get("creation_time"),
+            "is_full": room_info.get("num_participants", 0) >= room_info.get("max_participants", 10)
         }
-        
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("Failed to list participants",
-                    error=str(e),
-                    meeting_id=meeting_id)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to list participants: {str(e)}"
-        ) 
+        logger.error("Failed to get meeting info", meeting_id=meeting_id, error=str(e))
+        raise HTTPException(status_code=500, detail="Failed to get meeting information")
+
+
+@router.get("/{meeting_id}/exists")
+async def check_meeting_exists(meeting_id: str) -> Dict[str, bool]:
+    """
+    Simple endpoint to check if a meeting exists
+    """
+    try:
+        exists = await livekit_client.room_exists(meeting_id)
+        return {"exists": exists}
+    except Exception as e:
+        logger.error("Failed to check meeting existence", meeting_id=meeting_id, error=str(e))
+        return {"exists": False}
+
+
+@router.post("/{meeting_id}/validate-token")
+async def validate_meeting_token(meeting_id: str, token: str) -> Dict[str, Any]:
+    """
+    Validate a meeting token
+    """
+    try:
+        validation_result = await livekit_client.validate_token(token)
+        
+        if not validation_result.get("valid"):
+            raise HTTPException(status_code=401, detail=validation_result.get("error", "Invalid token"))
+        
+        # Check if token is for the correct room
+        token_room = validation_result.get("room_name")
+        if token_room != meeting_id:
+            raise HTTPException(status_code=403, detail="Token not valid for this meeting")
+        
+        return validation_result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to validate token", meeting_id=meeting_id, error=str(e))
+        raise HTTPException(status_code=500, detail="Token validation failed")
+
+
+@router.delete("/{meeting_id}")
+async def end_meeting(
+    meeting_id: str,
+    current_user: User = Depends(get_current_user_optional)
+) -> Dict[str, Any]:
+    """
+    End a meeting (admin only)
+    """
+    try:
+        # Only physicians or admins can end meetings
+        if not current_user or not current_user.can_create_rooms:
+            raise HTTPException(status_code=403, detail="Insufficient permissions")
+        
+        success = await livekit_client.delete_room(meeting_id)
+        
+        if success:
+            logger.info("Meeting ended", meeting_id=meeting_id, ended_by=current_user.id)
+            return {"success": True, "message": "Meeting ended successfully"}
+        else:
+            raise HTTPException(status_code=404, detail="Meeting not found or already ended")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to end meeting", meeting_id=meeting_id, error=str(e))
+        raise HTTPException(status_code=500, detail="Failed to end meeting") 

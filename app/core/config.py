@@ -3,11 +3,10 @@ Application configuration
 """
 
 import os
-from typing import List, Optional
-from pydantic_settings import BaseSettings
+from typing import List
 
 
-class Settings(BaseSettings):
+class Settings:
     """
     Application settings with environment variable support
     """
@@ -37,7 +36,7 @@ class Settings(BaseSettings):
     ]
     
     # Frontend
-    FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:3000")
+    FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:8001")
     
     # LiveKit - Updated with Cloud Configuration
     LIVEKIT_API_KEY: str = os.getenv("LIVEKIT_API_KEY", "APIM4pxPvXu6uF4")
@@ -55,10 +54,6 @@ class Settings(BaseSettings):
     
     # Allowed hosts
     ALLOWED_HOSTS: List[str] = ["*"]
-    
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
 
 
 # Create settings instance

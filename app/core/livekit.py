@@ -1,285 +1,268 @@
 """
-LiveKit client integration for WebRTC functionality
+LiveKit client for video conferencing with enhanced security
 """
 
-import os
-import time
-import secrets
-import string
-from typing import Optional, Dict, List, Any
+import logging
+from typing import Optional, Dict, Any
 from datetime import datetime, timedelta
-
 from livekit import api
-from livekit.api import AccessToken, VideoGrants, RoomServiceClient
 import structlog
+import jwt
+
+from app.core.config import settings
 
 logger = structlog.get_logger()
 
 
 class LiveKitClient:
     """
-    LiveKit client wrapper for room and participant management
+    Enhanced LiveKit client for managing video conferences
+    with improved security and error handling
     """
     
     def __init__(self):
-        self.api_key = os.getenv('LIVEKIT_API_KEY', 'devkey')
-        self.api_secret = os.getenv('LIVEKIT_API_SECRET', 'secret')
-        self.url = os.getenv('LIVEKIT_URL', 'ws://localhost:7880')
+        self.api_key = settings.LIVEKIT_API_KEY
+        self.api_secret = settings.LIVEKIT_API_SECRET
+        self.url = settings.LIVEKIT_URL
+        self._client: Optional[api.LiveKitAPI] = None
         
-        # Convert ws:// to http:// for API calls
-        self.api_url = self.url.replace('ws://', 'http://').replace('wss://', 'https://')
-        
-        self.room_service: Optional[RoomServiceClient] = None
-        self._initialized = False
-        
+        # Validate configuration
+        if not all([self.api_key, self.api_secret, self.url]):
+            raise ValueError("LiveKit configuration incomplete")
+    
     async def initialize(self):
-        """
-        Initialize LiveKit service clients
-        """
-        if self._initialized:
-            return
-            
+        """Initialize the LiveKit client with connection validation"""
         try:
-            # Initialize Room Service Client
-            self.room_service = RoomServiceClient(
-                self.api_url,
-                self.api_key,
-                self.api_secret
+            self._client = api.LiveKitAPI(
+                url=self.url,
+                api_key=self.api_key,
+                api_secret=self.api_secret
             )
             
-            self._initialized = True
-            logger.info("LiveKit clients initialized successfully",
-                       url=self.url,
-                       api_key=self.api_key[:10] + "...")
+            # Test connection by listing rooms
+            await self._client.room.list_rooms(api.ListRoomsRequest())
+            logger.info("LiveKit client initialized and connection verified", url=self.url)
         except Exception as e:
-            logger.error("Failed to initialize LiveKit clients", error=str(e))
+            logger.error("Failed to initialize LiveKit client", error=str(e))
             raise
     
-    def generate_room_id(self) -> str:
-        """
-        Generate a unique room ID in format: xxx-xxxx-xxx
-        """
-        parts = []
-        for length in [3, 4, 3]:
-            part = ''.join(secrets.choice(string.ascii_lowercase) for _ in range(length))
-            parts.append(part)
-        return '-'.join(parts)
-    
-    def generate_token(
-        self,
-        room_name: str,
-        identity: str,
-        name: str = None,
-        metadata: Dict[str, Any] = None,
-        can_publish: bool = True,
-        can_subscribe: bool = True,
-        can_publish_data: bool = True,
-        validity_hours: int = 24
-    ) -> str:
-        """
-        Generate an access token for a participant
-        """
+    async def create_room(self, room_name: str, max_participants: int = 10, 
+                         enable_recording: bool = False) -> Dict[str, Any]:
+        """Create a new room with enhanced configuration"""
         try:
-            # Create access token
-            token = AccessToken(self.api_key, self.api_secret)
+            if not self._client:
+                await self.initialize()
             
-            # Set token properties
-            token.identity = identity
-            token.name = name or identity
+            # Validate room name
+            if not room_name or len(room_name) < 3:
+                raise ValueError("Room name must be at least 3 characters")
             
-            if metadata:
-                token.metadata = str(metadata)
+            room_create = api.CreateRoomRequest(
+                name=room_name,
+                max_participants=max_participants,
+                empty_timeout=300,  # 5 minutes
+                metadata=f'{{"created_at": "{datetime.utcnow().isoformat()}", "enable_recording": {str(enable_recording).lower()}}}'
+            )
             
-            # Set video grants
-            grants = VideoGrants(
+            room = await self._client.room.create_room(room_create)
+            
+            logger.info("Room created successfully", 
+                       room_name=room.name, 
+                       room_sid=room.sid,
+                       max_participants=max_participants)
+            
+            return {
+                "room_name": room.name,
+                "sid": room.sid,
+                "max_participants": room.max_participants,
+                "creation_time": room.creation_time,
+                "url": self.url,
+                "enable_recording": enable_recording
+            }
+        except Exception as e:
+            logger.error("Failed to create room", room_name=room_name, error=str(e))
+            raise
+    
+    async def generate_token(self, room_name: str, participant_name: str, 
+                           user_role: str = "participant", 
+                           can_publish: bool = True,
+                           can_subscribe: bool = True,
+                           can_publish_data: bool = True,
+                           expires_in_minutes: int = 60) -> str:
+        """Generate secure access token with role-based permissions"""
+        try:
+            # Validate inputs
+            if not room_name or not participant_name:
+                raise ValueError("Room name and participant name are required")
+            
+            # Calculate expiration
+            expires_at = datetime.utcnow() + timedelta(minutes=expires_in_minutes)
+            
+            token = api.AccessToken(self.api_key, self.api_secret)
+            token.with_identity(participant_name)
+            token.with_name(participant_name)
+            token.with_ttl(timedelta(minutes=expires_in_minutes))
+            
+            # Role-based permissions
+            video_grants = api.VideoGrants(
                 room_join=True,
                 room=room_name,
                 can_publish=can_publish,
                 can_subscribe=can_subscribe,
                 can_publish_data=can_publish_data
             )
-            token.add_grant(grants)
             
-            # Set expiration
-            token.ttl = timedelta(hours=validity_hours)
+            # Enhanced permissions for physicians
+            if user_role == "physician":
+                video_grants.room_admin = True
+                video_grants.room_record = True
+                video_grants.can_update_own_metadata = True
             
-            # Generate JWT token
+            token.with_grants(video_grants)
+            
             jwt_token = token.to_jwt()
             
-            logger.info("Generated LiveKit token",
-                       room=room_name,
-                       identity=identity,
-                       can_publish=can_publish)
+            logger.info("Token generated successfully", 
+                       room_name=room_name, 
+                       participant_name=participant_name,
+                       user_role=user_role,
+                       expires_at=expires_at.isoformat())
             
             return jwt_token
             
         except Exception as e:
-            logger.error("Failed to generate token",
-                        error=str(e),
-                        room=room_name,
-                        identity=identity)
+            logger.error("Failed to generate token", 
+                        room_name=room_name, 
+                        participant_name=participant_name, 
+                        error=str(e))
             raise
     
-    async def create_room(
-        self,
-        room_name: str,
-        empty_timeout: int = 300,
-        max_participants: int = 50,
-        metadata: Dict[str, Any] = None
-    ) -> Dict[str, Any]:
-        """
-        Create a new room on LiveKit server
-        """
-        if not self._initialized:
-            await self.initialize()
-            
+    async def validate_token(self, token: str) -> Dict[str, Any]:
+        """Validate and decode a LiveKit token"""
         try:
-            # Create room using RoomService
-            room = await self.room_service.create_room(
-                api.CreateRoomRequest(
-                    name=room_name,
-                    empty_timeout=empty_timeout,
-                    max_participants=max_participants,
-                    metadata=str(metadata) if metadata else None
-                )
-            )
+            # Decode without verification first to get claims
+            unverified = jwt.decode(token, options={"verify_signature": False})
             
-            logger.info("Created LiveKit room",
-                       room_name=room_name,
-                       max_participants=max_participants)
+            # Verify with secret
+            payload = jwt.decode(token, self.api_secret, algorithms=["HS256"])
             
             return {
-                "name": room.name,
-                "sid": room.sid,
-                "creation_time": room.creation_time,
-                "empty_timeout": room.empty_timeout,
-                "max_participants": room.max_participants,
-                "metadata": room.metadata
+                "valid": True,
+                "room_name": payload.get("video", {}).get("room"),
+                "participant_name": payload.get("sub"),
+                "expires_at": datetime.fromtimestamp(payload.get("exp", 0)),
+                "permissions": payload.get("video", {})
             }
-            
-        except Exception as e:
-            logger.error("Failed to create room",
-                        error=str(e),
-                        room_name=room_name)
-            raise
+        except jwt.ExpiredSignatureError:
+            return {"valid": False, "error": "Token expired"}
+        except jwt.InvalidTokenError as e:
+            return {"valid": False, "error": f"Invalid token: {str(e)}"}
     
-    async def get_room(self, room_name: str) -> Optional[Dict[str, Any]]:
-        """
-        Get room information
-        """
-        if not self._initialized:
-            await self.initialize()
-            
+    async def get_room_info(self, room_name: str) -> Optional[Dict[str, Any]]:
+        """Get comprehensive room information"""
         try:
-            # List all rooms and find the one we're looking for
-            rooms = await self.room_service.list_rooms(api.ListRoomsRequest())
+            if not self._client:
+                await self.initialize()
+            
+            rooms = await self._client.room.list_rooms(api.ListRoomsRequest())
             
             for room in rooms.rooms:
                 if room.name == room_name:
+                    # Get participants
+                    participants = await self._client.room.list_participants(
+                        api.ListParticipantsRequest(room=room_name)
+                    )
+                    
                     return {
-                        "name": room.name,
+                        "room_name": room.name,
                         "sid": room.sid,
-                        "creation_time": room.creation_time,
-                        "empty_timeout": room.empty_timeout,
-                        "max_participants": room.max_participants,
                         "num_participants": room.num_participants,
-                        "metadata": room.metadata
+                        "max_participants": room.max_participants,
+                        "creation_time": room.creation_time,
+                        "url": self.url,
+                        "participants": [
+                            {
+                                "identity": p.identity,
+                                "name": p.name,
+                                "joined_at": p.joined_at,
+                                "is_publisher": p.permission.can_publish
+                            } for p in participants.participants
+                        ]
                     }
             
             return None
-            
         except Exception as e:
-            logger.error("Failed to get room",
-                        error=str(e),
-                        room_name=room_name)
+            logger.error("Failed to get room info", room_name=room_name, error=str(e))
             return None
     
-    async def delete_room(self, room_name: str) -> bool:
-        """
-        Delete a room
-        """
-        if not self._initialized:
-            await self.initialize()
-            
+    async def room_exists(self, room_name: str) -> bool:
+        """Check if room exists with better error handling"""
         try:
-            await self.room_service.delete_room(
+            room_info = await self.get_room_info(room_name)
+            return room_info is not None
+        except Exception as e:
+            logger.error("Error checking room existence", room_name=room_name, error=str(e))
+            return False
+    
+    async def delete_room(self, room_name: str) -> bool:
+        """Delete a room (for cleanup)"""
+        try:
+            if not self._client:
+                await self.initialize()
+            
+            await self._client.room.delete_room(
                 api.DeleteRoomRequest(room=room_name)
             )
             
-            logger.info("Deleted LiveKit room", room_name=room_name)
+            logger.info("Room deleted successfully", room_name=room_name)
             return True
-            
         except Exception as e:
-            logger.error("Failed to delete room",
-                        error=str(e),
-                        room_name=room_name)
+            logger.error("Failed to delete room", room_name=room_name, error=str(e))
             return False
     
-    async def list_participants(self, room_name: str) -> List[Dict[str, Any]]:
-        """
-        List all participants in a room
-        """
-        if not self._initialized:
-            await self.initialize()
-            
+    async def start_recording(self, room_name: str, output_file: str) -> Optional[str]:
+        """Start recording a room"""
         try:
-            participants = await self.room_service.list_participants(
-                api.ListParticipantsRequest(room=room_name)
-            )
+            if not self._client:
+                await self.initialize()
             
-            return [
-                {
-                    "sid": p.sid,
-                    "identity": p.identity,
-                    "name": p.name,
-                    "state": p.state,
-                    "metadata": p.metadata,
-                    "joined_at": p.joined_at,
-                    "is_publisher": p.is_publisher
+            # Configure recording request
+            recording_request = api.StartRecordingRequest(
+                room_name=room_name,
+                output={
+                    "file": {
+                        "filepath": output_file
+                    }
                 }
-                for p in participants.participants
-            ]
-            
-        except Exception as e:
-            logger.error("Failed to list participants",
-                        error=str(e),
-                        room_name=room_name)
-            return []
-    
-    async def remove_participant(self, room_name: str, identity: str) -> bool:
-        """
-        Remove a participant from a room
-        """
-        if not self._initialized:
-            await self.initialize()
-            
-        try:
-            await self.room_service.remove_participant(
-                api.RoomParticipantIdentity(
-                    room=room_name,
-                    identity=identity
-                )
             )
             
-            logger.info("Removed participant from room",
-                       room_name=room_name,
-                       identity=identity)
-            return True
+            recording = await self._client.recording.start_recording(recording_request)
             
+            logger.info("Recording started", 
+                       room_name=room_name, 
+                       recording_id=recording.recording_id)
+            
+            return recording.recording_id
         except Exception as e:
-            logger.error("Failed to remove participant",
-                        error=str(e),
-                        room_name=room_name,
-                        identity=identity)
+            logger.error("Failed to start recording", room_name=room_name, error=str(e))
+            return None
+    
+    async def stop_recording(self, recording_id: str) -> bool:
+        """Stop an active recording"""
+        try:
+            if not self._client:
+                await self.initialize()
+            
+            await self._client.recording.stop_recording(
+                api.StopRecordingRequest(recording_id=recording_id)
+            )
+            
+            logger.info("Recording stopped", recording_id=recording_id)
+            return True
+        except Exception as e:
+            logger.error("Failed to stop recording", recording_id=recording_id, error=str(e))
             return False
 
 
-# Global LiveKit client instance
-livekit_client = LiveKitClient()
-
-
-def get_livekit_client() -> LiveKitClient:
-    """
-    Get LiveKit client for dependency injection
-    """
-    return livekit_client 
+# Global instance
+livekit_client = LiveKitClient() 
