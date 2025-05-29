@@ -88,7 +88,8 @@ class LiveKitClient:
                            can_publish: bool = True,
                            can_subscribe: bool = True,
                            can_publish_data: bool = True,
-                           expires_in_minutes: int = 60) -> str:
+                           expires_in_minutes: int = 60,
+                           metadata: Optional[Dict[str, Any]] = None) -> str:
         """Generate secure access token with role-based permissions"""
         try:
             # Validate inputs
@@ -102,6 +103,11 @@ class LiveKitClient:
             token.with_identity(participant_name)
             token.with_name(participant_name)
             token.with_ttl(timedelta(minutes=expires_in_minutes))
+            
+            # Add metadata if provided
+            if metadata:
+                import json
+                token.with_metadata(json.dumps(metadata))
             
             # Role-based permissions
             video_grants = api.VideoGrants(
@@ -126,7 +132,8 @@ class LiveKitClient:
                        room_name=room_name, 
                        participant_name=participant_name,
                        user_role=user_role,
-                       expires_at=expires_at.isoformat())
+                       expires_at=expires_at.isoformat(),
+                       has_metadata=metadata is not None)
             
             return jwt_token
             

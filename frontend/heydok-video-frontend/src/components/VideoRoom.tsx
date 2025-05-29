@@ -1,5 +1,21 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Camera, CameraOff, Mic, MicOff, PhoneOff, ScreenShare, Users, MessageSquare } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { 
+  LiveKitRoom, 
+  VideoConference, 
+  RoomAudioRenderer,
+  DisconnectButton,
+  TrackToggle,
+  useLocalParticipant,
+  useParticipants,
+  StartAudio
+} from '@livekit/components-react';
+import { 
+  Track, 
+  ConnectionState
+} from 'livekit-client';
+import { Camera, CameraOff, Mic, MicOff, PhoneOff, ScreenShare, Users } from 'lucide-react';
+import toast from 'react-hot-toast';
+import '@livekit/components-styles';
 import '../styles/VideoRoom.css';
 
 interface VideoRoomProps {
@@ -10,171 +26,166 @@ interface VideoRoomProps {
   onLeave: () => void;
 }
 
-const VideoRoom: React.FC<VideoRoomProps> = ({ token, serverUrl, roomName, displayName, onLeave }) => {
-  const [isCameraOn, setIsCameraOn] = useState(true);
-  const [isMicOn, setIsMicOn] = useState(true);
-  const [isScreenSharing, setIsScreenSharing] = useState(false);
-  const [participants, setParticipants] = useState<string[]>([displayName]);
-  
-  const localVideoRef = useRef<HTMLVideoElement>(null);
-  const remoteVideosRef = useRef<HTMLDivElement>(null);
+// Enhanced Control Bar with Medical-specific Features
+const MedicalControlBar: React.FC<{ onLeave: () => void }> = ({ onLeave }) => {
+  const { localParticipant } = useLocalParticipant();
+  const participants = useParticipants();
+  const [isRecording, setIsRecording] = useState(false);
 
-  useEffect(() => {
-    // Initialize video/audio streams
-    initializeMedia();
-    
-    return () => {
-      // Cleanup media streams
-      stopAllStreams();
-    };
-  }, []);
-
-  const initializeMedia = async () => {
+  const startRecording = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: isCameraOn,
-        audio: isMicOn
+      const response = await fetch(`/api/v1/meetings/${localParticipant.identity}/start-recording`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
       });
       
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = stream;
+      if (response.ok) {
+        setIsRecording(true);
+        toast.success('Recording started');
       }
     } catch (error) {
-      console.error('Error accessing media devices:', error);
+      toast.error('Failed to start recording');
     }
   };
 
-  const stopAllStreams = () => {
-    if (localVideoRef.current && localVideoRef.current.srcObject) {
-      const stream = localVideoRef.current.srcObject as MediaStream;
-      stream.getTracks().forEach(track => track.stop());
-    }
-  };
-
-  const toggleCamera = async () => {
-    setIsCameraOn(!isCameraOn);
-    if (localVideoRef.current && localVideoRef.current.srcObject) {
-      const stream = localVideoRef.current.srcObject as MediaStream;
-      const videoTrack = stream.getVideoTracks()[0];
-      if (videoTrack) {
-        videoTrack.enabled = !isCameraOn;
+  const stopRecording = async () => {
+    try {
+      const response = await fetch(`/api/v1/meetings/${localParticipant.identity}/stop-recording`, {
+        method: 'POST'
+      });
+      
+      if (response.ok) {
+        setIsRecording(false);
+        toast.success('Recording stopped');
       }
+    } catch (error) {
+      toast.error('Failed to stop recording');
     }
   };
 
-  const toggleMic = async () => {
-    setIsMicOn(!isMicOn);
-    if (localVideoRef.current && localVideoRef.current.srcObject) {
-      const stream = localVideoRef.current.srcObject as MediaStream;
-      const audioTrack = stream.getAudioTracks()[0];
-      if (audioTrack) {
-        audioTrack.enabled = !isMicOn;
-      }
-    }
-  };
+  // Check if user is physician based on metadata
+  const isPhysician = localParticipant.metadata ? 
+    JSON.parse(localParticipant.metadata).role === 'physician' : false;
 
-  const toggleScreenShare = async () => {
-    if (!isScreenSharing) {
-      try {
-        const screenStream = await navigator.mediaDevices.getDisplayMedia({
-          video: true,
-          audio: false
-        });
-        setIsScreenSharing(true);
-        
-        screenStream.getVideoTracks()[0].onended = () => {
-          setIsScreenSharing(false);
-        };
-      } catch (error) {
-        console.error('Error sharing screen:', error);
-      }
-    } else {
-      setIsScreenSharing(false);
-    }
-  };
+  return (
+    <div className="medical-control-bar">
+      <div className="meeting-info">
+        <span className="participant-count">
+          <Users size={16} /> {participants.length}
+        </span>
+        {isRecording && <span className="recording-indicator">🔴 Recording</span>}
+      </div>
 
-  const handleLeave = () => {
-    stopAllStreams();
+      <div className="control-buttons">
+        <TrackToggle source={Track.Source.Microphone} showIcon={true}>
+          <Mic size={20} />
+          <MicOff size={20} />
+        </TrackToggle>
+
+        <TrackToggle source={Track.Source.Camera} showIcon={true}>
+          <Camera size={20} />
+          <CameraOff size={20} />
+        </TrackToggle>
+
+        <TrackToggle source={Track.Source.ScreenShare} captureOptions={{ audio: true }}>
+          <ScreenShare size={20} />
+        </TrackToggle>
+
+        {/* Recording Control - Only for physicians */}
+        {isPhysician && (
+          <button
+            className={`control-btn ${isRecording ? 'recording' : ''}`}
+            onClick={isRecording ? stopRecording : startRecording}
+            title={isRecording ? 'Stop Recording' : 'Start Recording'}
+          >
+            <div className="record-icon" />
+          </button>
+        )}
+
+        <DisconnectButton>
+          <PhoneOff size={20} />
+        </DisconnectButton>
+      </div>
+    </div>
+  );
+};
+
+// Main VideoRoom Component
+const VideoRoom: React.FC<VideoRoomProps> = ({ 
+  token, 
+  serverUrl, 
+  roomName, 
+  displayName, 
+  onLeave 
+}) => {
+  const [connectionState, setConnectionState] = useState<ConnectionState>(ConnectionState.Disconnected);
+
+  const handleDisconnected = () => {
+    toast.success('You have left the meeting');
     onLeave();
   };
 
+  const handleError = (error: Error) => {
+    console.error('Room error:', error);
+    toast.error(`Connection error: ${error.message}`);
+  };
+
+  const handleConnectionStateChanged = (state: ConnectionState) => {
+    setConnectionState(state);
+    
+    switch (state) {
+      case ConnectionState.Connected:
+        toast.success('Connected to meeting');
+        break;
+      case ConnectionState.Connecting:
+        toast.loading('Connecting to meeting...');
+        break;
+      case ConnectionState.Disconnected:
+        toast.dismiss();
+        break;
+      case ConnectionState.Reconnecting:
+        toast.loading('Reconnecting...');
+        break;
+    }
+  };
+
   return (
-    <div className="video-room">
-      <div className="video-grid">
-        <div className="video-container local">
-          <video
-            ref={localVideoRef}
-            autoPlay
-            muted
-            playsInline
-            className="video-element"
-          />
-          <div className="video-label">You ({displayName})</div>
-          {!isCameraOn && (
-            <div className="video-off-placeholder">
-              <CameraOff size={48} />
-              <p>Camera is off</p>
-            </div>
-          )}
-        </div>
+    <div className="video-room-container">
+      <LiveKitRoom
+        video={true}
+        audio={true}
+        token={token}
+        serverUrl={serverUrl}
+        data-lk-theme="default"
+        style={{ height: '100vh' }}
+        onDisconnected={handleDisconnected}
+        onError={handleError}
+        options={{
+          adaptiveStream: true,
+          dynacast: true,
+          videoCaptureDefaults: {
+            resolution: { width: 1280, height: 720 },
+            facingMode: 'user',
+          },
+          audioCaptureDefaults: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
+        }}
+      >
+        {/* Audio renderer for remote participants */}
+        <RoomAudioRenderer />
         
-        <div ref={remoteVideosRef} className="remote-videos">
-          {/* Remote participant videos will be added here dynamically */}
-          <div className="no-participants">
-            <Users size={48} />
-            <p>Waiting for others to join...</p>
-          </div>
-        </div>
-      </div>
-
-      <div className="controls-bar">
-        <div className="meeting-info">
-          <span className="room-name">{roomName}</span>
-          <span className="participant-count">
-            <Users size={16} /> {participants.length}
-          </span>
-        </div>
-
-        <div className="control-buttons">
-          <button
-            className={`control-btn ${!isMicOn ? 'off' : ''}`}
-            onClick={toggleMic}
-            title={isMicOn ? 'Turn off microphone' : 'Turn on microphone'}
-          >
-            {isMicOn ? <Mic size={20} /> : <MicOff size={20} />}
-          </button>
-
-          <button
-            className={`control-btn ${!isCameraOn ? 'off' : ''}`}
-            onClick={toggleCamera}
-            title={isCameraOn ? 'Turn off camera' : 'Turn on camera'}
-          >
-            {isCameraOn ? <Camera size={20} /> : <CameraOff size={20} />}
-          </button>
-
-          <button
-            className={`control-btn ${isScreenSharing ? 'active' : ''}`}
-            onClick={toggleScreenShare}
-            title={isScreenSharing ? 'Stop sharing' : 'Share screen'}
-          >
-            <ScreenShare size={20} />
-          </button>
-
-          <button
-            className="control-btn leave"
-            onClick={handleLeave}
-            title="Leave meeting"
-          >
-            <PhoneOff size={20} />
-          </button>
-        </div>
-
-        <div className="extra-controls">
-          <button className="control-btn" title="Chat">
-            <MessageSquare size={20} />
-          </button>
-        </div>
-      </div>
+        {/* Start Audio component for iOS Safari */}
+        <StartAudio label="Click to enable audio" />
+        
+        {/* Main video conference layout */}
+        <VideoConference />
+        
+        {/* Custom control bar */}
+        <MedicalControlBar onLeave={onLeave} />
+      </LiveKitRoom>
     </div>
   );
 };

@@ -236,7 +236,17 @@ async def join_meeting(
             can_publish=can_publish,
             can_subscribe=can_subscribe,
             can_publish_data=can_publish_data,
-            expires_in_minutes=120  # 2 hours
+            expires_in_minutes=120,  # 2 hours
+            metadata={
+                "role": user_role,
+                "user_id": user_id,
+                "authenticated": current_user is not None,
+                "permissions": {
+                    "can_record": user_role == "physician",
+                    "can_moderate": user_role == "physician",
+                    "can_end_meeting": user_role == "physician"
+                }
+            }
         )
         
         # Calculate token expiration
@@ -319,11 +329,15 @@ async def check_meeting_exists(meeting_id: str) -> Dict[str, bool]:
 
 
 @router.post("/{meeting_id}/validate-token")
-async def validate_meeting_token(meeting_id: str, token: str) -> Dict[str, Any]:
+async def validate_meeting_token(meeting_id: str, request: dict) -> Dict[str, Any]:
     """
     Validate a meeting token
     """
     try:
+        token = request.get("token")
+        if not token:
+            raise HTTPException(status_code=400, detail="Token is required")
+            
         validation_result = await livekit_client.validate_token(token)
         
         if not validation_result.get("valid"):
@@ -367,4 +381,86 @@ async def end_meeting(
         raise
     except Exception as e:
         logger.error("Failed to end meeting", meeting_id=meeting_id, error=str(e))
-        raise HTTPException(status_code=500, detail="Failed to end meeting") 
+        raise HTTPException(status_code=500, detail="Failed to end meeting")
+
+
+@router.post("/{meeting_id}/start-recording")
+async def start_recording(
+    meeting_id: str,
+    current_user: Optional[User] = Depends(get_current_user_optional)
+) -> Dict[str, Any]:
+    """
+    Start recording a meeting (physicians only)
+    """
+    try:
+        # Check if room exists
+        room_info = await livekit_client.get_room_info(meeting_id)
+        if not room_info:
+            raise HTTPException(status_code=404, detail="Meeting not found")
+        
+        # Only physicians can start recordings
+        if not current_user or current_user.role.value != "physician":
+            raise HTTPException(status_code=403, detail="Only physicians can start recordings")
+        
+        # Generate recording filename with timestamp
+        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        output_file = f"recordings/{meeting_id}_{timestamp}.mp4"
+        
+        recording_id = await livekit_client.start_recording(meeting_id, output_file)
+        
+        if recording_id:
+            logger.info("Recording started", 
+                       meeting_id=meeting_id, 
+                       recording_id=recording_id,
+                       started_by=current_user.id)
+            
+            return {
+                "success": True,
+                "recording_id": recording_id,
+                "output_file": output_file,
+                "message": "Recording started successfully"
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Failed to start recording")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to start recording", meeting_id=meeting_id, error=str(e))
+        raise HTTPException(status_code=500, detail="Failed to start recording")
+
+
+@router.post("/{meeting_id}/stop-recording")
+async def stop_recording(
+    meeting_id: str,
+    current_user: Optional[User] = Depends(get_current_user_optional)
+) -> Dict[str, Any]:
+    """
+    Stop recording a meeting (physicians only)
+    """
+    try:
+        # Only physicians can stop recordings
+        if not current_user or current_user.role.value != "physician":
+            raise HTTPException(status_code=403, detail="Only physicians can stop recordings")
+        
+        # For simplicity, we'll use the meeting_id as recording_id
+        # In a real implementation, you'd track active recordings
+        success = await livekit_client.stop_recording(meeting_id)
+        
+        if success:
+            logger.info("Recording stopped", 
+                       meeting_id=meeting_id,
+                       stopped_by=current_user.id)
+            
+            return {
+                "success": True,
+                "message": "Recording stopped successfully"
+            }
+        else:
+            raise HTTPException(status_code=404, detail="No active recording found")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to stop recording", meeting_id=meeting_id, error=str(e))
+        raise HTTPException(status_code=500, detail="Failed to stop recording") 

@@ -75,12 +75,16 @@ const MeetingPage: React.FC = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          display_name: displayName.trim()
+          user_name: displayName.trim(),
+          user_role: "patient", // Default role, could be made configurable
+          enable_video: isCameraOn,
+          enable_audio: isMicOn
         }),
       });
 
       if (!response.ok) {
-        throw new Error('Failed to join meeting');
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to join meeting');
       }
 
       const data = await response.json();
@@ -90,7 +94,7 @@ const MeetingPage: React.FC = () => {
       toast.success('Joined meeting successfully!');
     } catch (error) {
       console.error('Error joining meeting:', error);
-      toast.error('Failed to join meeting');
+      toast.error(error instanceof Error ? error.message : 'Failed to join meeting');
     } finally {
       setIsJoining(false);
     }
