@@ -1,6 +1,7 @@
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
-livekit-server-sdk==0.5.1
+livekit==0.18.3
 python-dotenv==1.0.0
 python-multipart==0.0.6
 aiofiles==23.2.1
+pyjwt==2.8.0
