@@ -81,18 +81,73 @@
         </div>
     </div>
 
-    <!-- LiveKit Client SDK -->
-    <script src="https://unpkg.com/livekit-client/dist/livekit-client.umd.min.js"></script>
-    
-    <!-- Check if LiveKit loaded successfully -->
+    <!-- LiveKit Client SDK with multiple fallbacks -->
     <script>
-        if (typeof LiveKit === 'undefined') {
-            console.error('LiveKit client failed to load');
-            document.getElementById('loadingState').innerHTML = 
-                '<p style="color: #ea4335;">Fehler beim Laden der Video-Komponenten. Bitte Seite neu laden.</p>';
+        // Global variable to track SDK loading
+        window.livekitLoading = true;
+        window.livekitLoadAttempts = 0;
+        
+        function tryLoadLiveKit() {
+            const cdnUrls = [
+                'https://unpkg.com/livekit-client/dist/livekit-client.umd.min.js',
+                'https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js',
+                'https://cdn.skypack.dev/livekit-client'
+            ];
+            
+            function loadScript(url, callback) {
+                const script = document.createElement('script');
+                script.src = url;
+                script.onload = callback;
+                script.onerror = () => {
+                    console.warn(`Failed to load LiveKit from: ${url}`);
+                    tryNextCDN();
+                };
+                document.head.appendChild(script);
+            }
+            
+            function tryNextCDN() {
+                window.livekitLoadAttempts++;
+                if (window.livekitLoadAttempts < cdnUrls.length) {
+                    loadScript(cdnUrls[window.livekitLoadAttempts], checkLiveKit);
+                } else {
+                    // All CDNs failed, show error
+                    showSDKError();
+                }
+            }
+            
+            function checkLiveKit() {
+                setTimeout(() => {
+                    if (typeof LiveKit !== 'undefined') {
+                        console.log('LiveKit loaded successfully');
+                        window.livekitLoading = false;
+                        // Load our app
+                        const appScript = document.createElement('script');
+                        appScript.src = '/frontend/app.js';
+                        document.head.appendChild(appScript);
+                    } else {
+                        tryNextCDN();
+                    }
+                }, 100);
+            }
+            
+            function showSDKError() {
+                window.livekitLoading = false;
+                document.getElementById('loadingState').innerHTML = 
+                    '<div style="text-align: center; color: #ea4335;">' +
+                    '<h3>⚠️ Video SDK Fehler</h3>' +
+                    '<p>LiveKit konnte nicht geladen werden.</p>' +
+                    '<button onclick="window.location.reload()" style="margin-top: 1rem; padding: 0.5rem 1rem; background: #1a73e8; color: white; border: none; border-radius: 4px; cursor: pointer;">' +
+                    'Seite neu laden' +
+                    '</button>' +
+                    '</div>';
+            }
+            
+            // Start loading
+            loadScript(cdnUrls[0], checkLiveKit);
         }
+        
+        // Start the loading process
+        tryLoadLiveKit();
     </script>
-    
-    <script src="/frontend/app.js"></script>
 </body>
 </html> 

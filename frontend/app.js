@@ -9,15 +9,27 @@ const participants = new Map();
 const pathParts = window.location.pathname.split('/');
 const meetingId = pathParts[pathParts.length - 1];
 
-// Initialize the meeting
+// Initialize the meeting only when LiveKit is ready
 async function initMeeting() {
     console.log('Initializing meeting:', meetingId);
+    
+    // Wait for LiveKit to be available if it's still loading
+    if (window.livekitLoading) {
+        console.log('Waiting for LiveKit SDK to load...');
+        let attempts = 0;
+        while (window.livekitLoading && attempts < 50) { // Wait max 5 seconds
+            await new Promise(resolve => setTimeout(resolve, 100));
+            attempts++;
+        }
+    }
     
     // Check if LiveKit is available
     if (typeof LiveKit === 'undefined') {
         showError('LiveKit Video SDK konnte nicht geladen werden. Bitte laden Sie die Seite neu.');
         return;
     }
+    
+    console.log('LiveKit SDK is ready, proceeding with meeting initialization...');
     
     // Get meeting data from sessionStorage
     let meetingData = sessionStorage.getItem('meetingData');
@@ -59,15 +71,17 @@ async function initMeeting() {
 
 function showError(message) {
     const loadingState = document.getElementById('loadingState');
-    loadingState.innerHTML = `
-        <div style="text-align: center; color: #ea4335;">
-            <h3>⚠️ Fehler</h3>
-            <p>${message}</p>
-            <button onclick="window.location.reload()" style="margin-top: 1rem; padding: 0.5rem 1rem; background: #1a73e8; color: white; border: none; border-radius: 4px; cursor: pointer;">
-                Seite neu laden
-            </button>
-        </div>
-    `;
+    if (loadingState) {
+        loadingState.innerHTML = `
+            <div style="text-align: center; color: #ea4335;">
+                <h3>⚠️ Fehler</h3>
+                <p>${message}</p>
+                <button onclick="window.location.reload()" style="margin-top: 1rem; padding: 0.5rem 1rem; background: #1a73e8; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                    Seite neu laden
+                </button>
+            </div>
+        `;
+    }
 }
 
 async function connectToRoom(meetingData) {
@@ -108,7 +122,10 @@ async function connectToRoom(meetingData) {
         console.log('Connected to room successfully');
 
         // Hide loading state
-        document.getElementById('loadingState').style.display = 'none';
+        const loadingElement = document.getElementById('loadingState');
+        if (loadingElement) {
+            loadingElement.style.display = 'none';
+        }
 
         // Set local participant
         localParticipant = room.localParticipant;
@@ -152,7 +169,10 @@ async function connectToRoom(meetingData) {
 
         // Set share link
         const shareUrl = window.location.href;
-        document.getElementById('shareLinkInput').value = shareUrl;
+        const shareLinkInput = document.getElementById('shareLinkInput');
+        if (shareLinkInput) {
+            shareLinkInput.value = shareUrl;
+        }
 
     } catch (error) {
         console.error('Error connecting to room:', error);
@@ -250,114 +270,160 @@ function createParticipantContainer(participant, isLocal = false) {
     container.appendChild(video);
     container.appendChild(nameLabel);
     
-    document.getElementById('videoGrid').appendChild(container);
+    const videoGrid = document.getElementById('videoGrid');
+    if (videoGrid) {
+        videoGrid.appendChild(container);
+    }
     
     return container;
 }
 
 function updateParticipantCount() {
     const count = room ? room.participants.size + 1 : 1; // +1 for local participant
-    document.getElementById('participantCount').textContent = count;
+    const participantCountElement = document.getElementById('participantCount');
+    if (participantCountElement) {
+        participantCountElement.textContent = count;
+    }
 }
 
 function updateControlButtons() {
     // Update microphone button
     const micBtn = document.getElementById('toggleMic');
-    micBtn.classList.toggle('active', audioEnabled);
-    micBtn.querySelector('.mic-on').classList.toggle('hidden', !audioEnabled);
-    micBtn.querySelector('.mic-off').classList.toggle('hidden', audioEnabled);
+    if (micBtn) {
+        micBtn.classList.toggle('active', audioEnabled);
+        const micOn = micBtn.querySelector('.mic-on');
+        const micOff = micBtn.querySelector('.mic-off');
+        if (micOn) micOn.classList.toggle('hidden', !audioEnabled);
+        if (micOff) micOff.classList.toggle('hidden', audioEnabled);
+    }
     
     // Update video button
     const videoBtn = document.getElementById('toggleVideo');
-    videoBtn.classList.toggle('active', videoEnabled);
-    videoBtn.querySelector('.video-on').classList.toggle('hidden', !videoEnabled);
-    videoBtn.querySelector('.video-off').classList.toggle('hidden', videoEnabled);
+    if (videoBtn) {
+        videoBtn.classList.toggle('active', videoEnabled);
+        const videoOn = videoBtn.querySelector('.video-on');
+        const videoOff = videoBtn.querySelector('.video-off');
+        if (videoOn) videoOn.classList.toggle('hidden', !videoEnabled);
+        if (videoOff) videoOff.classList.toggle('hidden', videoEnabled);
+    }
 }
 
-// Control button handlers
-document.getElementById('toggleMic').addEventListener('click', async () => {
-    if (!room) return;
-    
-    try {
-        audioEnabled = !audioEnabled;
-        await room.localParticipant.setMicrophoneEnabled(audioEnabled);
-        updateControlButtons();
-        console.log('Microphone', audioEnabled ? 'enabled' : 'disabled');
-    } catch (error) {
-        console.error('Error toggling microphone:', error);
-        // Revert the state if it failed
-        audioEnabled = !audioEnabled;
-        updateControlButtons();
-    }
-});
-
-document.getElementById('toggleVideo').addEventListener('click', async () => {
-    if (!room) return;
-    
-    try {
-        videoEnabled = !videoEnabled;
-        await room.localParticipant.setCameraEnabled(videoEnabled);
-        updateControlButtons();
-        console.log('Camera', videoEnabled ? 'enabled' : 'disabled');
-    } catch (error) {
-        console.error('Error toggling camera:', error);
-        // Revert the state if it failed
-        videoEnabled = !videoEnabled;
-        updateControlButtons();
-    }
-});
-
-document.getElementById('shareLink').addEventListener('click', () => {
-    document.getElementById('shareModal').classList.add('show');
-});
-
-document.getElementById('copyLink').addEventListener('click', async () => {
-    const input = document.getElementById('shareLinkInput');
-    
-    try {
-        // Use modern clipboard API if available
-        if (navigator.clipboard && window.isSecureContext) {
-            await navigator.clipboard.writeText(input.value);
-        } else {
-            // Fallback for older browsers
-            input.select();
-            document.execCommand('copy');
-        }
-        
-        const btn = document.getElementById('copyLink');
-        btn.textContent = '✓ Kopiert!';
-        setTimeout(() => {
-            btn.textContent = '📋 Kopieren';
-        }, 2000);
-    } catch (error) {
-        console.error('Error copying to clipboard:', error);
-    }
-});
-
-document.getElementById('leaveMeeting').addEventListener('click', async () => {
-    if (confirm('Meeting wirklich verlassen?')) {
-        try {
-            if (room) {
-                await room.disconnect();
+// Setup event listeners when DOM is ready
+function setupEventListeners() {
+    // Control button handlers
+    const toggleMicBtn = document.getElementById('toggleMic');
+    if (toggleMicBtn) {
+        toggleMicBtn.addEventListener('click', async () => {
+            if (!room) return;
+            
+            try {
+                audioEnabled = !audioEnabled;
+                await room.localParticipant.setMicrophoneEnabled(audioEnabled);
+                updateControlButtons();
+                console.log('Microphone', audioEnabled ? 'enabled' : 'disabled');
+            } catch (error) {
+                console.error('Error toggling microphone:', error);
+                // Revert the state if it failed
+                audioEnabled = !audioEnabled;
+                updateControlButtons();
             }
-        } catch (error) {
-            console.error('Error disconnecting from room:', error);
-        }
-        
-        sessionStorage.removeItem('meetingData');
-        window.location.href = '/';
+        });
     }
-});
 
-// Close modal on outside click
-document.getElementById('shareModal').addEventListener('click', (e) => {
-    if (e.target.id === 'shareModal') {
-        e.target.classList.remove('show');
+    const toggleVideoBtn = document.getElementById('toggleVideo');
+    if (toggleVideoBtn) {
+        toggleVideoBtn.addEventListener('click', async () => {
+            if (!room) return;
+            
+            try {
+                videoEnabled = !videoEnabled;
+                await room.localParticipant.setCameraEnabled(videoEnabled);
+                updateControlButtons();
+                console.log('Camera', videoEnabled ? 'enabled' : 'disabled');
+            } catch (error) {
+                console.error('Error toggling camera:', error);
+                // Revert the state if it failed
+                videoEnabled = !videoEnabled;
+                updateControlButtons();
+            }
+        });
     }
-});
 
-// Initialize on page load
-document.addEventListener('DOMContentLoaded', () => {
-    console.log('DOM loaded, initializing meeting...');
+    const shareLinkBtn = document.getElementById('shareLink');
+    if (shareLinkBtn) {
+        shareLinkBtn.addEventListener('click', () => {
+            const shareModal = document.getElementById('shareModal');
+            if (shareModal) {
+                shareModal.classList.add('show');
+            }
+        });
+    }
+
+    const copyLinkBtn = document.getElementById('copyLink');
+    if (copyLinkBtn) {
+        copyLinkBtn.addEventListener('click', async () => {
+            const input = document.getElementById('shareLinkInput');
+            if (!input) return;
+            
+            try {
+                // Use modern clipboard API if available
+                if (navigator.clipboard && window.isSecureContext) {
+                    await navigator.clipboard.writeText(input.value);
+                } else {
+                    // Fallback for older browsers
+                    input.select();
+                    document.execCommand('copy');
+                }
+                
+                copyLinkBtn.textContent = '✓ Kopiert!';
+                setTimeout(() => {
+                    copyLinkBtn.textContent = '📋 Kopieren';
+                }, 2000);
+            } catch (error) {
+                console.error('Error copying to clipboard:', error);
+            }
+        });
+    }
+
+    const leaveMeetingBtn = document.getElementById('leaveMeeting');
+    if (leaveMeetingBtn) {
+        leaveMeetingBtn.addEventListener('click', async () => {
+            if (confirm('Meeting wirklich verlassen?')) {
+                try {
+                    if (room) {
+                        await room.disconnect();
+                    }
+                } catch (error) {
+                    console.error('Error disconnecting from room:', error);
+                }
+                
+                sessionStorage.removeItem('meetingData');
+                window.location.href = '/';
+            }
+        });
+    }
+
+    // Close modal on outside click
+    const shareModal = document.getElementById('shareModal');
+    if (shareModal) {
+        shareModal.addEventListener('click', (e) => {
+            if (e.target.id === 'shareModal') {
+                e.target.classList.remove('show');
+            }
+        });
+    }
+}
+
+// Initialize when page loads
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+        console.log('DOM loaded, setting up event listeners and initializing meeting...');
+        setupEventListeners();
+        initMeeting();
+    });
+} else {
+    // DOM already loaded
+    console.log('DOM already loaded, setting up event listeners and initializing meeting...');
+    setupEventListeners();
     initMeeting();
-}); 
+} 
