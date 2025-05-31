@@ -304,13 +304,18 @@ async def join_meeting(
 async def meeting_room(meeting_id: str):
     """Serve the meeting room page"""
     try:
-        # Check if meeting exists
+        # Check if meeting exists, create if not (handles Heroku memory loss)
         if meeting_id not in meetings:
-            logger.warning(f"Attempt to access non-existent meeting room: {meeting_id}")
-            return HTMLResponse(
-                content="<h1>Meeting not found</h1><p>This meeting does not exist or has expired.</p>",
-                status_code=404
-            )
+            logger.info(f"Meeting {meeting_id} not found in memory, recreating entry for meeting room access")
+            # Recreate meeting entry for this meeting ID
+            meetings[meeting_id] = {
+                "id": meeting_id,
+                "room_name": f"meeting-{meeting_id}",
+                "created_at": datetime.now().isoformat(),
+                "host_name": "Host",
+                "participants": [],
+                "is_active": True
+            }
         
         with open("frontend/meeting.html", "r", encoding="utf-8") as f:
             html_content = f.read()
@@ -348,8 +353,18 @@ async def serve_app_js():
 @app.get("/api/meetings/{meeting_id}/info")
 async def get_meeting_info(meeting_id: str):
     """Get meeting information"""
+    # Check if meeting exists, create if not (handles Heroku memory loss)
     if meeting_id not in meetings:
-        raise HTTPException(status_code=404, detail="Meeting not found")
+        logger.info(f"Meeting {meeting_id} not found in memory, recreating entry for info request")
+        # Recreate meeting entry for this meeting ID
+        meetings[meeting_id] = {
+            "id": meeting_id,
+            "room_name": f"meeting-{meeting_id}",
+            "created_at": datetime.now().isoformat(),
+            "host_name": "Host",
+            "participants": [],
+            "is_active": True
+        }
     
     meeting = meetings[meeting_id]
     return {
