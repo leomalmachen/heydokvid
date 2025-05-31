@@ -93,8 +93,17 @@
                 'https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js',
                 'https://cdn.skypack.dev/livekit-client',
                 'https://unpkg.com/livekit-client@latest/dist/livekit-client.umd.min.js',
-                'https://cdn.jsdelivr.net/npm/livekit-client@latest/dist/livekit-client.umd.min.js'
+                'https://cdn.jsdelivr.net/npm/livekit-client@latest/dist/livekit-client.umd.min.js',
+                // Add fallback to a specific version that's known to work
+                'https://unpkg.com/livekit-client@1.15.4/dist/livekit-client.umd.min.js',
+                'https://cdn.jsdelivr.net/npm/livekit-client@1.15.4/dist/livekit-client.umd.min.js'
             ];
+            
+            // Add debug information
+            console.log('Starting LiveKit SDK loading process...');
+            console.log('Browser UserAgent:', navigator.userAgent);
+            console.log('Current URL:', window.location.href);
+            console.log('Meeting ID:', '{{MEETING_ID}}');
             
             function loadScript(url, callback) {
                 console.log(`Attempting to load LiveKit from: ${url}`);
@@ -108,6 +117,11 @@
                 };
                 script.onerror = (error) => {
                     console.error(`Failed to load LiveKit from: ${url}`, error);
+                    console.error('Error details:', {
+                        type: error.type,
+                        message: error.message,
+                        timestamp: new Date().toISOString()
+                    });
                     tryNextCDN();
                 };
                 document.head.appendChild(script);
@@ -144,15 +158,49 @@
             
             function showSDKError() {
                 window.livekitLoading = false;
+                
+                // Collect debug information
+                const debugInfo = {
+                    userAgent: navigator.userAgent,
+                    meetingId: '{{MEETING_ID}}',
+                    currentUrl: window.location.href,
+                    timestamp: new Date().toISOString(),
+                    attemptsCount: window.livekitLoadAttempts,
+                    onlineStatus: navigator.onLine,
+                    protocol: window.location.protocol
+                };
+                
+                console.error('LiveKit SDK Loading Failed - Debug Info:', debugInfo);
+                
                 document.getElementById('loadingState').innerHTML = 
-                    '<div style="text-align: center; color: #ea4335;">' +
+                    '<div style="text-align: center; color: #ea4335; max-width: 600px; margin: 0 auto;">' +
                     '<h3>⚠️ Video SDK Fehler</h3>' +
                     '<p>LiveKit konnte nicht geladen werden.</p>' +
+                    '<div style="text-align: left; background: #f5f5f5; padding: 1rem; border-radius: 4px; margin: 1rem 0; font-size: 0.9rem;">' +
+                    '<strong>Mögliche Ursachen:</strong><br>' +
+                    '• Netzwerkverbindung blockiert<br>' +
+                    '• Browser-Erweiterungen (z.B. Ad-Blocker)<br>' +
+                    '• Firewall oder Proxy-Einstellungen<br>' +
+                    '• Browser unterstützt kein WebRTC<br><br>' +
+                    '<strong>Debug-Informationen:</strong><br>' +
+                    'Meeting ID: ' + debugInfo.meetingId + '<br>' +
+                    'Online: ' + (debugInfo.onlineStatus ? 'Ja' : 'Nein') + '<br>' +
+                    'Protokoll: ' + debugInfo.protocol + '<br>' +
+                    'Versuche: ' + debugInfo.attemptsCount + '<br>' +
+                    '</div>' +
                     '<button onclick="window.location.reload()" style="margin-top: 1rem; padding: 0.5rem 1rem; background: #1a73e8; color: white; border: none; border-radius: 4px; cursor: pointer;">' +
                     'Seite neu laden' +
                     '</button>' +
+                    '<button onclick="checkBrowserConsole()" style="margin-left: 0.5rem; padding: 0.5rem 1rem; background: #666; color: white; border: none; border-radius: 4px; cursor: pointer;">' +
+                    'Browser-Konsole öffnen' +
+                    '</button>' +
                     '</div>';
             }
+            
+            // Helper function to guide users to browser console
+            window.checkBrowserConsole = function() {
+                alert('Öffne die Browser-Konsole mit F12 (Windows/Linux) oder Cmd+Option+J (Mac) um detaillierte Fehlerinformationen zu sehen.');
+            };
             
             // Start loading
             loadScript(cdnUrls[0], checkLiveKit);
