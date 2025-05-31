@@ -34,6 +34,13 @@ app = FastAPI(
 # Configure CORS
 allowed_origins = ["*"]  # In production, restrict this!
 app_url = os.getenv("APP_URL")
+
+# Try to detect Heroku URL if APP_URL is not set
+if not app_url:
+    heroku_app_name = os.getenv("HEROKU_APP_NAME") 
+    if heroku_app_name:
+        app_url = f"https://{heroku_app_name}.herokuapp.com"
+
 if app_url:
     logger.info(f"Production mode detected. APP_URL: {app_url}")
     allowed_origins = [
@@ -127,8 +134,17 @@ def generate_meeting_id() -> str:
 
 def get_base_url() -> str:
     """Get the base URL for the application"""
+    # Try to get the URL from environment first (Heroku sets this)
     if app_url:
         return app_url.rstrip('/')
+    
+    # For Heroku, also check for the host header in requests
+    # This is a fallback that works better in production
+    heroku_app_name = os.getenv("HEROKU_APP_NAME")
+    if heroku_app_name:
+        return f"https://{heroku_app_name}.herokuapp.com"
+    
+    # Development fallback
     return "http://localhost:8000"
 
 # Dependency for LiveKit client
@@ -235,10 +251,18 @@ async def join_meeting(
 ):
     """Join an existing meeting"""
     try:
-        # Check if meeting exists
+        # Check if meeting exists, create if not (handles Heroku memory loss)
         if meeting_id not in meetings:
-            logger.warning(f"Attempt to join non-existent meeting: {meeting_id}")
-            raise HTTPException(status_code=404, detail="Meeting not found")
+            logger.info(f"Meeting {meeting_id} not found in memory, creating entry for join request")
+            # Create meeting entry for this meeting ID
+            meetings[meeting_id] = {
+                "id": meeting_id,
+                "room_name": f"meeting-{meeting_id}",
+                "created_at": datetime.now().isoformat(),
+                "host_name": "Host",
+                "participants": [],
+                "is_active": True
+            }
         
         meeting = meetings[meeting_id]
         room_name = meeting["room_name"]
@@ -272,8 +296,6 @@ async def join_meeting(
             participants_count=len(meeting["participants"])
         )
         
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error(f"Error joining meeting {meeting_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to join meeting: {str(e)}")
