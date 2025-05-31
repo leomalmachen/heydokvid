@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meeting - HeyDok Video</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <!-- LiveKit Client SDK -->
+    <script src="https://unpkg.com/livekit-client/dist/livekit-client.umd.min.js"></script>
+</head>
+<body>
+    <div class="meeting-container">
+        <!-- Meeting Header -->
+        <header class="meeting-header">
+            <div class="meeting-info">
+                <h1>HeyDok Video</h1>
+                <span class="meeting-id">Meeting: {{MEETING_ID}}</span>
+            </div>
+            <div class="participant-count">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                    <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" fill="currentColor"/>
+                </svg>
+                <span id="participantCount">1</span>
+            </div>
+        </header>
+
+        <!-- Video Grid -->
+        <main class="video-grid" id="videoGrid">
+            <!-- Videos will be added dynamically here -->
+            <div class="loading-state" id="loadingState">
+                <div class="spinner"></div>
+                <p>Meeting wird verbunden...</p>
+            </div>
+        </main>
+
+        <!-- Control Bar -->
+        <footer class="control-bar">
+            <div class="controls">
+                <button id="toggleMic" class="control-btn" title="Mikrofon">
+                    <svg class="mic-on" width="24" height="24" viewBox="0 0 24 24">
+                        <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+                        <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+                    </svg>
+                    <svg class="mic-off hidden" width="24" height="24" viewBox="0 0 24 24">
+                        <path d="M19 11h-1.7c0 .74-.16 1.43-.43 2.05l1.23 1.23c.56-.98.9-2.09.9-3.28zm-4.02.17c0-.06.02-.11.02-.17V5c0-1.66-1.34-3-3-3S9 3.34 9 5v.18l5.98 5.99zM4.27 3L3 4.27l6.01 6.01V11c0 1.66 1.33 3 2.99 3 .22 0 .44-.03.65-.08l1.66 1.66c-.71.33-1.5.52-2.31.52-2.76 0-5.3-2.1-5.3-5.1H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c.91-.13 1.77-.45 2.54-.9L19.73 21 21 19.73 4.27 3z"/>
+                    </svg>
+                </button>
+
+                <button id="toggleVideo" class="control-btn" title="Kamera">
+                    <svg class="video-on" width="24" height="24" viewBox="0 0 24 24">
+                        <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>
+                    </svg>
+                    <svg class="video-off hidden" width="24" height="24" viewBox="0 0 24 24">
+                        <path d="M21 6.5l-4 4V7c0-.55-.45-1-1-1H9.82L21 17.18V6.5zM3.27 2L2 3.27 4.73 6H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.21 0 .39-.08.54-.18L19.73 21 21 19.73 3.27 2z"/>
+                    </svg>
+                </button>
+
+                <button id="shareLink" class="control-btn" title="Link teilen">
+                    <svg width="24" height="24" viewBox="0 0 24 24">
+                        <path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92 1.61 0 2.92-1.31 2.92-2.92s-1.31-2.92-2.92-2.92z"/>
+                    </svg>
+                </button>
+
+                <button id="leaveMeeting" class="control-btn leave" title="Meeting verlassen">
+                    <svg width="24" height="24" viewBox="0 0 24 24">
+                        <path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.68.28-.3 0-.55-.13-.74-.33-.48-.52-.46-1.34.06-1.84 1.06-.98 2.25-1.78 3.53-2.36A9.868 9.868 0 0112 10c1.88 0 3.64.52 5.65 1.32 1.28.58 2.46 1.37 3.52 2.35.52.5.54 1.32.06 1.84-.49.52-1.31.54-1.84.06-.79-.73-1.68-1.36-2.66-1.85-.33-.16-.56-.51-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z"/>
+                    </svg>
+                </button>
+            </div>
+        </footer>
+
+        <!-- Share Modal -->
+        <div id="shareModal" class="modal">
+            <div class="modal-content">
+                <h2>Meeting teilen</h2>
+                <p>Teile diesen Link mit anderen:</p>
+                <div class="share-link">
+                    <input type="text" id="shareLinkInput" readonly>
+                    <button id="copyLink" class="btn btn-small">📋 Kopieren</button>
+                </div>
+                <button class="btn btn-secondary" onclick="document.getElementById('shareModal').classList.remove('show')">Schließen</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/frontend/app.js"></script>
+</body>
+</html> 

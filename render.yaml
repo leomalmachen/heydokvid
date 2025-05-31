@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: heydok-video
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: LIVEKIT_URL
+        sync: false
+      - key: LIVEKIT_API_KEY
+        sync: false
+      - key: LIVEKIT_API_SECRET
+        sync: false
+      - key: APP_URL
+        sync: false
+      - key: PYTHON_VERSION
+        value: 3.11 

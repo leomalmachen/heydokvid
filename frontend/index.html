@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HeyDok Video - Einfache Videomeetings</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>HeyDok Video</h1>
+            <p>Starte oder trete einem Meeting bei - ohne Anmeldung!</p>
+        </header>
+
+        <main class="home-main">
+            <!-- New Meeting Section -->
+            <div class="action-card">
+                <h2>Neues Meeting starten</h2>
+                <input type="text" id="hostName" placeholder="Dein Name" maxlength="50">
+                <button id="createMeeting" class="btn btn-primary">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                        <path d="M17 10.5V7c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2v-3.5l4 4v-11l-4 4z" fill="currentColor"/>
+                    </svg>
+                    Neues Meeting
+                </button>
+            </div>
+
+            <div class="divider">
+                <span>oder</span>
+            </div>
+
+            <!-- Join Meeting Section -->
+            <div class="action-card">
+                <h2>Meeting beitreten</h2>
+                <input type="text" id="meetingCode" placeholder="Meeting-Code eingeben" pattern="[a-z0-9]{3}-[a-z0-9]{4}-[a-z0-9]{3}">
+                <input type="text" id="participantName" placeholder="Dein Name" maxlength="50">
+                <button id="joinMeeting" class="btn btn-secondary">
+                    Beitreten
+                </button>
+            </div>
+        </main>
+
+        <!-- Share Modal -->
+        <div id="shareModal" class="modal">
+            <div class="modal-content">
+                <h2>Meeting erstellt! 🎉</h2>
+                <p>Teile diesen Link mit anderen:</p>
+                <div class="share-link">
+                    <input type="text" id="shareLink" readonly>
+                    <button id="copyLink" class="btn btn-small">📋 Kopieren</button>
+                </div>
+                <button id="goToMeeting" class="btn btn-primary">Zum Meeting →</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Load name from localStorage
+        const savedName = localStorage.getItem('userName') || '';
+        document.getElementById('hostName').value = savedName;
+        document.getElementById('participantName').value = savedName;
+
+        // Create Meeting
+        document.getElementById('createMeeting').addEventListener('click', async () => {
+            const hostName = document.getElementById('hostName').value.trim() || 'Host';
+            
+            // Save name to localStorage
+            localStorage.setItem('userName', hostName);
+            
+            try {
+                const response = await fetch('/api/meetings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ host_name: hostName })
+                });
+
+                if (!response.ok) throw new Error('Failed to create meeting');
+                
+                const data = await response.json();
+                
+                // Show share modal
+                document.getElementById('shareLink').value = data.meeting_url;
+                document.getElementById('shareModal').classList.add('show');
+                
+                // Store data for navigation
+                sessionStorage.setItem('meetingData', JSON.stringify(data));
+                
+                // Go to meeting button
+                document.getElementById('goToMeeting').onclick = () => {
+                    window.location.href = `/meeting/${data.meeting_id}`;
+                };
+            } catch (error) {
+                alert('Fehler beim Erstellen des Meetings: ' + error.message);
+            }
+        });
+
+        // Join Meeting
+        document.getElementById('joinMeeting').addEventListener('click', async () => {
+            const meetingCode = document.getElementById('meetingCode').value.trim();
+            const participantName = document.getElementById('participantName').value.trim() || 'Teilnehmer';
+            
+            if (!meetingCode) {
+                alert('Bitte Meeting-Code eingeben');
+                return;
+            }
+            
+            // Save name to localStorage
+            localStorage.setItem('userName', participantName);
+            
+            // If it's a URL, extract meeting ID
+            let meetingId = meetingCode;
+            if (meetingCode.includes('/meeting/')) {
+                meetingId = meetingCode.split('/meeting/')[1];
+            }
+            
+            try {
+                const response = await fetch(`/api/meetings/${meetingId}/join`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ participant_name: participantName })
+                });
+
+                if (!response.ok) {
+                    if (response.status === 404) {
+                        throw new Error('Meeting nicht gefunden');
+                    }
+                    throw new Error('Fehler beim Beitreten');
+                }
+                
+                const data = await response.json();
+                
+                // Store data for meeting page
+                sessionStorage.setItem('meetingData', JSON.stringify(data));
+                
+                // Navigate to meeting
+                window.location.href = `/meeting/${data.meeting_id}`;
+            } catch (error) {
+                alert(error.message);
+            }
+        });
+
+        // Copy link functionality
+        document.getElementById('copyLink').addEventListener('click', () => {
+            const shareLink = document.getElementById('shareLink');
+            shareLink.select();
+            document.execCommand('copy');
+            
+            const btn = document.getElementById('copyLink');
+            btn.textContent = '✓ Kopiert!';
+            setTimeout(() => {
+                btn.textContent = '📋 Kopieren';
+            }, 2000);
+        });
+
+        // Close modal on click outside
+        document.getElementById('shareModal').addEventListener('click', (e) => {
+            if (e.target.id === 'shareModal') {
+                e.target.classList.remove('show');
+            }
+        });
+
+        // Allow Enter key to submit
+        document.getElementById('meetingCode').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                document.getElementById('joinMeeting').click();
+            }
+        });
+    </script>
+</body>
+</html> 
