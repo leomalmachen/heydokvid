@@ -30,11 +30,7 @@ class LiveKitClient:
             token = api.AccessToken(self.api_key, self.api_secret)
             
             # Set participant identity and name
-            token.identity = participant_name
-            token.name = participant_name
-            
-            # Set expiration (24 hours from now)
-            token.ttl = 24 * 60 * 60  # 24 hours in seconds
+            token = token.with_identity(participant_name).with_name(participant_name)
             
             # Create video grants
             video_grants = api.VideoGrants(
@@ -43,7 +39,6 @@ class LiveKitClient:
                 can_publish=True,
                 can_subscribe=True,
                 can_publish_data=True,
-                can_update_metadata=True
             )
             
             # Add additional permissions for hosts
@@ -53,7 +48,7 @@ class LiveKitClient:
                 video_grants.can_publish_sources = ["camera", "microphone", "screen_share"]
             
             # Add grants to token using the new API
-            token.video = video_grants
+            token = token.with_grants(video_grants)
             
             # Generate JWT
             jwt_token = token.to_jwt()
@@ -78,12 +73,10 @@ class LiveKitClient:
         try:
             # Try to create a test token
             test_token = api.AccessToken(self.api_key, self.api_secret)
-            test_token.identity = "test"
-            test_token.name = "test"
-            test_token.ttl = 60  # 1 minute
+            test_token = test_token.with_identity("test").with_name("test")
             
             grants = api.VideoGrants(room_join=True, room="test")
-            test_token.video = grants
+            test_token = test_token.with_grants(grants)
             
             jwt = test_token.to_jwt()
             return True
