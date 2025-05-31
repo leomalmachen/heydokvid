@@ -5,8 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Meeting - HeyDok Video</title>
     <link rel="stylesheet" href="/static/style.css">
-    <!-- LiveKit Client SDK -->
-    <script src="https://unpkg.com/livekit-client/dist/livekit-client.umd.min.js"></script>
 </head>
 <body>
     <div class="meeting-container">
@@ -36,7 +34,7 @@
         <!-- Control Bar -->
         <footer class="control-bar">
             <div class="controls">
-                <button id="toggleMic" class="control-btn" title="Mikrofon">
+                <button id="toggleMic" class="control-btn active" title="Mikrofon">
                     <svg class="mic-on" width="24" height="24" viewBox="0 0 24 24">
                         <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
                         <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
@@ -46,7 +44,7 @@
                     </svg>
                 </button>
 
-                <button id="toggleVideo" class="control-btn" title="Kamera">
+                <button id="toggleVideo" class="control-btn active" title="Kamera">
                     <svg class="video-on" width="24" height="24" viewBox="0 0 24 24">
                         <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>
                     </svg>
@@ -83,6 +81,18 @@
         </div>
     </div>
 
+    <!-- LiveKit Client SDK -->
+    <script src="https://unpkg.com/livekit-client/dist/livekit-client.umd.min.js"></script>
+    
+    <!-- Check if LiveKit loaded successfully -->
+    <script>
+        if (typeof LiveKit === 'undefined') {
+            console.error('LiveKit client failed to load');
+            document.getElementById('loadingState').innerHTML = 
+                '<p style="color: #ea4335;">Fehler beim Laden der Video-Komponenten. Bitte Seite neu laden.</p>';
+        }
+    </script>
+    
     <script src="/frontend/app.js"></script>
 </body>
 </html> 

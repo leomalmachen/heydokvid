@@ -13,6 +13,12 @@ const meetingId = pathParts[pathParts.length - 1];
 async function initMeeting() {
     console.log('Initializing meeting:', meetingId);
     
+    // Check if LiveKit is available
+    if (typeof LiveKit === 'undefined') {
+        showError('LiveKit Video SDK konnte nicht geladen werden. Bitte laden Sie die Seite neu.');
+        return;
+    }
+    
     // Get meeting data from sessionStorage
     let meetingData = sessionStorage.getItem('meetingData');
     
@@ -28,14 +34,19 @@ async function initMeeting() {
             });
 
             if (!response.ok) {
-                throw new Error('Failed to join meeting');
+                if (response.status === 404) {
+                    throw new Error('Meeting nicht gefunden oder abgelaufen');
+                }
+                throw new Error('Fehler beim Beitreten zum Meeting');
             }
 
             meetingData = await response.json();
             sessionStorage.setItem('meetingData', JSON.stringify(meetingData));
         } catch (error) {
-            alert('Fehler beim Beitreten: ' + error.message);
-            window.location.href = '/';
+            showError('Fehler beim Beitreten: ' + error.message);
+            setTimeout(() => {
+                window.location.href = '/';
+            }, 3000);
             return;
         }
     } else {
@@ -46,26 +57,55 @@ async function initMeeting() {
     await connectToRoom(meetingData);
 }
 
+function showError(message) {
+    const loadingState = document.getElementById('loadingState');
+    loadingState.innerHTML = `
+        <div style="text-align: center; color: #ea4335;">
+            <h3>⚠️ Fehler</h3>
+            <p>${message}</p>
+            <button onclick="window.location.reload()" style="margin-top: 1rem; padding: 0.5rem 1rem; background: #1a73e8; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                Seite neu laden
+            </button>
+        </div>
+    `;
+}
+
 async function connectToRoom(meetingData) {
     try {
+        console.log('Connecting to LiveKit room...');
+        
         // Create room instance
-        room = new LivekitClient.Room({
+        room = new LiveKit.Room({
             adaptiveStream: true,
             dynacast: true,
+            publishDefaults: {
+                videoSimulcastLayers: [
+                    LiveKit.VideoPresets.h90,
+                    LiveKit.VideoPresets.h180,
+                    LiveKit.VideoPresets.h360,
+                ],
+            },
         });
 
         // Set up event handlers
         room
-            .on(LivekitClient.RoomEvent.TrackSubscribed, handleTrackSubscribed)
-            .on(LivekitClient.RoomEvent.TrackUnsubscribed, handleTrackUnsubscribed)
-            .on(LivekitClient.RoomEvent.ParticipantConnected, handleParticipantConnected)
-            .on(LivekitClient.RoomEvent.ParticipantDisconnected, handleParticipantDisconnected)
-            .on(LivekitClient.RoomEvent.Disconnected, handleDisconnect)
-            .on(LivekitClient.RoomEvent.LocalTrackPublished, handleLocalTrackPublished);
+            .on(LiveKit.RoomEvent.TrackSubscribed, handleTrackSubscribed)
+            .on(LiveKit.RoomEvent.TrackUnsubscribed, handleTrackUnsubscribed)
+            .on(LiveKit.RoomEvent.ParticipantConnected, handleParticipantConnected)
+            .on(LiveKit.RoomEvent.ParticipantDisconnected, handleParticipantDisconnected)
+            .on(LiveKit.RoomEvent.Disconnected, handleDisconnect)
+            .on(LiveKit.RoomEvent.LocalTrackPublished, handleLocalTrackPublished)
+            .on(LiveKit.RoomEvent.ConnectionStateChanged, (state) => {
+                console.log('Connection state changed:', state);
+            })
+            .on(LiveKit.RoomEvent.RoomMetadataChanged, (metadata) => {
+                console.log('Room metadata changed:', metadata);
+            });
 
         // Connect to room
+        console.log('Connecting to:', meetingData.livekit_url);
         await room.connect(meetingData.livekit_url, meetingData.token);
-        console.log('Connected to room');
+        console.log('Connected to room successfully');
 
         // Hide loading state
         document.getElementById('loadingState').style.display = 'none';
@@ -73,8 +113,39 @@ async function connectToRoom(meetingData) {
         // Set local participant
         localParticipant = room.localParticipant;
 
-        // Enable camera and microphone
-        await room.localParticipant.enableCameraAndMicrophone();
+        // Request camera and microphone permissions and enable them
+        try {
+            console.log('Requesting camera and microphone permissions...');
+            
+            // First, try to get permission for both camera and microphone
+            await room.localParticipant.enableCameraAndMicrophone();
+            console.log('Camera and microphone enabled successfully');
+            
+            // Update button states
+            updateControlButtons();
+            
+        } catch (error) {
+            console.warn('Error enabling camera/microphone together:', error);
+            
+            // Try to enable them separately with better error handling
+            try {
+                await room.localParticipant.setMicrophoneEnabled(true);
+                console.log('Microphone enabled');
+            } catch (micError) {
+                console.error('Microphone access denied:', micError);
+                audioEnabled = false;
+            }
+            
+            try {
+                await room.localParticipant.setCameraEnabled(true);
+                console.log('Camera enabled');
+            } catch (camError) {
+                console.error('Camera access denied:', camError);
+                videoEnabled = false;
+            }
+            
+            updateControlButtons();
+        }
 
         // Update participant count
         updateParticipantCount();
@@ -85,14 +156,14 @@ async function connectToRoom(meetingData) {
 
     } catch (error) {
         console.error('Error connecting to room:', error);
-        alert('Fehler beim Verbinden: ' + error.message);
+        showError('Fehler beim Verbinden zum Meeting: ' + error.message);
     }
 }
 
 function handleTrackSubscribed(track, publication, participant) {
     console.log('Track subscribed:', track.kind, participant.identity);
     
-    if (track.kind === 'video' || track.kind === 'audio') {
+    if (track.kind === LiveKit.Track.Kind.Video || track.kind === LiveKit.Track.Kind.Audio) {
         // Get or create participant container
         let container = document.getElementById(`participant-${participant.sid}`);
         if (!container) {
@@ -100,10 +171,10 @@ function handleTrackSubscribed(track, publication, participant) {
         }
 
         // Attach track
-        if (track.kind === 'video') {
+        if (track.kind === LiveKit.Track.Kind.Video) {
             const videoElement = container.querySelector('video');
             track.attach(videoElement);
-        } else if (track.kind === 'audio') {
+        } else if (track.kind === LiveKit.Track.Kind.Audio) {
             // Audio tracks are attached to a hidden element
             const audioElement = document.createElement('audio');
             audioElement.autoplay = true;
@@ -139,8 +210,10 @@ function handleParticipantDisconnected(participant) {
 
 function handleDisconnect() {
     console.log('Disconnected from room');
-    alert('Verbindung zum Meeting verloren');
-    window.location.href = '/';
+    showError('Verbindung zum Meeting wurde getrennt');
+    setTimeout(() => {
+        window.location.href = '/';
+    }, 3000);
 }
 
 function handleLocalTrackPublished(publication, participant) {
@@ -153,7 +226,7 @@ function handleLocalTrackPublished(publication, participant) {
     }
 
     // Attach local video
-    if (publication.kind === 'video') {
+    if (publication.kind === LiveKit.Track.Kind.Video) {
         const videoElement = container.querySelector('video');
         publication.track.attach(videoElement);
     }
@@ -187,52 +260,90 @@ function updateParticipantCount() {
     document.getElementById('participantCount').textContent = count;
 }
 
+function updateControlButtons() {
+    // Update microphone button
+    const micBtn = document.getElementById('toggleMic');
+    micBtn.classList.toggle('active', audioEnabled);
+    micBtn.querySelector('.mic-on').classList.toggle('hidden', !audioEnabled);
+    micBtn.querySelector('.mic-off').classList.toggle('hidden', audioEnabled);
+    
+    // Update video button
+    const videoBtn = document.getElementById('toggleVideo');
+    videoBtn.classList.toggle('active', videoEnabled);
+    videoBtn.querySelector('.video-on').classList.toggle('hidden', !videoEnabled);
+    videoBtn.querySelector('.video-off').classList.toggle('hidden', videoEnabled);
+}
+
 // Control button handlers
 document.getElementById('toggleMic').addEventListener('click', async () => {
     if (!room) return;
     
-    audioEnabled = !audioEnabled;
-    await room.localParticipant.setMicrophoneEnabled(audioEnabled);
-    
-    const btn = document.getElementById('toggleMic');
-    btn.classList.toggle('active', audioEnabled);
-    btn.querySelector('.mic-on').classList.toggle('hidden', !audioEnabled);
-    btn.querySelector('.mic-off').classList.toggle('hidden', audioEnabled);
+    try {
+        audioEnabled = !audioEnabled;
+        await room.localParticipant.setMicrophoneEnabled(audioEnabled);
+        updateControlButtons();
+        console.log('Microphone', audioEnabled ? 'enabled' : 'disabled');
+    } catch (error) {
+        console.error('Error toggling microphone:', error);
+        // Revert the state if it failed
+        audioEnabled = !audioEnabled;
+        updateControlButtons();
+    }
 });
 
 document.getElementById('toggleVideo').addEventListener('click', async () => {
     if (!room) return;
     
-    videoEnabled = !videoEnabled;
-    await room.localParticipant.setCameraEnabled(videoEnabled);
-    
-    const btn = document.getElementById('toggleVideo');
-    btn.classList.toggle('active', videoEnabled);
-    btn.querySelector('.video-on').classList.toggle('hidden', !videoEnabled);
-    btn.querySelector('.video-off').classList.toggle('hidden', videoEnabled);
+    try {
+        videoEnabled = !videoEnabled;
+        await room.localParticipant.setCameraEnabled(videoEnabled);
+        updateControlButtons();
+        console.log('Camera', videoEnabled ? 'enabled' : 'disabled');
+    } catch (error) {
+        console.error('Error toggling camera:', error);
+        // Revert the state if it failed
+        videoEnabled = !videoEnabled;
+        updateControlButtons();
+    }
 });
 
 document.getElementById('shareLink').addEventListener('click', () => {
     document.getElementById('shareModal').classList.add('show');
 });
 
-document.getElementById('copyLink').addEventListener('click', () => {
+document.getElementById('copyLink').addEventListener('click', async () => {
     const input = document.getElementById('shareLinkInput');
-    input.select();
-    document.execCommand('copy');
     
-    const btn = document.getElementById('copyLink');
-    btn.textContent = '✓ Kopiert!';
-    setTimeout(() => {
-        btn.textContent = '📋 Kopieren';
-    }, 2000);
+    try {
+        // Use modern clipboard API if available
+        if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(input.value);
+        } else {
+            // Fallback for older browsers
+            input.select();
+            document.execCommand('copy');
+        }
+        
+        const btn = document.getElementById('copyLink');
+        btn.textContent = '✓ Kopiert!';
+        setTimeout(() => {
+            btn.textContent = '📋 Kopieren';
+        }, 2000);
+    } catch (error) {
+        console.error('Error copying to clipboard:', error);
+    }
 });
 
 document.getElementById('leaveMeeting').addEventListener('click', async () => {
     if (confirm('Meeting wirklich verlassen?')) {
-        if (room) {
-            await room.disconnect();
+        try {
+            if (room) {
+                await room.disconnect();
+            }
+        } catch (error) {
+            console.error('Error disconnecting from room:', error);
         }
+        
         sessionStorage.removeItem('meetingData');
         window.location.href = '/';
     }
@@ -246,4 +357,7 @@ document.getElementById('shareModal').addEventListener('click', (e) => {
 });
 
 // Initialize on page load
-document.addEventListener('DOMContentLoaded', initMeeting); 
+document.addEventListener('DOMContentLoaded', () => {
+    console.log('DOM loaded, initializing meeting...');
+    initMeeting();
+}); 
