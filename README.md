@@ -1,313 +1,135 @@
-# 🏥 Heydok Video - DSGVO/HIPAA-konforme Videocall-Plattform
+# HeyDok Video - Simple Video Meeting Platform
 
-Eine professionelle, medizinische Videocall-Lösung für Arzt-Patient-Konsultationen mit LiveKit-Integration.
-
-![Heydok Video](https://img.shields.io/badge/Status-Production%20Ready-green)
-![DSGVO](https://img.shields.io/badge/DSGVO-Compliant-blue)
-![HIPAA](https://img.shields.io/badge/HIPAA-Compliant-blue)
-![LiveKit](https://img.shields.io/badge/LiveKit-Integrated-orange)
+Eine minimale, voll funktionsfähige Video-Meeting-Plattform ähnlich wie Google Meet. Nutzer können mit einem Klick ein Meeting starten, den Link teilen, und andere können sofort beitreten - ohne Registrierung.
 
 ## 🚀 Features
 
-### 🎯 **Medizinische Video-Konsultationen**
-- **1:1 Arzt-Patient-Meetings** mit rollenbasierten Berechtigungen
-- **HD Video/Audio** mit adaptiver Qualität
-- **Screensharing** für medizinische Dokumentation
-- **Sichere Chat-Funktionalität** (HIPAA-konform)
+- **One-Click Meeting Creation** - Kein Login erforderlich
+- **Instant Join** - Mit Meeting-Code oder Link
+- **Video/Audio Controls** - Mikrofon und Kamera An/Aus
+- **Responsive Design** - Funktioniert auf Desktop und Mobile
+- **Real-time Video** - Powered by LiveKit
 
-### 🔐 **Sicherheit & Compliance**
-- **DSGVO/HIPAA-konform** mit vollständiger Audit-Trail
-- **End-to-End-Verschlüsselung** für alle Kommunikation
-- **Rollenbasierte Zugriffskontrolle** (Arzt vs. Patient)
-- **Rate Limiting** und DDoS-Schutz
+## 📋 Tech Stack
 
-### 📹 **Recording & Dokumentation**
-- **Nur-Arzt-Recording** mit sicherer Speicherung
-- **Automatische Metadaten-Generierung**
-- **Verschlüsselte Aufzeichnungen** für Compliance
-- **Strukturierte Audit-Logs**
+- **Backend**: FastAPI (Python)
+- **Frontend**: Vanilla JavaScript, HTML, CSS
+- **Video/Audio**: LiveKit WebRTC
+- **Deployment**: Render.com (kostenlos)
 
-### 📱 **Cross-Platform**
-- **Responsive Design** für Desktop, Tablet, Mobile
-- **iOS Safari Unterstützung** mit automatischer Audio-Aktivierung
-- **Progressive Web App** (PWA) ready
-- **Offline-Fallback** für kritische Funktionen
+## 🛠️ Local Setup
 
-## 🏗️ Architektur
-
-```
-heydok-video/
-├── app/                     # FastAPI Backend
-│   ├── api/v1/endpoints/   # REST API Endpoints
-│   ├── core/               # Core Services (LiveKit, Security)
-│   ├── models/             # Database Models
-│   └── schemas/            # Pydantic Schemas
-├── frontend/               # React Frontend
-│   └── heydok-video-frontend/
-│       ├── src/components/ # React Components
-│       ├── src/pages/      # Page Components
-│       ├── src/services/   # API Services
-│       └── src/styles/     # CSS Styles
-├── infrastructure/         # Deployment Configs
-├── scripts/               # Utility Scripts
-└── docs/                  # Documentation
-```
-
-## 🛠️ Tech Stack
-
-### Backend
-- **FastAPI** - High-performance Python web framework
-- **LiveKit** - Real-time video/audio infrastructure
-- **SQLAlchemy** - Database ORM
-- **Pydantic** - Data validation
-- **Structlog** - Structured logging
-- **JWT** - Secure authentication
-
-### Frontend
-- **React 18** - Modern UI framework
-- **TypeScript** - Type-safe development
-- **LiveKit React Components** - Professional video UI
-- **Tailwind CSS** - Utility-first styling
-- **React Router** - Client-side routing
-- **React Hot Toast** - User notifications
-
-### Infrastructure
-- **Docker** - Containerization
-- **Kubernetes** - Orchestration
-- **PostgreSQL** - Primary database
-- **Redis** - Caching and sessions
-- **S3** - Recording storage
-
-## 🚀 Quick Start
-
-### 1. Repository klonen
+### 1. Clone Repository
 ```bash
-git clone https://github.com/leomalmachen/heydokvideo.git
-cd heydokvideo
+git clone https://github.com/yourusername/heydokvid.git
+cd heydokvid
 ```
 
-### 2. Backend Setup
+### 2. Create Virtual Environment
 ```bash
-# Python Virtual Environment
 python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+```
 
-# Dependencies installieren
+### 3. Install Dependencies
+```bash
 pip install -r requirements.txt
-
-# Umgebungsvariablen konfigurieren
-cp env.example .env
-# Bearbeiten Sie .env mit Ihren LiveKit-Credentials
 ```
 
-### 3. Frontend Setup
-```bash
-cd frontend/heydok-video-frontend
-npm install
-```
-
-### 4. LiveKit Konfiguration
-```bash
-# In .env file:
-LIVEKIT_URL=wss://your-livekit-server.com
+### 4. Set Environment Variables
+Create a `.env` file in the root directory:
+```env
+LIVEKIT_URL=wss://your-instance.livekit.cloud
 LIVEKIT_API_KEY=your-api-key
 LIVEKIT_API_SECRET=your-api-secret
 ```
 
-### 5. Anwendung starten
+⚠️ **WICHTIG**: Niemals echte API-Schlüssel in GitHub committen!
+
+### 5. Run the Application
 ```bash
-# Backend (Terminal 1)
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-
-# Frontend (Terminal 2)
-cd frontend/heydok-video-frontend
-npm start
+cd backend
+uvicorn main:app --reload
 ```
 
-🎉 **Anwendung läuft auf:**
-- Backend: http://localhost:8000
-- Frontend: http://localhost:3000
-- API Docs: http://localhost:8000/docs
+Visit http://localhost:8000
 
-## 📋 Verwendung
+## 🚀 Deploy to Render.com (Kostenlos)
 
-### Meeting erstellen (Arzt)
-```bash
-curl -X POST http://localhost:8000/api/v1/meetings/create \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Konsultation Dr. Müller",
-    "max_participants": 2,
-    "enable_recording": true
-  }'
+### 1. Vorbereitung
+- Erstellen Sie einen [LiveKit Cloud Account](https://livekit.io/cloud) (kostenlos)
+- Forken Sie dieses Repository zu Ihrem GitHub Account
+
+### 2. Deploy auf Render
+1. Gehen Sie zu [render.com](https://render.com) und melden Sie sich mit GitHub an
+2. Klicken Sie auf "New +" → "Web Service"
+3. Verbinden Sie Ihr GitHub Repository
+4. Render erkennt automatisch die `render.yaml` Konfiguration
+5. Fügen Sie die Environment Variables hinzu:
+   - `LIVEKIT_URL`: Ihre LiveKit Server URL
+   - `LIVEKIT_API_KEY`: Ihr LiveKit API Key
+   - `LIVEKIT_API_SECRET`: Ihr LiveKit API Secret
+   - `APP_URL`: Wird automatisch gesetzt (https://ihr-app-name.onrender.com)
+
+### 3. Deployment
+- Klicken Sie auf "Create Web Service"
+- Warten Sie 2-3 Minuten für das erste Deployment
+- Ihre App ist live unter: `https://ihr-app-name.onrender.com`
+
+## 📁 Project Structure
+
+```
+heydok-video/
+├── backend/
+│   ├── main.py           # FastAPI Server
+│   └── livekit_client.py # LiveKit Integration
+├── frontend/
+│   ├── index.html        # Homepage
+│   ├── meeting.html      # Meeting Room
+│   └── app.js           # Meeting Logic
+├── static/
+│   └── style.css        # Styling
+├── requirements.txt     # Python Dependencies
+├── render.yaml         # Render.com Config
+└── README.md          # This file
 ```
 
-### Meeting beitreten (Patient/Arzt)
-```bash
-curl -X POST http://localhost:8000/api/v1/meetings/{meeting_id}/join \
-  -H "Content-Type: application/json" \
-  -d '{
-    "user_name": "Max Mustermann",
-    "user_role": "patient"
-  }'
-```
+## 🔧 Development
 
-## 🧪 Testing
+### Testing Locally
+1. Start the backend server
+2. Open browser 1 and create a meeting
+3. Copy the meeting link
+4. Open browser 2 (or incognito) and join with the link
+5. Test video/audio and controls
 
-### Integration Tests ausführen
-```bash
-# Backend Tests
-python test_heydok_integration.py --url http://localhost:8000
+### Common Issues
 
-# Frontend Tests
-cd frontend/heydok-video-frontend
-npm test
-```
+**LiveKit Connection Failed**
+- Check environment variables
+- Ensure LIVEKIT_URL starts with `wss://`
+- Verify API Key and Secret match
 
-### Test Coverage
-```bash
-# Backend Coverage
-pytest --cov=app tests/
+**No Video/Audio**
+- HTTPS required (except localhost)
+- Check browser permissions
+- Look for console errors
 
-# Frontend Coverage
-npm run test:coverage
-```
+## 🔒 Security Notes
 
-## 🚀 Deployment
+- Verwenden Sie niemals die API-Schlüssel aus Beispielen
+- Erstellen Sie eigene LiveKit Credentials
+- Nutzen Sie Environment Variables für alle Secrets
+- Aktivieren Sie CORS-Restrictions für Production
 
-### Docker Deployment
-```bash
-# Build und Start
-docker-compose up --build
+## 📝 License
 
-# Production Build
-docker-compose -f docker-compose.prod.yml up -d
-```
-
-### Kubernetes Deployment
-```bash
-# Apply Kubernetes configs
-kubectl apply -f infrastructure/k8s/
-
-# Check deployment status
-kubectl get pods -l app=heydok-video
-```
-
-### Cloud Deployment (Render/Vercel)
-```bash
-# Render deployment
-./deploy-render.sh
-
-# Environment variables setzen:
-# - LIVEKIT_URL
-# - LIVEKIT_API_KEY
-# - LIVEKIT_API_SECRET
-# - DATABASE_URL
-# - REDIS_URL
-```
-
-## 🔐 Sicherheit
-
-### DSGVO Compliance
-- ✅ **Datenminimierung** - Nur notwendige Daten
-- ✅ **Verschlüsselung** - End-to-End für alle Kommunikation
-- ✅ **Audit-Logs** - Vollständige Nachverfolgung
-- ✅ **Recht auf Vergessenwerden** - Automatische Löschung
-
-### HIPAA Compliance
-- ✅ **BAA-konforme Infrastruktur** - LiveKit Cloud
-- ✅ **Sichere Token** - JWT mit kurzen Ablaufzeiten
-- ✅ **Rollenbasierte Zugriffe** - Strenge Berechtigungen
-- ✅ **Verschlüsselte Aufzeichnungen** - S3 mit Encryption
-
-### Sicherheitsfeatures
-- **Rate Limiting** - 20 Aufrufe/Minute
-- **CORS Protection** - Konfigurierbare Origins
-- **SQL Injection Protection** - SQLAlchemy ORM
-- **XSS Protection** - Content Security Policy
-
-## 📊 Monitoring
-
-### Metriken
-- Meeting-Erstellungen pro Tag
-- Durchschnittliche Meeting-Dauer
-- Teilnehmeranzahl-Verteilung
-- API Response Times
-- Fehlerrate
-
-### Logging
-```python
-# Strukturierte Logs
-logger.info("Meeting created",
-           meeting_id=meeting_id,
-           created_by=user_id,
-           client_ip=request.client.host)
-```
-
-### Health Checks
-```bash
-# API Health
-curl http://localhost:8000/health
-
-# LiveKit Status
-curl http://localhost:8000/api/v1/meetings/health
-```
-
-## 🔄 API Dokumentation
-
-### Wichtige Endpoints
-
-| Endpoint | Method | Beschreibung |
-|----------|--------|--------------|
-| `/api/v1/meetings/create` | POST | Meeting erstellen |
-| `/api/v1/meetings/{id}/join` | POST | Meeting beitreten |
-| `/api/v1/meetings/{id}/info` | GET | Meeting-Informationen |
-| `/api/v1/meetings/{id}/start-recording` | POST | Recording starten |
-| `/api/v1/meetings/{id}/stop-recording` | POST | Recording stoppen |
-
-### Vollständige API-Docs
-- **Swagger UI**: http://localhost:8000/docs
-- **ReDoc**: http://localhost:8000/redoc
+MIT License - feel free to use this project for anything!
 
 ## 🤝 Contributing
 
-1. Fork das Repository
-2. Feature Branch erstellen (`git checkout -b feature/amazing-feature`)
-3. Changes committen (`git commit -m 'Add amazing feature'`)
-4. Branch pushen (`git push origin feature/amazing-feature`)
-5. Pull Request öffnen
-
-### Development Guidelines
-- **Code Style**: Black + isort für Python, Prettier für TypeScript
-- **Testing**: Mindestens 80% Test Coverage
-- **Documentation**: Docstrings für alle öffentlichen Funktionen
-- **Security**: Alle Änderungen durch Security Review
-
-## 📞 Support
-
-### Technischer Support
-- **Issues**: [GitHub Issues](https://github.com/leomalmachen/heydokvideo/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/leomalmachen/heydokvideo/discussions)
-- **Email**: support@heydok.com
-
-### Dokumentation
-- **Integration Guide**: [HEYDOK_INTEGRATION_GUIDE.md](./HEYDOK_INTEGRATION_GUIDE.md)
-- **API Reference**: [API_DOCUMENTATION.md](./API_DOCUMENTATION.md)
-- **Deployment Guide**: [DEPLOYMENT.md](./DEPLOYMENT.md)
-
-## 📄 Lizenz
-
-Dieses Projekt ist unter der MIT-Lizenz lizenziert - siehe [LICENSE](LICENSE) für Details.
-
-## 🏆 Acknowledgments
-
-- **LiveKit** - Für die exzellente Video-Infrastruktur
-- **FastAPI** - Für das moderne Python Web Framework
-- **React** - Für die leistungsstarke UI-Bibliothek
-- **Heydok Team** - Für die Vision einer besseren medizinischen Kommunikation
-
----
-
-**Made with ❤️ for better healthcare communication**
-
-![Heydok](https://img.shields.io/badge/Heydok-Medical%20Video%20Platform-blue?style=for-the-badge) 
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request 

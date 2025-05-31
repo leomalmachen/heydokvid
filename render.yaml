@@ -1,51 +1,17 @@
 services:
-  # Main Web Service
   - type: web
-    name: video-meeting-platform
-    runtime: docker
-    repo: https://github.com/YOUR_GITHUB_USERNAME/YOUR_REPO_NAME
-    branch: main
-    dockerfilePath: ./Dockerfile
-    dockerContext: .
+    name: heydok-video
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
-      - key: PORT
-        value: 8000
       - key: LIVEKIT_URL
         sync: false
       - key: LIVEKIT_API_KEY
         sync: false
       - key: LIVEKIT_API_SECRET
         sync: false
-      - key: DATABASE_URL
-        fromDatabase:
-          name: video-meeting-db
-          property: connectionString
-      - key: REDIS_URL
-        fromService:
-          type: redis
-          name: video-meeting-redis
-          property: connectionString
-      - key: SECRET_KEY
-        generateValue: true
-      - key: ENVIRONMENT
-        value: production
-      - key: LOG_LEVEL
-        value: INFO
-      - key: CORS_ORIGINS
-        value: "*"
-    healthCheckPath: /health
-    autoDeploy: true
-
-  # PostgreSQL Database
-  - type: postgres
-    name: video-meeting-db
-    databaseName: video_meeting
-    user: video_meeting_user
-    plan: starter
-    ipAllowList: []
-
-  # Redis Cache
-  - type: redis
-    name: video-meeting-redis
-    plan: starter
-    ipAllowList: [] 
+      - key: APP_URL
+        sync: false
+      - key: PYTHON_VERSION
+        value: 3.11 
