@@ -3,383 +3,169 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Video Meeting Platform</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #333;
-        }
-        
-        .container {
-            background: white;
-            padding: 3rem;
-            border-radius: 1rem;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-            max-width: 500px;
-            width: 100%;
-            text-align: center;
-        }
-        
-        h1 {
-            margin-bottom: 1rem;
-            font-size: 2.5rem;
-            font-weight: 300;
-            color: #333;
-        }
-        
-        p {
-            margin-bottom: 2rem;
-            color: #666;
-            font-size: 1.1rem;
-        }
-        
-        .input-group {
-            margin-bottom: 1.5rem;
-            text-align: left;
-        }
-        
-        label {
-            display: block;
-            margin-bottom: 0.5rem;
-            font-weight: 500;
-            color: #333;
-        }
-        
-        input[type="text"] {
-            width: 100%;
-            padding: 1rem;
-            font-size: 1rem;
-            border: 2px solid #e8eaed;
-            border-radius: 0.5rem;
-            background: white;
-            transition: border-color 0.2s ease;
-        }
-        
-        input[type="text"]:focus {
-            outline: none;
-            border-color: #1a73e8;
-        }
-        
-        .button-group {
-            display: flex;
-            gap: 1rem;
-            margin-bottom: 1rem;
-        }
-        
-        .btn {
-            flex: 1;
-            background: #1a73e8;
-            color: white;
-            border: none;
-            padding: 1rem 2rem;
-            font-size: 1rem;
-            border-radius: 2rem;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            font-weight: 500;
-        }
-        
-        .btn:hover {
-            background: #1557b0;
-            transform: translateY(-2px);
-        }
-        
-        .btn:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-            transform: none;
-        }
-        
-        .btn.secondary {
-            background: #34a853;
-        }
-        
-        .btn.secondary:hover {
-            background: #2d8f47;
-        }
-        
-        .meeting-info {
-            display: none;
-            margin-top: 2rem;
-            padding: 1rem;
-            background: #f8f9fa;
-            border-radius: 0.5rem;
-            border-left: 4px solid #34a853;
-        }
-        
-        .meeting-link {
-            word-break: break-all;
-            color: #1a73e8;
-            text-decoration: none;
-            font-weight: 500;
-        }
-        
-        .copy-btn {
-            background: #34a853;
-            color: white;
-            border: none;
-            padding: 0.5rem 1rem;
-            border-radius: 0.25rem;
-            cursor: pointer;
-            margin-top: 0.5rem;
-            font-size: 0.9rem;
-        }
-        
-        .copy-btn:hover {
-            background: #2d8f47;
-        }
-        
-        .error {
-            color: #d93025;
-            margin-top: 1rem;
-            display: none;
-            padding: 1rem;
-            background: #fce8e6;
-            border-radius: 0.5rem;
-            border-left: 4px solid #d93025;
-        }
-        
-        .spinner {
-            display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 3px solid #ffffff;
-            border-radius: 50%;
-            border-top-color: transparent;
-            animation: spin 1s ease-in-out infinite;
-        }
-        
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-        
-        .join-section {
-            display: none;
-            margin-top: 1rem;
-            padding-top: 1rem;
-            border-top: 1px solid #e8eaed;
-        }
-        
-        .join-section.show {
-            display: block;
-        }
-    </style>
+    <title>HeyDok Video - Einfache Videomeetings</title>
+    <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
     <div class="container">
-        <h1>🎥 Video Meeting</h1>
-        <p>Erstellen Sie ein Meeting oder treten Sie einem bestehenden bei</p>
-        
-        <div class="input-group">
-            <label for="userName">Ihr Name</label>
-            <input type="text" id="userName" placeholder="Geben Sie Ihren Namen ein" required>
-        </div>
-        
-        <div class="button-group">
-            <button id="createBtn" class="btn" onclick="createMeeting()">
-                Neues Meeting erstellen
-            </button>
-            <button id="joinToggleBtn" class="btn secondary" onclick="toggleJoinSection()">
-                Meeting beitreten
-            </button>
-        </div>
-        
-        <div id="joinSection" class="join-section">
-            <div class="input-group">
-                <label for="meetingId">Meeting-ID</label>
-                <input type="text" id="meetingId" placeholder="z.B. abc-1234-xyz">
+        <header>
+            <h1>HeyDok Video</h1>
+            <p>Starte oder trete einem Meeting bei - ohne Anmeldung!</p>
+        </header>
+
+        <main class="home-main">
+            <!-- New Meeting Section -->
+            <div class="action-card">
+                <h2>Neues Meeting starten</h2>
+                <input type="text" id="hostName" placeholder="Dein Name" maxlength="50">
+                <button id="createMeeting" class="btn btn-primary">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                        <path d="M17 10.5V7c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2v-3.5l4 4v-11l-4 4z" fill="currentColor"/>
+                    </svg>
+                    Neues Meeting
+                </button>
             </div>
-            <button id="joinBtn" class="btn secondary" onclick="joinExistingMeeting()">
-                Meeting beitreten
-            </button>
+
+            <div class="divider">
+                <span>oder</span>
+            </div>
+
+            <!-- Join Meeting Section -->
+            <div class="action-card">
+                <h2>Meeting beitreten</h2>
+                <input type="text" id="meetingCode" placeholder="Meeting-Code eingeben" pattern="[a-z0-9]{3}-[a-z0-9]{4}-[a-z0-9]{3}">
+                <input type="text" id="participantName" placeholder="Dein Name" maxlength="50">
+                <button id="joinMeeting" class="btn btn-secondary">
+                    Beitreten
+                </button>
+            </div>
+        </main>
+
+        <!-- Share Modal -->
+        <div id="shareModal" class="modal">
+            <div class="modal-content">
+                <h2>Meeting erstellt! 🎉</h2>
+                <p>Teile diesen Link mit anderen:</p>
+                <div class="share-link">
+                    <input type="text" id="shareLink" readonly>
+                    <button id="copyLink" class="btn btn-small">📋 Kopieren</button>
+                </div>
+                <button id="goToMeeting" class="btn btn-primary">Zum Meeting →</button>
+            </div>
         </div>
-        
-        <div id="meetingInfo" class="meeting-info">
-            <h3>Meeting erstellt! 🎉</h3>
-            <p>Teilen Sie diesen Link mit anderen:</p>
-            <a id="meetingLink" href="#" target="_blank" class="meeting-link"></a>
-            <br>
-            <button class="copy-btn" onclick="copyLink()">Link kopieren</button>
-        </div>
-        
-        <div id="error" class="error"></div>
     </div>
 
     <script>
-        function getApiUrl() {
-            // For development
-            if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-                return `${window.location.protocol}//${window.location.hostname}:8000`;
+        // Load name from localStorage
+        const savedName = localStorage.getItem('userName') || '';
+        document.getElementById('hostName').value = savedName;
+        document.getElementById('participantName').value = savedName;
+
+        // Create Meeting
+        document.getElementById('createMeeting').addEventListener('click', async () => {
+            const hostName = document.getElementById('hostName').value.trim() || 'Host';
+            
+            // Save name to localStorage
+            localStorage.setItem('userName', hostName);
+            
+            try {
+                const response = await fetch('/api/meetings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ host_name: hostName })
+                });
+
+                if (!response.ok) throw new Error('Failed to create meeting');
+                
+                const data = await response.json();
+                
+                // Show share modal
+                document.getElementById('shareLink').value = data.meeting_url;
+                document.getElementById('shareModal').classList.add('show');
+                
+                // Store data for navigation
+                sessionStorage.setItem('meetingData', JSON.stringify(data));
+                
+                // Go to meeting button
+                document.getElementById('goToMeeting').onclick = () => {
+                    window.location.href = `/meeting/${data.meeting_id}`;
+                };
+            } catch (error) {
+                alert('Fehler beim Erstellen des Meetings: ' + error.message);
             }
+        });
+
+        // Join Meeting
+        document.getElementById('joinMeeting').addEventListener('click', async () => {
+            const meetingCode = document.getElementById('meetingCode').value.trim();
+            const participantName = document.getElementById('participantName').value.trim() || 'Teilnehmer';
             
-            // For production
-            return `${window.location.protocol}//${window.location.host}`;
-        }
-        
-        const API_URL = getApiUrl();
-        
-        function showError(message) {
-            const error = document.getElementById('error');
-            error.textContent = message;
-            error.style.display = 'block';
-        }
-        
-        function hideError() {
-            document.getElementById('error').style.display = 'none';
-        }
-        
-        function toggleJoinSection() {
-            const joinSection = document.getElementById('joinSection');
-            joinSection.classList.toggle('show');
-            
-            const btn = document.getElementById('joinToggleBtn');
-            if (joinSection.classList.contains('show')) {
-                btn.textContent = 'Abbrechen';
-            } else {
-                btn.textContent = 'Meeting beitreten';
-            }
-        }
-        
-        async function createMeeting() {
-            const userName = document.getElementById('userName').value.trim();
-            const btn = document.getElementById('createBtn');
-            const meetingInfo = document.getElementById('meetingInfo');
-            
-            if (!userName) {
-                showError('Bitte geben Sie Ihren Namen ein.');
+            if (!meetingCode) {
+                alert('Bitte Meeting-Code eingeben');
                 return;
             }
             
-            btn.disabled = true;
-            btn.innerHTML = '<span class="spinner"></span> Meeting wird erstellt...';
-            hideError();
-            meetingInfo.style.display = 'none';
+            // Save name to localStorage
+            localStorage.setItem('userName', participantName);
+            
+            // If it's a URL, extract meeting ID
+            let meetingId = meetingCode;
+            if (meetingCode.includes('/meeting/')) {
+                meetingId = meetingCode.split('/meeting/')[1];
+            }
             
             try {
-                console.log('Creating meeting with API URL:', API_URL);
-                
-                const response = await fetch(`${API_URL}/api/v1/meetings/create`, {
+                const response = await fetch(`/api/meetings/${meetingId}/join`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        name: `${userName}s Meeting`
-                    })
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ participant_name: participantName })
                 });
-                
+
                 if (!response.ok) {
-                    const errorText = await response.text();
-                    console.error('Create meeting error:', response.status, errorText);
-                    throw new Error(`HTTP ${response.status}: ${errorText}`);
+                    if (response.status === 404) {
+                        throw new Error('Meeting nicht gefunden');
+                    }
+                    throw new Error('Fehler beim Beitreten');
                 }
                 
                 const data = await response.json();
-                console.log('Meeting created:', data);
                 
-                // Show meeting info
-                const meetingLink = document.getElementById('meetingLink');
-                meetingLink.href = data.meeting_url;
-                meetingLink.textContent = data.meeting_url;
-                meetingInfo.style.display = 'block';
+                // Store data for meeting page
+                sessionStorage.setItem('meetingData', JSON.stringify(data));
                 
-                // Store link for copying
-                window.currentMeetingUrl = data.meeting_url;
-                
-                // Automatically redirect to meeting after 2 seconds
-                setTimeout(() => {
-                    window.location.href = `${data.meeting_url}?name=${encodeURIComponent(userName)}`;
-                }, 2000);
-                
-            } catch (err) {
-                console.error('Error creating meeting:', err);
-                showError('Fehler beim Erstellen des Meetings. Bitte versuchen Sie es erneut.');
-            } finally {
-                btn.disabled = false;
-                btn.textContent = 'Neues Meeting erstellen';
+                // Navigate to meeting
+                window.location.href = `/meeting/${data.meeting_id}`;
+            } catch (error) {
+                alert(error.message);
             }
-        }
-        
-        async function joinExistingMeeting() {
-            const userName = document.getElementById('userName').value.trim();
-            const meetingId = document.getElementById('meetingId').value.trim();
-            const btn = document.getElementById('joinBtn');
+        });
+
+        // Copy link functionality
+        document.getElementById('copyLink').addEventListener('click', () => {
+            const shareLink = document.getElementById('shareLink');
+            shareLink.select();
+            document.execCommand('copy');
             
-            if (!userName) {
-                showError('Bitte geben Sie Ihren Namen ein.');
-                return;
+            const btn = document.getElementById('copyLink');
+            btn.textContent = '✓ Kopiert!';
+            setTimeout(() => {
+                btn.textContent = '📋 Kopieren';
+            }, 2000);
+        });
+
+        // Close modal on click outside
+        document.getElementById('shareModal').addEventListener('click', (e) => {
+            if (e.target.id === 'shareModal') {
+                e.target.classList.remove('show');
             }
-            
-            if (!meetingId) {
-                showError('Bitte geben Sie eine Meeting-ID ein.');
-                return;
+        });
+
+        // Allow Enter key to submit
+        document.getElementById('meetingCode').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                document.getElementById('joinMeeting').click();
             }
-            
-            btn.disabled = true;
-            btn.innerHTML = '<span class="spinner"></span> Beitritt läuft...';
-            hideError();
-            
-            try {
-                console.log('Checking meeting exists:', meetingId);
-                
-                // Check if meeting exists
-                const checkResponse = await fetch(`${API_URL}/api/v1/meetings/${meetingId}/exists`);
-                
-                if (!checkResponse.ok) {
-                    if (checkResponse.status === 404) {
-                        throw new Error('Meeting nicht gefunden. Bitte überprüfen Sie die Meeting-ID.');
-                    } else if (checkResponse.status === 410) {
-                        throw new Error('Meeting ist abgelaufen.');
-                    } else {
-                        throw new Error('Fehler beim Überprüfen des Meetings.');
-                    }
-                }
-                
-                // Redirect to meeting page
-                const meetingUrl = `/meeting/${meetingId}?name=${encodeURIComponent(userName)}`;
-                console.log('Redirecting to:', meetingUrl);
-                window.location.href = meetingUrl;
-                
-            } catch (err) {
-                console.error('Error joining meeting:', err);
-                showError(err.message || 'Fehler beim Beitreten des Meetings. Bitte versuchen Sie es erneut.');
-            } finally {
-                btn.disabled = false;
-                btn.textContent = 'Meeting beitreten';
-            }
-        }
-        
-        async function copyLink() {
-            try {
-                await navigator.clipboard.writeText(window.currentMeetingUrl);
-                
-                const btn = event.target;
-                const originalText = btn.textContent;
-                btn.textContent = '✓ Kopiert!';
-                btn.style.background = '#2d8f47';
-                
-                setTimeout(() => {
-                    btn.textContent = originalText;
-                    btn.style.background = '#34a853';
-                }, 2000);
-                
-            } catch (err) {
-                console.error('Error copying link:', err);
-                // Fallback: show prompt
-                prompt('Meeting-Link (kopieren Sie diesen Link):', window.currentMeetingUrl);
-            }
-        }
+        });
     </script>
 </body>
 </html> 

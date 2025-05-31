@@ -1,0 +1,41 @@
+{
+  "name": "HeyDok Video Meetings",
+  "description": "A minimal video meeting platform powered by LiveKit and FastAPI",
+  "repository": "https://github.com/yourusername/heydok-video",
+  "logo": "https://node-js-sample.herokuapp.com/node.png",
+  "keywords": ["fastapi", "livekit", "video", "meetings", "python"],
+  "image": "heroku/python",
+  "stack": "heroku-22",
+  "buildpacks": [
+    {
+      "url": "heroku/python"
+    }
+  ],
+  "env": {
+    "LIVEKIT_URL": {
+      "description": "LiveKit WebSocket URL (e.g., wss://your-instance.livekit.cloud)",
+      "required": true
+    },
+    "LIVEKIT_API_KEY": {
+      "description": "LiveKit API Key",
+      "required": true
+    },
+    "LIVEKIT_API_SECRET": {
+      "description": "LiveKit API Secret",
+      "required": true
+    },
+    "APP_URL": {
+      "description": "Full URL of your Heroku app (will be set automatically)",
+      "required": false
+    }
+  },
+  "formation": {
+    "web": {
+      "quantity": 1,
+      "size": "eco"
+    }
+  },
+  "scripts": {
+    "postdeploy": "echo 'HeyDok Video deployed successfully!'"
+  }
+} 

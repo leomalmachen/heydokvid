@@ -1,193 +1,95 @@
-# Deployment Guide
+# Deployment Guide - HeyDok Video
 
-This guide covers deployment options for the Video Meeting Platform.
+## 🚀 GitHub Deployment Setup
 
-## 🚀 Deployment Options
-
-### 1. Render.com (Recommended)
-
-Render provides easy deployment with automatic SSL and scaling.
-
-#### Prerequisites
-- Render account
-- GitHub repository
-- Environment variables ready
-
-#### Steps
-
-1. **Prepare your repository**
-   ```bash
-   ./deploy-render.sh
-   ```
-
-2. **Create services on Render**
-   - Go to [render.com](https://render.com)
-   - Create a new Web Service
-   - Connect your GitHub repository
-   - Use the following settings:
-     - Build Command: `pip install -r requirements.txt`
-     - Start Command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-
-3. **Configure environment variables**
-   Add these in Render dashboard:
-   ```
-   LIVEKIT_URL=your_livekit_url
-   LIVEKIT_API_KEY=your_api_key
-   LIVEKIT_API_SECRET=your_api_secret
-   DATABASE_URL=your_postgres_url
-   REDIS_URL=your_redis_url
-   SECRET_KEY=your_secret_key
-   ```
-
-4. **Deploy**
-   - Click "Deploy"
-   - Wait for build to complete
-   - Your app will be available at `https://your-app.onrender.com`
-
-### 2. Docker Deployment
-
-Docker provides consistent deployment across any platform.
-
-#### Local Docker
-
-1. **Build the image**
-   ```bash
-   docker build -t video-meeting-app .
-   ```
-
-2. **Run the container**
-   ```bash
-   docker run -p 8000:8000 \
-     -e LIVEKIT_URL=your_livekit_url \
-     -e LIVEKIT_API_KEY=your_api_key \
-     -e LIVEKIT_API_SECRET=your_api_secret \
-     -e DATABASE_URL=your_postgres_url \
-     -e REDIS_URL=your_redis_url \
-     -e SECRET_KEY=your_secret_key \
-     video-meeting-app
-   ```
-
-#### Docker Compose
-
-1. **Start all services**
-   ```bash
-   docker-compose -f docker-compose.dev.yml up -d
-   ```
-
-2. **Check logs**
-   ```bash
-   docker-compose logs -f
-   ```
-
-3. **Stop services**
-   ```bash
-   docker-compose down
-   ```
-
-## 📋 Environment Variables
-
-### Required Variables
-
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `LIVEKIT_URL` | LiveKit server URL | `wss://your-livekit.com` |
-| `LIVEKIT_API_KEY` | LiveKit API key | `APIxxxxxxxx` |
-| `LIVEKIT_API_SECRET` | LiveKit API secret | `secret-key-here` |
-| `DATABASE_URL` | PostgreSQL connection | `postgresql://user:pass@host/db` |
-| `REDIS_URL` | Redis connection | `redis://localhost:6379` |
-| `SECRET_KEY` | App secret key | `your-secret-key` |
-
-### Optional Variables
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `PORT` | Server port | `8000` |
-| `LOG_LEVEL` | Logging level | `INFO` |
-| `CORS_ORIGINS` | Allowed origins | `["*"]` |
-
-## 🔍 Health Checks
-
-### API Health
+### 1. Repository Setup
 ```bash
-curl https://your-app.com/health
+# Initialize git repository if not already done
+git init
+git add .
+git commit -m "Initial commit"
+
+# Create GitHub repository and push
+git remote add origin https://github.com/yourusername/heydok-video.git
+git branch -M main
+git push -u origin main
 ```
 
-### LiveKit Connection
+### 2. Configure GitHub Secrets
+Go to your GitHub repository → Settings → Secrets and Variables → Actions
+
+Add these secrets:
+- `HEROKU_API_KEY`: Your Heroku API key (found in Account Settings → API Key)
+- `HEROKU_APP_NAME`: Your Heroku app name
+- `HEROKU_EMAIL`: Your Heroku account email
+
+## 🔧 Heroku Deployment
+
+### Method 1: One-Click Deploy
+[![Deploy](https://www.herokucdn.com/deploy/button.svg)](https://heroku.com/deploy)
+
+### Method 2: Manual Heroku CLI
 ```bash
-curl https://your-app.com/api/v1/health/livekit
+# Install Heroku CLI
+# Login to Heroku
+heroku login
+
+# Create new Heroku app
+heroku create your-app-name
+
+# Set environment variables
+heroku config:set LIVEKIT_URL=wss://heydok-5pbd24sq.livekit.cloud
+heroku config:set LIVEKIT_API_KEY=APIysK82G8HGmFr
+heroku config:set LIVEKIT_API_SECRET=ytVhapnJwHIzfQzzqZL3sPbSJfelfdBcCtD2vCwm0bbA
+
+# Deploy
+git push heroku main
+
+# Open your app
+heroku open
 ```
 
-## 🚨 Troubleshooting
+### Method 3: GitHub Integration
+1. Go to your Heroku Dashboard
+2. Create new app
+3. Go to Deploy tab
+4. Connect to GitHub
+5. Enable automatic deploys from main branch
+6. Set Config Vars in Settings tab:
+   - `LIVEKIT_URL`: `wss://heydok-5pbd24sq.livekit.cloud`
+   - `LIVEKIT_API_KEY`: `APIysK82G8HGmFr`
+   - `LIVEKIT_API_SECRET`: `ytVhapnJwHIzfQzzqZL3sPbSJfelfdBcCtD2vCwm0bbA`
 
-### Common Issues
+## 🔍 Health Check URLs
+After deployment, test these endpoints:
+- `/health` - Application health status
+- `/api/health` - API health status
+- `/` - Homepage
 
-1. **Port conflicts**
-   - Change the PORT environment variable
-   - Check for other services on the same port
+## 🐛 Troubleshooting
 
-2. **LiveKit connection errors**
-   - Verify credentials are correct
-   - Check LiveKit server is accessible
-   - Ensure WebSocket connections are allowed
+### Common Issues:
+1. **LiveKit credentials error**: Verify all three environment variables are set correctly
+2. **Static files not found**: Make sure `frontend/` directory exists and contains HTML files
+3. **Port binding error**: Heroku automatically sets the PORT variable
 
-3. **Database connection issues**
-   - Verify DATABASE_URL format
-   - Check network connectivity
-   - Ensure database is running
-
-### Logs
-
-- **Render**: Check logs in Render dashboard
-- **Docker**: `docker logs container-name`
-- **Local**: Check `logs/` directory
-
-## 🔒 Security Considerations
-
-1. **Use HTTPS in production**
-2. **Set strong SECRET_KEY**
-3. **Restrict CORS origins**
-4. **Use environment variables for secrets**
-5. **Enable rate limiting**
-6. **Regular security updates**
-
-## 📊 Monitoring
-
-### Recommended Tools
-- **Sentry** for error tracking
-- **Prometheus** for metrics
-- **Grafana** for visualization
-- **Uptime monitoring** services
-
-### Key Metrics
-- Response times
-- Error rates
-- Active connections
-- Room usage
-- API usage
-
-## 🔄 Updates and Maintenance
-
-### Updating Dependencies
+### Debug Commands:
 ```bash
-pip install --upgrade -r requirements.txt
+# Check Heroku logs
+heroku logs --tail
+
+# Check config vars
+heroku config
+
+# Restart app
+heroku restart
 ```
 
-### Database Migrations
-```bash
-alembic upgrade head
-```
-
-### Rolling Updates
-1. Deploy new version
-2. Run health checks
-3. Switch traffic
-4. Monitor for issues
-
-## 📞 Support
-
-For deployment issues:
-1. Check logs first
-2. Review environment variables
-3. Test locally with same config
-4. Check GitHub issues
-5. Contact support if needed 
+## 📝 Environment Variables
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `LIVEKIT_URL` | LiveKit WebSocket URL | Yes |
+| `LIVEKIT_API_KEY` | LiveKit API Key | Yes |
+| `LIVEKIT_API_SECRET` | LiveKit API Secret | Yes |
+| `APP_URL` | Full app URL (auto-set by Heroku) | No |
+| `PORT` | Port number (auto-set by Heroku) | No | 

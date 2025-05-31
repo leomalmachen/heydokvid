@@ -3,786 +3,86 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Meeting beitreten</title>
-    <!-- LiveKit SDK -->
+    <title>Meeting - HeyDok Video</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <!-- LiveKit Client SDK -->
     <script src="https://unpkg.com/livekit-client/dist/livekit-client.umd.min.js"></script>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #f8f9fa;
-            min-height: 100vh;
-            color: #202124;
-        }
-        
-        /* Join Screen Styles */
-        .join-screen {
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 2rem;
-        }
-        
-        .join-container {
-            background: white;
-            padding: 3rem;
-            border-radius: 1rem;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
-            max-width: 400px;
-            width: 100%;
-            text-align: center;
-        }
-        
-        .join-container h1 {
-            margin-bottom: 0.5rem;
-            font-size: 2rem;
-            font-weight: 400;
-            color: #202124;
-        }
-        
-        .meeting-id-display {
-            color: #5f6368;
-            margin-bottom: 2rem;
-            font-size: 0.9rem;
-        }
-        
-        .preview-container {
-            position: relative;
-            width: 200px;
-            height: 150px;
-            margin: 0 auto 2rem;
-            border-radius: 1rem;
-            overflow: hidden;
-            background: #000;
-        }
-        
-        #previewVideo {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-        
-        .preview-controls {
-            position: absolute;
-            bottom: 10px;
-            left: 50%;
-            transform: translateX(-50%);
-            display: flex;
-            gap: 0.5rem;
-        }
-        
-        .preview-btn {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            border: none;
-            background: rgba(0,0,0,0.7);
-            color: white;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: all 0.2s ease;
-        }
-        
-        .preview-btn:hover {
-            background: rgba(0,0,0,0.9);
-        }
-        
-        .preview-btn.off {
-            background: #d93025;
-        }
-        
-        .name-input {
-            width: 100%;
-            padding: 1rem;
-            font-size: 1rem;
-            border: 2px solid #e8eaed;
-            border-radius: 0.5rem;
-            margin-bottom: 2rem;
-            background: white;
-            transition: border-color 0.2s ease;
-        }
-        
-        .name-input:focus {
-            outline: none;
-            border-color: #1a73e8;
-        }
-        
-        .join-btn {
-            background: #1a73e8;
-            color: white;
-            border: none;
-            padding: 1rem 2rem;
-            font-size: 1rem;
-            border-radius: 2rem;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            width: 100%;
-            font-weight: 500;
-        }
-        
-        .join-btn:hover {
-            background: #1557b0;
-        }
-        
-        .join-btn:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-        }
-        
-        /* Meeting Screen Styles */
-        .meeting-screen {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: #000;
-        }
-        
-        .meeting-screen.show {
-            display: block;
-        }
-        
-        .video-grid {
-            width: 100%;
-            height: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            position: relative;
-        }
-        
-        #remoteVideosContainer {
-            width: 100%;
-            height: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            position: relative;
-        }
-        
-        .remote-video {
-            width: 100%;
-            height: 100%;
-            object-fit: contain;
-            background: #1a1a1a;
-        }
-        
-        #localVideo {
-            position: absolute;
-            bottom: 100px;
-            right: 20px;
-            width: 200px;
-            height: 150px;
-            object-fit: cover;
-            border-radius: 0.5rem;
-            box-shadow: 0 4px 16px rgba(0,0,0,0.5);
-            border: 2px solid #fff;
-            z-index: 10;
-        }
-        
-        .meeting-header {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            background: rgba(0,0,0,0.7);
-            padding: 0.5rem 1rem;
-            border-radius: 2rem;
-            color: white;
-            font-size: 0.9rem;
-            backdrop-filter: blur(10px);
-        }
-        
-        .meeting-controls {
-            position: absolute;
-            bottom: 30px;
-            left: 50%;
-            transform: translateX(-50%);
-            display: flex;
-            gap: 1rem;
-            background: rgba(0,0,0,0.8);
-            padding: 1rem 2rem;
-            border-radius: 3rem;
-            backdrop-filter: blur(10px);
-        }
-        
-        .control-btn {
-            width: 56px;
-            height: 56px;
-            border-radius: 50%;
-            border: none;
-            background: #3c4043;
-            color: white;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: all 0.2s ease;
-            position: relative;
-        }
-        
-        .control-btn:hover {
-            background: #5f6368;
-        }
-        
-        .control-btn.active {
-            background: #1a73e8;
-        }
-        
-        .control-btn.off {
-            background: #d93025;
-        }
-        
-        .control-btn.end {
-            background: #ea4335;
-        }
-        
-        .control-btn.end:hover {
-            background: #d33b2c;
-        }
-        
-        .error {
-            color: #d93025;
-            margin-top: 1rem;
-            padding: 1rem;
-            background: #fce8e6;
-            border-radius: 0.5rem;
-            display: none;
-        }
-        
-        .error.show {
-            display: block;
-        }
-        
-        .spinner {
-            display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 2px solid rgba(255,255,255,.3);
-            border-radius: 50%;
-            border-top-color: white;
-            animation: spin 1s ease-in-out infinite;
-        }
-        
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-        
-        .no-video-placeholder {
-            width: 100%;
-            height: 100%;
-            background: #1a1a1a;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #fff;
-            font-size: 1.2rem;
-        }
-    </style>
 </head>
 <body>
-    <!-- Join Screen -->
-    <div class="join-screen" id="joinScreen">
-        <div class="join-container">
-            <h1>Meeting beitreten</h1>
-            <div class="meeting-id-display" id="meetingIdDisplay"></div>
-            
-            <div class="preview-container">
-                <video id="previewVideo" autoplay playsinline muted></video>
-                <div class="preview-controls">
-                    <button class="preview-btn" id="previewMicBtn" onclick="togglePreviewMic()">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
-                            <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-                            <line x1="12" y1="19" x2="12" y2="23"></line>
-                            <line x1="8" y1="23" x2="16" y2="23"></line>
-                        </svg>
-                    </button>
-                    <button class="preview-btn" id="previewCameraBtn" onclick="togglePreviewCamera()">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M23 7l-7 5 7 5V7z"></path>
-                            <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
-                        </svg>
-                    </button>
-                </div>
+    <div class="meeting-container">
+        <!-- Meeting Header -->
+        <header class="meeting-header">
+            <div class="meeting-info">
+                <h1>HeyDok Video</h1>
+                <span class="meeting-id">Meeting: {{MEETING_ID}}</span>
             </div>
-            
-            <input 
-                type="text" 
-                id="displayName" 
-                class="name-input"
-                placeholder="Ihr Name" 
-                required
-                autofocus
-            >
-            
-            <button id="joinBtn" class="join-btn" onclick="joinMeeting()">
-                Meeting beitreten
-            </button>
-            
-            <button class="share-btn" onclick="shareMeeting()" style="margin-top: 1rem; background: #34a853; color: white; border: none; padding: 0.8rem 2rem; border-radius: 2rem; cursor: pointer; font-size: 0.9rem; width: 100%; transition: all 0.2s ease;">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 0.5rem; vertical-align: middle;">
-                    <circle cx="18" cy="5" r="3"></circle>
-                    <circle cx="6" cy="12" r="3"></circle>
-                    <circle cx="18" cy="19" r="3"></circle>
-                    <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
-                    <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+            <div class="participant-count">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                    <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" fill="currentColor"/>
                 </svg>
-                Meeting-Link teilen
-            </button>
-            
-            <div id="error" class="error"></div>
+                <span id="participantCount">1</span>
+            </div>
+        </header>
+
+        <!-- Video Grid -->
+        <main class="video-grid" id="videoGrid">
+            <!-- Videos will be added dynamically here -->
+            <div class="loading-state" id="loadingState">
+                <div class="spinner"></div>
+                <p>Meeting wird verbunden...</p>
+            </div>
+        </main>
+
+        <!-- Control Bar -->
+        <footer class="control-bar">
+            <div class="controls">
+                <button id="toggleMic" class="control-btn" title="Mikrofon">
+                    <svg class="mic-on" width="24" height="24" viewBox="0 0 24 24">
+                        <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+                        <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+                    </svg>
+                    <svg class="mic-off hidden" width="24" height="24" viewBox="0 0 24 24">
+                        <path d="M19 11h-1.7c0 .74-.16 1.43-.43 2.05l1.23 1.23c.56-.98.9-2.09.9-3.28zm-4.02.17c0-.06.02-.11.02-.17V5c0-1.66-1.34-3-3-3S9 3.34 9 5v.18l5.98 5.99zM4.27 3L3 4.27l6.01 6.01V11c0 1.66 1.33 3 2.99 3 .22 0 .44-.03.65-.08l1.66 1.66c-.71.33-1.5.52-2.31.52-2.76 0-5.3-2.1-5.3-5.1H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c.91-.13 1.77-.45 2.54-.9L19.73 21 21 19.73 4.27 3z"/>
+                    </svg>
+                </button>
+
+                <button id="toggleVideo" class="control-btn" title="Kamera">
+                    <svg class="video-on" width="24" height="24" viewBox="0 0 24 24">
+                        <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>
+                    </svg>
+                    <svg class="video-off hidden" width="24" height="24" viewBox="0 0 24 24">
+                        <path d="M21 6.5l-4 4V7c0-.55-.45-1-1-1H9.82L21 17.18V6.5zM3.27 2L2 3.27 4.73 6H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.21 0 .39-.08.54-.18L19.73 21 21 19.73 3.27 2z"/>
+                    </svg>
+                </button>
+
+                <button id="shareLink" class="control-btn" title="Link teilen">
+                    <svg width="24" height="24" viewBox="0 0 24 24">
+                        <path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92 1.61 0 2.92-1.31 2.92-2.92s-1.31-2.92-2.92-2.92z"/>
+                    </svg>
+                </button>
+
+                <button id="leaveMeeting" class="control-btn leave" title="Meeting verlassen">
+                    <svg width="24" height="24" viewBox="0 0 24 24">
+                        <path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.68.28-.3 0-.55-.13-.74-.33-.48-.52-.46-1.34.06-1.84 1.06-.98 2.25-1.78 3.53-2.36A9.868 9.868 0 0112 10c1.88 0 3.64.52 5.65 1.32 1.28.58 2.46 1.37 3.52 2.35.52.5.54 1.32.06 1.84-.49.52-1.31.54-1.84.06-.79-.73-1.68-1.36-2.66-1.85-.33-.16-.56-.51-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z"/>
+                    </svg>
+                </button>
+            </div>
+        </footer>
+
+        <!-- Share Modal -->
+        <div id="shareModal" class="modal">
+            <div class="modal-content">
+                <h2>Meeting teilen</h2>
+                <p>Teile diesen Link mit anderen:</p>
+                <div class="share-link">
+                    <input type="text" id="shareLinkInput" readonly>
+                    <button id="copyLink" class="btn btn-small">📋 Kopieren</button>
+                </div>
+                <button class="btn btn-secondary" onclick="document.getElementById('shareModal').classList.remove('show')">Schließen</button>
+            </div>
         </div>
     </div>
-    
-    <!-- Meeting Screen -->
-    <div class="meeting-screen" id="meetingScreen">
-        <div class="meeting-header" id="meetingHeader"></div>
-        
-        <div class="video-grid">
-            <div id="remoteVideosContainer"></div>
-            <video id="localVideo" autoplay playsinline muted></video>
-        </div>
-        
-        <div class="meeting-controls">
-            <button id="shareBtn" class="control-btn" onclick="shareMeeting()" title="Meeting teilen">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="18" cy="5" r="3"></circle>
-                    <circle cx="6" cy="12" r="3"></circle>
-                    <circle cx="18" cy="19" r="3"></circle>
-                    <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
-                    <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
-                </svg>
-            </button>
-            <button id="micBtn" class="control-btn active" onclick="toggleMic()" title="Mikrofon">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
-                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-                    <line x1="12" y1="19" x2="12" y2="23"></line>
-                    <line x1="8" y1="23" x2="16" y2="23"></line>
-                </svg>
-            </button>
-            <button class="control-btn active" id="cameraBtn" onclick="toggleCamera()">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M23 7l-7 5 7 5V7z"></path>
-                    <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
-                </svg>
-            </button>
-            <button class="control-btn end" onclick="endCall()">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-3.33-2.67m-2.67-3.34a19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"></path>
-                    <line x1="23" y1="1" x2="1" y2="23"></line>
-                </svg>
-            </button>
-        </div>
-    </div>
-    
-    <script>
-        // Improved API URL detection
-        function getApiUrl() {
-            const currentHost = window.location.host;
-            const currentProtocol = window.location.protocol;
-            
-            // For localhost development
-            if (currentHost.includes('localhost') || currentHost.includes('127.0.0.1')) {
-                // Backend runs on port 8000
-                return 'http://localhost:8000';
-            }
-            
-            // For production (Heroku, Vercel, etc.)
-            return `${currentProtocol}//${currentHost}`;
-        }
-        
-        const API_URL = getApiUrl();
-        console.log('Using API URL:', API_URL);
-            
-        // Extract meeting ID from URL path instead of query parameters
-        const pathParts = window.location.pathname.split('/');
-        const meetingId = pathParts[pathParts.length - 1]; // Get last part of path
-        
-        // Extract name from URL query parameters
-        const urlParams = new URLSearchParams(window.location.search);
-        const nameFromUrl = urlParams.get('name');
-        
-        console.log('Meeting ID from URL path:', meetingId);
-        console.log('Name from URL params:', nameFromUrl);
-        console.log('Full pathname:', window.location.pathname);
-        
-        // LiveKit variables
-        let room = null;
-        let localParticipant = null;
-        let localVideoTrack = null;
-        let localAudioTrack = null;
-        
-        // Preview variables
-        let previewStream = null;
-        let isMicOn = true;
-        let isCameraOn = true;
-        
-        // Redirect if no meeting ID or invalid meeting ID
-        if (!meetingId || meetingId === 'meeting' || meetingId.length < 3) {
-            console.error('No valid meeting ID found in URL');
-            window.location.href = '/';
-        }
-        
-        // Initialize
-        document.getElementById('meetingIdDisplay').textContent = `Meeting-ID: ${meetingId}`;
-        document.getElementById('meetingHeader').textContent = `Meeting: ${meetingId}`;
-        
-        // Pre-fill name if provided in URL
-        if (nameFromUrl) {
-            document.getElementById('displayName').value = nameFromUrl;
-        }
-        
-        // Check if meeting exists before allowing join
-        async function checkMeetingExists() {
-            try {
-                console.log('Checking if meeting exists:', meetingId);
-                const response = await fetch(`${API_URL}/api/v1/meetings/${meetingId}/exists`);
-                
-                if (!response.ok) {
-                    if (response.status === 404) {
-                        showError('Meeting nicht gefunden. Bitte überprüfen Sie die Meeting-ID.');
-                        document.getElementById('joinBtn').disabled = true;
-                        return false;
-                    } else if (response.status === 410) {
-                        showError('Meeting ist abgelaufen oder nicht mehr aktiv.');
-                        document.getElementById('joinBtn').disabled = true;
-                        return false;
-                    }
-                }
-                
-                const data = await response.json();
-                console.log('Meeting exists:', data);
-                return true;
-                
-            } catch (err) {
-                console.error('Error checking meeting:', err);
-                showError('Fehler beim Überprüfen des Meetings. Bitte versuchen Sie es erneut.');
-                return false;
-            }
-        }
-        
-        // Get user media for preview
-        async function initializeMedia() {
-            try {
-                previewStream = await navigator.mediaDevices.getUserMedia({
-                    video: true,
-                    audio: true
-                });
-                
-                document.getElementById('previewVideo').srcObject = previewStream;
-                
-            } catch (err) {
-                console.error('Failed to get user media:', err);
-                showError('Kamera/Mikrofon konnte nicht aktiviert werden. Bitte überprüfen Sie die Berechtigungen.');
-            }
-        }
-        
-        function togglePreviewMic() {
-            if (!previewStream) return;
-            
-            const audioTrack = previewStream.getAudioTracks()[0];
-            if (audioTrack) {
-                isMicOn = !isMicOn;
-                audioTrack.enabled = isMicOn;
-                document.getElementById('previewMicBtn').classList.toggle('off', !isMicOn);
-            }
-        }
-        
-        function togglePreviewCamera() {
-            if (!previewStream) return;
-            
-            const videoTrack = previewStream.getVideoTracks()[0];
-            if (videoTrack) {
-                isCameraOn = !isCameraOn;
-                videoTrack.enabled = isCameraOn;
-                document.getElementById('previewCameraBtn').classList.toggle('off', !isCameraOn);
-            }
-        }
-        
-        async function joinMeeting() {
-            const displayName = document.getElementById('displayName').value.trim();
-            const joinBtn = document.getElementById('joinBtn');
-            
-            if (!displayName) {
-                showError('Bitte geben Sie Ihren Namen ein.');
-                return;
-            }
-            
-            joinBtn.disabled = true;
-            joinBtn.innerHTML = '<span class="spinner"></span> Beitritt läuft...';
-            
-            try {
-                console.log('Joining meeting:', meetingId, 'with name:', displayName);
-                console.log('API URL:', API_URL);
-                
-                // Call the join API endpoint
-                const response = await fetch(`${API_URL}/api/v1/meetings/${meetingId}/join`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        display_name: displayName
-                    })
-                });
-                
-                console.log('Join response status:', response.status);
-                
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    console.error('Join API Error:', response.status, errorText);
-                    
-                    if (response.status === 404) {
-                        throw new Error('Meeting nicht gefunden. Bitte überprüfen Sie die Meeting-ID.');
-                    } else if (response.status === 410) {
-                        throw new Error('Meeting ist abgelaufen.');
-                    } else {
-                        throw new Error(`Meeting-Beitritt fehlgeschlagen: ${response.status}`);
-                    }
-                }
-                
-                const data = await response.json();
-                console.log('Join response data:', data);
-                
-                // Stop preview stream
-                if (previewStream) {
-                    previewStream.getTracks().forEach(track => track.stop());
-                }
-                
-                // Connect to LiveKit room
-                await connectToRoom(data.token, data.livekit_url);
-                
-                // Move to meeting screen
-                document.getElementById('joinScreen').style.display = 'none';
-                document.getElementById('meetingScreen').classList.add('show');
-                
-            } catch (err) {
-                console.error('Join meeting error:', err);
-                showError(err.message || 'Meeting-Beitritt fehlgeschlagen. Bitte versuchen Sie es erneut.');
-                joinBtn.disabled = false;
-                joinBtn.textContent = 'Meeting beitreten';
-            }
-        }
-        
-        async function connectToRoom(token, url) {
-            try {
-                // Create a new Room instance
-                room = new LivekitClient.Room({
-                    adaptiveStream: true,
-                    dynacast: true,
-                    videoCaptureDefaults: {
-                        resolution: LivekitClient.VideoPresets.h720.resolution,
-                    }
-                });
-                
-                // Set up event handlers
-                room.on(LivekitClient.RoomEvent.TrackSubscribed, handleTrackSubscribed);
-                room.on(LivekitClient.RoomEvent.TrackUnsubscribed, handleTrackUnsubscribed);
-                room.on(LivekitClient.RoomEvent.ParticipantConnected, handleParticipantConnected);
-                room.on(LivekitClient.RoomEvent.ParticipantDisconnected, handleParticipantDisconnected);
-                room.on(LivekitClient.RoomEvent.Disconnected, handleDisconnect);
-                
-                // Connect to the room
-                await room.connect(url, token);
-                console.log('Connected to room:', room.name);
-                
-                // Publish local tracks
-                await room.localParticipant.enableCameraAndMicrophone();
-                
-                // Get local tracks
-                localVideoTrack = room.localParticipant.getTrack(LivekitClient.Track.Source.Camera);
-                localAudioTrack = room.localParticipant.getTrack(LivekitClient.Track.Source.Microphone);
-                
-                // Display local video
-                if (localVideoTrack) {
-                    const videoElement = localVideoTrack.attach();
-                    document.getElementById('localVideo').replaceWith(videoElement);
-                    videoElement.id = 'localVideo';
-                }
-                
-                // Apply initial mic/camera state
-                if (!isMicOn && localAudioTrack) {
-                    await room.localParticipant.setMicrophoneEnabled(false);
-                    document.getElementById('micBtn').classList.remove('active');
-                    document.getElementById('micBtn').classList.add('off');
-                }
-                
-                if (!isCameraOn && localVideoTrack) {
-                    await room.localParticipant.setCameraEnabled(false);
-                    document.getElementById('cameraBtn').classList.remove('active');
-                    document.getElementById('cameraBtn').classList.add('off');
-                }
-                
-            } catch (err) {
-                console.error('Failed to connect to room:', err);
-                throw err;
-            }
-        }
-        
-        function handleTrackSubscribed(track, publication, participant) {
-            console.log('Track subscribed:', track.kind, 'from', participant.identity);
-            
-            if (track.kind === LivekitClient.Track.Kind.Video) {
-                // Attach video track to remote video element
-                const videoElement = track.attach();
-                videoElement.classList.add('remote-video');
-                videoElement.setAttribute('data-participant', participant.identity);
-                
-                const container = document.getElementById('remoteVideosContainer');
-                // Clear existing videos (for 1-on-1 meetings)
-                container.innerHTML = '';
-                container.appendChild(videoElement);
-            } else if (track.kind === LivekitClient.Track.Kind.Audio) {
-                // Attach audio track (it will play automatically)
-                track.attach();
-            }
-        }
-        
-        function handleTrackUnsubscribed(track, publication, participant) {
-            console.log('Track unsubscribed:', track.kind, 'from', participant.identity);
-            
-            if (track.kind === LivekitClient.Track.Kind.Video) {
-                // Find and remove the video element
-                const videoElement = document.querySelector(`[data-participant="${participant.identity}"]`);
-                if (videoElement) {
-                    videoElement.remove();
-                }
-            }
-            
-            track.detach();
-        }
-        
-        function handleParticipantConnected(participant) {
-            console.log('Participant connected:', participant.identity);
-        }
-        
-        function handleParticipantDisconnected(participant) {
-            console.log('Participant disconnected:', participant.identity);
-            // Clear remote video
-            const remoteVideo = document.getElementById('remoteVideosContainer');
-            remoteVideo.innerHTML = '';
-        }
-        
-        function handleDisconnect() {
-            console.log('Disconnected from room');
-            endCall();
-        }
-        
-        async function toggleMic() {
-            if (!room || !room.localParticipant) return;
-            
-            try {
-                const isEnabled = room.localParticipant.isMicrophoneEnabled;
-                await room.localParticipant.setMicrophoneEnabled(!isEnabled);
-                
-                const btn = document.getElementById('micBtn');
-                btn.classList.toggle('active', !isEnabled);
-                btn.classList.toggle('off', isEnabled);
-            } catch (err) {
-                console.error('Failed to toggle microphone:', err);
-            }
-        }
-        
-        async function toggleCamera() {
-            if (!room || !room.localParticipant) return;
-            
-            try {
-                const isEnabled = room.localParticipant.isCameraEnabled;
-                await room.localParticipant.setCameraEnabled(!isEnabled);
-                
-                const btn = document.getElementById('cameraBtn');
-                btn.classList.toggle('active', !isEnabled);
-                btn.classList.toggle('off', isEnabled);
-            } catch (err) {
-                console.error('Failed to toggle camera:', err);
-            }
-        }
-        
-        async function endCall() {
-            // Disconnect from room
-            if (room) {
-                await room.disconnect();
-            }
-            
-            // Stop all tracks
-            if (previewStream) {
-                previewStream.getTracks().forEach(track => track.stop());
-            }
-            
-            // Redirect to home
-            window.location.href = '/';
-        }
-        
-        function showError(message) {
-            const error = document.getElementById('error');
-            error.textContent = message;
-            error.classList.add('show');
-            setTimeout(() => error.classList.remove('show'), 5000);
-        }
-        
-        // Initialize media and check meeting on page load
-        async function initializePage() {
-            // First check if meeting exists
-            const meetingExists = await checkMeetingExists();
-            if (meetingExists) {
-                // Only initialize media if meeting exists
-                await initializeMedia();
-            }
-        }
-        
-        // Initialize page on load
-        initializePage();
-        
-        // Handle Enter key in name input
-        document.getElementById('displayName').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                joinMeeting();
-            }
-        });
-        
-        async function shareMeeting() {
-            const meetingUrl = window.location.href;
-            
-            try {
-                // Try to use the Web Share API if available
-                if (navigator.share) {
-                    await navigator.share({
-                        title: 'Video Meeting',
-                        text: `Treten Sie meinem Meeting bei: ${meetingId}`,
-                        url: meetingUrl
-                    });
-                } else {
-                    // Fallback: Copy to clipboard
-                    await navigator.clipboard.writeText(meetingUrl);
-                    
-                    // Show temporary notification
-                    const shareBtn = document.getElementById('shareBtn');
-                    const originalHTML = shareBtn.innerHTML;
-                    shareBtn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"></path></svg>';
-                    shareBtn.style.background = '#34a853';
-                    
-                    setTimeout(() => {
-                        shareBtn.innerHTML = originalHTML;
-                        shareBtn.style.background = '';
-                    }, 2000);
-                }
-            } catch (err) {
-                console.error('Error sharing meeting:', err);
-                // Fallback: Show meeting URL in alert
-                prompt('Meeting-Link (Kopieren Sie diesen Link):', meetingUrl);
-            }
-        }
-    </script>
+
+    <script src="/frontend/app.js"></script>
 </body>
 </html> 
