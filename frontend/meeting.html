@@ -91,15 +91,23 @@
             const cdnUrls = [
                 'https://unpkg.com/livekit-client/dist/livekit-client.umd.min.js',
                 'https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js',
-                'https://cdn.skypack.dev/livekit-client'
+                'https://cdn.skypack.dev/livekit-client',
+                'https://unpkg.com/livekit-client@latest/dist/livekit-client.umd.min.js',
+                'https://cdn.jsdelivr.net/npm/livekit-client@latest/dist/livekit-client.umd.min.js'
             ];
             
             function loadScript(url, callback) {
+                console.log(`Attempting to load LiveKit from: ${url}`);
                 const script = document.createElement('script');
                 script.src = url;
-                script.onload = callback;
-                script.onerror = () => {
-                    console.warn(`Failed to load LiveKit from: ${url}`);
+                script.async = false;
+                script.crossOrigin = 'anonymous';
+                script.onload = () => {
+                    console.log(`Successfully loaded script from: ${url}`);
+                    callback();
+                };
+                script.onerror = (error) => {
+                    console.error(`Failed to load LiveKit from: ${url}`, error);
                     tryNextCDN();
                 };
                 document.head.appendChild(script);
@@ -118,16 +126,20 @@
             function checkLiveKit() {
                 setTimeout(() => {
                     if (typeof LiveKit !== 'undefined') {
-                        console.log('LiveKit loaded successfully');
+                        console.log('LiveKit loaded successfully!');
+                        console.log('LiveKit version:', LiveKit.version || 'Unknown');
                         window.livekitLoading = false;
                         // Load our app
                         const appScript = document.createElement('script');
                         appScript.src = '/frontend/app.js';
+                        appScript.onload = () => console.log('App.js loaded successfully');
+                        appScript.onerror = (e) => console.error('Failed to load app.js', e);
                         document.head.appendChild(appScript);
                     } else {
+                        console.warn('LiveKit not found in global scope, trying next CDN...');
                         tryNextCDN();
                     }
-                }, 100);
+                }, 500); // Increased timeout
             }
             
             function showSDKError() {
