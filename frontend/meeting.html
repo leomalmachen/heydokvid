@@ -81,208 +81,72 @@
         </div>
     </div>
 
-    <!-- LiveKit Client SDK with multiple fallbacks -->
+    <!-- LiveKit Client SDK - Direct loading from local file -->
+    <script src="/static/livekit-client.umd.min.js"></script>
+    <!-- App.js - Main application logic -->
+    <script src="/frontend/app.js"></script>
     <script>
-        // Global variable to track SDK loading
-        window.livekitLoading = true;
-        window.livekitLoadAttempts = 0;
-        
-        function tryLoadLiveKit() {
-            const cdnUrls = [
-                // Local fallback first (no external dependencies)
-                '/static/livekit-client.umd.min.js',
-                // API endpoint fallback
-                '/api/livekit-sdk',
-                // Latest stable version from multiple CDNs
-                'https://unpkg.com/livekit-client@2.13.3/dist/livekit-client.umd.min.js',
-                'https://cdn.jsdelivr.net/npm/livekit-client@2.13.3/dist/livekit-client.umd.min.js',
-                'https://cdnjs.cloudflare.com/ajax/libs/livekit-client/2.8.1/livekit-client.umd.min.js',
-                // Fallback to latest without version pinning
-                'https://unpkg.com/livekit-client/dist/livekit-client.umd.min.js',
-                'https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js',
-                // Additional fallbacks with different versions
-                'https://unpkg.com/livekit-client@2.12.0/dist/livekit-client.umd.min.js',
-                'https://cdn.jsdelivr.net/npm/livekit-client@2.12.0/dist/livekit-client.umd.min.js',
-                'https://unpkg.com/livekit-client@2.10.0/dist/livekit-client.umd.min.js',
-                'https://cdn.jsdelivr.net/npm/livekit-client@2.10.0/dist/livekit-client.umd.min.js'
-            ];
-            
-            // Add debug information
-            console.log('Starting LiveKit SDK loading process...');
-            console.log('Browser UserAgent:', navigator.userAgent);
-            console.log('Current URL:', window.location.href);
-            console.log('Meeting ID:', '{{MEETING_ID}}');
-            console.log('Online status:', navigator.onLine);
-            console.log('Protocol:', window.location.protocol);
-            
-            function loadScript(url, callback) {
-                console.log(`Attempting to load LiveKit from: ${url}`);
-                const script = document.createElement('script');
-                script.src = url;
-                script.async = false;
-                script.crossOrigin = 'anonymous';
-                
-                // Add timeout for loading
-                const timeout = setTimeout(() => {
-                    console.error(`Timeout loading script from: ${url}`);
-                    script.onerror(new Error('Timeout'));
-                }, 10000); // 10 second timeout
-                
-                script.onload = () => {
-                    clearTimeout(timeout);
-                    console.log(`Successfully loaded script from: ${url}`);
-                    callback();
-                };
-                script.onerror = (error) => {
-                    clearTimeout(timeout);
-                    console.error(`Failed to load LiveKit from: ${url}`, error);
-                    console.error('Error details:', {
-                        type: error.type,
-                        message: error.message,
-                        timestamp: new Date().toISOString()
-                    });
-                    tryNextCDN();
-                };
-                document.head.appendChild(script);
-            }
-            
-            function tryNextCDN() {
-                window.livekitLoadAttempts++;
-                if (window.livekitLoadAttempts < cdnUrls.length) {
-                    // Add a small delay between attempts
-                    setTimeout(() => {
-                        loadScript(cdnUrls[window.livekitLoadAttempts], checkLiveKit);
-                    }, 500);
-                } else {
-                    // All CDNs failed, show error
-                    showSDKError();
-                }
-            }
-            
-            function checkLiveKit() {
-                setTimeout(() => {
-                    if (typeof LiveKit !== 'undefined') {
-                        console.log('LiveKit loaded successfully!');
-                        console.log('LiveKit version:', LiveKit.version || 'Unknown');
-                        console.log('LiveKit available methods:', Object.keys(LiveKit));
-                        window.livekitLoading = false;
+        // Verify LiveKit is loaded
+        if (typeof LiveKit === 'undefined') {
+            console.error('LiveKit SDK failed to load from local file');
+            document.getElementById('error-message').innerHTML = `
+                <div class="error-container">
+                    <h2>⚠️ Video SDK Fehler</h2>
+                    <p>LiveKit konnte nicht geladen werden.</p>
+                    <div class="error-details">
+                        <h3>Mögliche Ursachen:</h3>
+                        <ul>
+                            <li>• Netzwerkverbindung blockiert</li>
+                            <li>• Browser-Erweiterungen (z.B. Ad-Blocker)</li>
+                            <li>• Firewall oder Proxy-Einstellungen</li>
+                            <li>• Browser unterstützt kein WebRTC</li>
+                            <li>• CDN-Server nicht erreichbar</li>
+                        </ul>
                         
-                        // Verify essential LiveKit components
-                        if (LiveKit.Room && LiveKit.RoomEvent && LiveKit.Track) {
-                            console.log('LiveKit components verified successfully');
-                            // Load our app
-                            const appScript = document.createElement('script');
-                            appScript.src = '/frontend/app.js';
-                            appScript.onload = () => console.log('App.js loaded successfully');
-                            appScript.onerror = (e) => {
-                                console.error('Failed to load app.js', e);
-                                showError('Fehler beim Laden der Anwendung. Bitte laden Sie die Seite neu.');
-                            };
-                            document.head.appendChild(appScript);
-                        } else {
-                            console.error('LiveKit loaded but missing essential components');
-                            showError('LiveKit SDK unvollständig geladen. Bitte laden Sie die Seite neu.');
-                        }
-                    } else {
-                        console.warn('LiveKit not found in global scope, trying next CDN...');
-                        tryNextCDN();
-                    }
-                }, 1000); // Increased timeout to 1 second
-            }
+                        <h3>Debug-Informationen:</h3>
+                        <p>Meeting ID: ${meetingId}</p>
+                        <p>Online: ${navigator.onLine ? 'Ja' : 'Nein'}</p>
+                        <p>Protokoll: ${window.location.protocol}</p>
+                        <p>Versuche: Direkte lokale Datei fehlgeschlagen</p>
+                        <p>Cookies: ${document.cookie ? 'Aktiviert' : 'Deaktiviert'}</p>
+                    </div>
+                    
+                    <div class="error-actions">
+                        <button onclick="location.reload()" class="btn-primary">Seite neu laden</button>
+                        <button onclick="window.open('https://developer.mozilla.org/en-US/docs/Web/API/WebRTC_API', '_blank')" class="btn-secondary">Browser-Konsole öffnen</button>
+                        <button onclick="testDirectConnection()" class="btn-success">Direkte Verbindung testen</button>
+                    </div>
+                </div>
+            `;
+            document.getElementById('error-message').style.display = 'block';
+        } else {
+            console.log('✅ LiveKit SDK loaded successfully from local file');
+            console.log('LiveKit version:', LiveKit.version || 'Unknown');
             
-            function showSDKError() {
-                window.livekitLoading = false;
-                
-                // Collect debug information
-                const debugInfo = {
-                    userAgent: navigator.userAgent,
-                    meetingId: '{{MEETING_ID}}',
-                    currentUrl: window.location.href,
-                    timestamp: new Date().toISOString(),
-                    attemptsCount: window.livekitLoadAttempts,
-                    onlineStatus: navigator.onLine,
-                    protocol: window.location.protocol,
-                    referrer: document.referrer,
-                    cookiesEnabled: navigator.cookieEnabled
-                };
-                
-                console.error('LiveKit SDK Loading Failed - Debug Info:', debugInfo);
-                
-                document.getElementById('loadingState').innerHTML = 
-                    '<div style="text-align: center; color: #ea4335; max-width: 600px; margin: 0 auto;">' +
-                    '<h3>⚠️ Video SDK Fehler</h3>' +
-                    '<p>LiveKit konnte nicht geladen werden.</p>' +
-                    '<div style="text-align: left; background: #f5f5f5; padding: 1rem; border-radius: 4px; margin: 1rem 0; font-size: 0.9rem;">' +
-                    '<strong>Mögliche Ursachen:</strong><br>' +
-                    '• Netzwerkverbindung blockiert<br>' +
-                    '• Browser-Erweiterungen (z.B. Ad-Blocker)<br>' +
-                    '• Firewall oder Proxy-Einstellungen<br>' +
-                    '• Browser unterstützt kein WebRTC<br>' +
-                    '• CDN-Server nicht erreichbar<br><br>' +
-                    '<strong>Debug-Informationen:</strong><br>' +
-                    'Meeting ID: ' + debugInfo.meetingId + '<br>' +
-                    'Online: ' + (debugInfo.onlineStatus ? 'Ja' : 'Nein') + '<br>' +
-                    'Protokoll: ' + debugInfo.protocol + '<br>' +
-                    'Versuche: ' + debugInfo.attemptsCount + '<br>' +
-                    'Cookies: ' + (debugInfo.cookiesEnabled ? 'Aktiviert' : 'Deaktiviert') + '<br>' +
-                    '</div>' +
-                    '<button onclick="window.location.reload()" style="margin-top: 1rem; padding: 0.5rem 1rem; background: #1a73e8; color: white; border: none; border-radius: 4px; cursor: pointer;">' +
-                    'Seite neu laden' +
-                    '</button>' +
-                    '<button onclick="checkBrowserConsole()" style="margin-left: 0.5rem; padding: 0.5rem 1rem; background: #666; color: white; border: none; border-radius: 4px; cursor: pointer;">' +
-                    'Browser-Konsole öffnen' +
-                    '</button>' +
-                    '<button onclick="tryDirectConnection()" style="margin-left: 0.5rem; padding: 0.5rem 1rem; background: #34a853; color: white; border: none; border-radius: 4px; cursor: pointer;">' +
-                    'Direkte Verbindung testen' +
-                    '</button>' +
-                    '</div>';
-            }
-            
-            // Helper function to guide users to browser console
-            window.checkBrowserConsole = function() {
-                alert('Öffne die Browser-Konsole mit F12 (Windows/Linux) oder Cmd+Option+J (Mac) um detaillierte Fehlerinformationen zu sehen.');
-            };
-            
-            // Helper function to test direct connection
-            window.tryDirectConnection = function() {
-                console.log('Testing direct connection to CDNs...');
-                const testUrl = 'https://unpkg.com/livekit-client@2.13.3/dist/livekit-client.umd.min.js';
-                fetch(testUrl, { method: 'HEAD' })
-                    .then(response => {
-                        if (response.ok) {
-                            alert('CDN ist erreichbar. Versuche erneut zu laden...');
-                            window.location.reload();
-                        } else {
-                            alert('CDN nicht erreichbar. Status: ' + response.status);
-                        }
-                    })
-                    .catch(error => {
-                        alert('Netzwerkfehler: ' + error.message);
-                    });
-            };
-            
-            // Helper function for general errors
-            window.showError = function(message) {
-                const loadingState = document.getElementById('loadingState');
-                if (loadingState) {
-                    loadingState.innerHTML = `
-                        <div style="text-align: center; color: #ea4335;">
-                            <h3>⚠️ Fehler</h3>
-                            <p>${message}</p>
-                            <button onclick="window.location.reload()" style="margin-top: 1rem; padding: 0.5rem 1rem; background: #1a73e8; color: white; border: none; border-radius: 4px; cursor: pointer;">
-                                Seite neu laden
-                            </button>
-                        </div>
-                    `;
+            // Initialize the meeting automatically
+            document.addEventListener('DOMContentLoaded', function() {
+                if (typeof initializeMeeting === 'function') {
+                    console.log('🚀 Initializing meeting...');
+                    initializeMeeting();
+                } else {
+                    console.error('❌ initializeMeeting function not found');
                 }
-            };
-            
-            // Start loading
-            loadScript(cdnUrls[0], checkLiveKit);
+            });
         }
         
-        // Start the loading process
-        tryLoadLiveKit();
+        function testDirectConnection() {
+            fetch('/api/livekit-sdk')
+                .then(response => {
+                    if (response.ok) {
+                        alert('✅ Server-Verbindung funktioniert. Bitte Browser-Konsole überprüfen (F12).');
+                    } else {
+                        alert('❌ Server-Verbindung fehlgeschlagen: ' + response.status);
+                    }
+                })
+                .catch(error => {
+                    alert('❌ Netzwerk-Fehler: ' + error.message);
+                });
+        }
     </script>
 </body>
 </html> 
