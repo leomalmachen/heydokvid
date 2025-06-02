@@ -15,6 +15,7 @@ let isInitialized = false;
 // PERSISTENT STATE: Prevent disconnections on tab switch
 let reconnectionAttempts = 0;
 const MAX_RECONNECTION_ATTEMPTS = 3;
+const RECONNECTION_DELAY = 2000;
 let isReconnecting = false;
 let meetingData = null;
 
@@ -328,12 +329,22 @@ function createParticipantContainer(participant, isLocal = false) {
     container.id = `participant-${participant.identity}`;
     container.setAttribute('data-participant', participant.identity);
     
-    // Create video element
+    // Create video element with ECHO PREVENTION
     const video = document.createElement('video');
     video.autoplay = true;
     video.playsInline = true;
-    video.muted = isLocal; // IMPORTANT: Mute local to prevent feedback
     video.id = `video-${participant.identity}`;
+    
+    // CRITICAL: Echo prevention for local participant
+    if (isLocal) {
+        video.muted = true; // LOCAL video MUST be muted
+        video.volume = 0;   // Extra safety
+        console.log('🔇 LOCAL video created - MUTED to prevent echo');
+    } else {
+        video.muted = false; // REMOTE video should NOT be muted
+        video.volume = 1.0;
+        console.log('🔊 REMOTE video created - NOT muted');
+    }
     
     // Create overlay for participant name and controls
     const overlay = document.createElement('div');
@@ -344,14 +355,16 @@ function createParticipantContainer(participant, isLocal = false) {
     nameLabel.textContent = participant.name || participant.identity;
     if (isLocal) nameLabel.textContent += ' (Du)';
     
-    // Audio indicator
+    // Audio indicator (only for remote participants)
     const audioIndicator = document.createElement('div');
     audioIndicator.className = 'audio-indicator';
     audioIndicator.innerHTML = '🎤';
     audioIndicator.style.display = 'none';
     
     overlay.appendChild(nameLabel);
-    overlay.appendChild(audioIndicator);
+    if (!isLocal) { // Only show audio indicator for remote participants
+        overlay.appendChild(audioIndicator);
+    }
     
     container.appendChild(video);
     container.appendChild(overlay);
@@ -360,7 +373,7 @@ function createParticipantContainer(participant, isLocal = false) {
     const videoGrid = document.getElementById('videoGrid');
     if (videoGrid) {
         videoGrid.appendChild(container);
-        console.log(`✅ ${isLocal ? 'LOCAL' : 'REMOTE'} container added to grid:`, participant.identity);
+        console.log(`✅ ${isLocal ? 'LOCAL (MUTED)' : 'REMOTE'} container added to grid:`, participant.identity);
         
         // MEGA-IMPORTANT: Trigger layout recalculation
         updateVideoGridLayout();
@@ -376,12 +389,25 @@ async function connectToRoom(data) {
     console.log('🔗 Connecting to LiveKit room...', data.livekit_url);
     
     try {
-        // Initialize room
+        // Initialize room with ENHANCED AUDIO SETTINGS
         room = new LiveKit.Room({
             adaptiveStream: true,
             dynacast: true,
+            // CRITICAL: Enhanced audio settings to prevent echo
+            audioCaptureDefaults: {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true,
+                sampleRate: 48000,
+                channelCount: 1, // Mono to reduce processing
+            },
             videoCaptureDefaults: {
                 resolution: LiveKit.VideoPresets.h720.resolution,
+            },
+            // IMPORTANT: Prevent audio feedback
+            publishDefaults: {
+                stopMicTrackOnMute: false, // Keep track alive when muted
+                audioPreset: LiveKit.AudioPresets.speech, // Optimized for speech
             },
         });
         
@@ -535,15 +561,16 @@ function handleTrackSubscribed(track, publication, participant) {
         return;
     }
     
-    // Get video element
-    const video = container.querySelector('video');
-    if (!video) {
-        console.error('❌ No video element found in container for:', participant.identity);
-        return;
-    }
-    
     if (track.kind === 'video') {
         console.log('📹 Attaching VIDEO track for:', participant.identity);
+        
+        // Get video element
+        const video = container.querySelector('video');
+        if (!video) {
+            console.error('❌ No video element found in container for:', participant.identity);
+            return;
+        }
+        
         track.attach(video);
         
         // Show video, hide avatar
@@ -562,25 +589,65 @@ function handleTrackSubscribed(track, publication, participant) {
         
     } else if (track.kind === 'audio') {
         console.log('🔊 Attaching AUDIO track for:', participant.identity);
-        track.attach(video); // Audio can also be attached to video element
+        
+        // CRITICAL: Check if this is local participant
+        const isLocal = participant.identity === room.localParticipant.identity;
+        
+        if (isLocal) {
+            console.log('🔇 SKIPPING local audio attachment to prevent echo');
+            return; // NEVER attach local audio to prevent echo!
+        }
+        
+        // ECHO PREVENTION: Only attach remote participant audio
+        console.log('🔊 Attaching REMOTE audio for:', participant.identity);
+        
+        // Remove any existing audio elements for this participant
+        const existingAudio = container.querySelectorAll('audio');
+        existingAudio.forEach(audio => {
+            console.log('🗑️ Removing existing audio element');
+            audio.remove();
+        });
+        
+        // Create new dedicated audio element for remote participant
+        const audio = document.createElement('audio');
+        audio.autoplay = true;
+        audio.playsInline = true;
+        audio.muted = false; // Remote audio should NOT be muted
+        audio.volume = 1.0;
+        audio.id = `audio-${participant.identity}`;
+        
+        // IMPORTANT: Set audio context properties for better quality
+        audio.setAttribute('preload', 'none');
+        audio.setAttribute('controls', 'false');
+        
+        // Attach track to audio element
+        track.attach(audio);
+        
+        // Add audio element to container (hidden)
+        audio.style.display = 'none';
+        container.appendChild(audio);
         
         // Handle audio indicators
         const audioIndicator = container.querySelector('.audio-indicator');
         if (audioIndicator) {
             track.on(LiveKit.TrackEvent.Muted, () => {
+                console.log('🔇 Audio muted for:', participant.identity);
                 audioIndicator.style.display = 'none';
             });
             
             track.on(LiveKit.TrackEvent.Unmuted, () => {
+                console.log('🔊 Audio unmuted for:', participant.identity);
                 audioIndicator.style.display = 'block';
             });
             
             // Set initial state
             audioIndicator.style.display = track.isMuted ? 'none' : 'block';
         }
+        
+        console.log('✅ Remote audio attached successfully for:', participant.identity);
     }
     
-    console.log(`✅ Track attached successfully: ${track.kind} for ${participant.identity}`);
+    console.log(`✅ Track handled successfully: ${track.kind} for ${participant.identity}`);
 }
 
 // Handle track unsubscription
@@ -619,33 +686,41 @@ async function enableLocalMedia() {
         // Update UI buttons
         updateMediaButtons();
         
-        // Get local tracks and attach them
-        room.localParticipant.audioTrackPublications.forEach((publication) => {
-            if (publication.track) {
-                const container = document.getElementById(`participant-${room.localParticipant.identity}`);
-                if (container) {
-                    const video = container.querySelector('video');
-                    if (video) {
-                        publication.track.attach(video);
-                    }
-                }
-            }
-        });
+        // CRITICAL: Handle local tracks properly to prevent echo
+        const localContainer = document.getElementById(`participant-${room.localParticipant.identity}`);
+        if (!localContainer) {
+            console.error('❌ Local container not found');
+            return;
+        }
         
+        const localVideo = localContainer.querySelector('video');
+        if (!localVideo) {
+            console.error('❌ Local video element not found');
+            return;
+        }
+        
+        // ECHO PREVENTION: Ensure local video is ALWAYS muted
+        localVideo.muted = true;
+        localVideo.volume = 0;
+        
+        // Attach video tracks to local video element
         room.localParticipant.videoTrackPublications.forEach((publication) => {
             if (publication.track) {
-                const container = document.getElementById(`participant-${room.localParticipant.identity}`);
-                if (container) {
-                    const video = container.querySelector('video');
-                    if (video) {
-                        publication.track.attach(video);
-                        video.style.display = videoEnabled ? 'block' : 'none';
-                    }
-                }
+                console.log('📹 Attaching LOCAL video track');
+                publication.track.attach(localVideo);
+                localVideo.style.display = videoEnabled ? 'block' : 'none';
             }
         });
         
-        console.log('✅ Local media enabled successfully');
+        // CRITICAL: NEVER attach local audio tracks to prevent echo
+        room.localParticipant.audioTrackPublications.forEach((publication) => {
+            if (publication.track) {
+                console.log('🔇 LOCAL audio track found - NOT attaching to prevent echo');
+                // Do NOT attach local audio track - this prevents echo!
+            }
+        });
+        
+        console.log('✅ Local media enabled successfully (echo-free)');
         
         // Hide loading and show controls
         const loadingElement = document.getElementById('loadingState');
@@ -911,6 +986,64 @@ function showError(message) {
                 </button>
             </div>
         `;
+    }
+}
+
+// Show status messages to user
+function showStatus(message, type = 'info') {
+    console.log(`📢 Status (${type}):`, message);
+    
+    // Create or update status element
+    let statusElement = document.getElementById('status-message');
+    if (!statusElement) {
+        statusElement = document.createElement('div');
+        statusElement.id = 'status-message';
+        statusElement.style.cssText = `
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            padding: 0.75rem 1rem;
+            border-radius: 6px;
+            color: white;
+            font-size: 0.875rem;
+            z-index: 1001;
+            transition: all 0.3s ease;
+            max-width: 300px;
+        `;
+        document.body.appendChild(statusElement);
+    }
+    
+    // Set color based on type
+    switch (type) {
+        case 'success':
+            statusElement.style.backgroundColor = '#34a853';
+            break;
+        case 'warning':
+            statusElement.style.backgroundColor = '#fbbc04';
+            statusElement.style.color = '#000';
+            break;
+        case 'error':
+            statusElement.style.backgroundColor = '#ea4335';
+            break;
+        default:
+            statusElement.style.backgroundColor = '#1a73e8';
+    }
+    
+    statusElement.textContent = message;
+    statusElement.style.display = 'block';
+    
+    // Auto-hide after 3 seconds for success/info messages
+    if (type === 'success' || type === 'info') {
+        setTimeout(() => {
+            if (statusElement) {
+                statusElement.style.opacity = '0';
+                setTimeout(() => {
+                    if (statusElement && statusElement.parentNode) {
+                        statusElement.parentNode.removeChild(statusElement);
+                    }
+                }, 300);
+            }
+        }, 3000);
     }
 }
 
