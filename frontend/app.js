@@ -87,8 +87,16 @@ function showError(message) {
 async function connectToRoom(meetingData) {
     try {
         console.log('Connecting to LiveKit room...');
+        console.log('Meeting data:', meetingData);
+        console.log('LiveKit URL:', meetingData.livekit_url);
+        console.log('Token length:', meetingData.token ? meetingData.token.length : 'No token');
         
-        // Create room instance
+        // Validate meeting data
+        if (!meetingData.livekit_url || !meetingData.token) {
+            throw new Error('Ungültige Meeting-Daten: URL oder Token fehlt');
+        }
+        
+        // Create room instance with better error handling
         room = new LiveKit.Room({
             adaptiveStream: true,
             dynacast: true,
@@ -101,7 +109,7 @@ async function connectToRoom(meetingData) {
             },
         });
 
-        // Set up event handlers
+        // Set up event handlers with better error logging
         room
             .on(LiveKit.RoomEvent.TrackSubscribed, handleTrackSubscribed)
             .on(LiveKit.RoomEvent.TrackUnsubscribed, handleTrackUnsubscribed)
@@ -111,15 +119,51 @@ async function connectToRoom(meetingData) {
             .on(LiveKit.RoomEvent.LocalTrackPublished, handleLocalTrackPublished)
             .on(LiveKit.RoomEvent.ConnectionStateChanged, (state) => {
                 console.log('Connection state changed:', state);
+                if (state === LiveKit.ConnectionState.Failed) {
+                    showError('Verbindung fehlgeschlagen. Bitte überprüfen Sie Ihre Internetverbindung.');
+                }
             })
             .on(LiveKit.RoomEvent.RoomMetadataChanged, (metadata) => {
                 console.log('Room metadata changed:', metadata);
+            })
+            .on(LiveKit.RoomEvent.ConnectionQualityChanged, (quality, participant) => {
+                console.log('Connection quality changed:', quality, participant?.identity);
+            })
+            .on(LiveKit.RoomEvent.MediaDevicesError, (error) => {
+                console.error('Media devices error:', error);
+                showError('Fehler beim Zugriff auf Kamera/Mikrofon: ' + error.message);
             });
 
-        // Connect to room
-        console.log('Connecting to:', meetingData.livekit_url);
-        await room.connect(meetingData.livekit_url, meetingData.token);
-        console.log('Connected to room successfully');
+        // Add connection timeout
+        const connectionTimeout = setTimeout(() => {
+            console.error('Connection timeout after 30 seconds');
+            showError('Verbindung dauert zu lange. Bitte überprüfen Sie Ihre Internetverbindung.');
+        }, 30000);
+
+        try {
+            // Connect to room
+            console.log('Connecting to:', meetingData.livekit_url);
+            await room.connect(meetingData.livekit_url, meetingData.token);
+            clearTimeout(connectionTimeout);
+            console.log('Connected to room successfully');
+        } catch (connectError) {
+            clearTimeout(connectionTimeout);
+            console.error('Connection error details:', connectError);
+            
+            // Provide more specific error messages
+            let errorMessage = 'Fehler beim Verbinden zum Meeting';
+            if (connectError.message.includes('token')) {
+                errorMessage = 'Ungültiger Meeting-Token. Bitte erstellen Sie ein neues Meeting.';
+            } else if (connectError.message.includes('network') || connectError.message.includes('timeout')) {
+                errorMessage = 'Netzwerkfehler. Bitte überprüfen Sie Ihre Internetverbindung.';
+            } else if (connectError.message.includes('permission')) {
+                errorMessage = 'Keine Berechtigung für das Meeting. Bitte überprüfen Sie den Meeting-Link.';
+            } else {
+                errorMessage += ': ' + connectError.message;
+            }
+            
+            throw new Error(errorMessage);
+        }
 
         // Hide loading state
         const loadingElement = document.getElementById('loadingState');
@@ -129,10 +173,18 @@ async function connectToRoom(meetingData) {
 
         // Set local participant
         localParticipant = room.localParticipant;
+        console.log('Local participant:', localParticipant.identity);
 
         // Request camera and microphone permissions and enable them
         try {
             console.log('Requesting camera and microphone permissions...');
+            
+            // Check if browser supports getUserMedia
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                console.warn('getUserMedia not supported in this browser');
+                showError('Ihr Browser unterstützt keine Kamera/Mikrofon-Zugriffe. Bitte verwenden Sie einen modernen Browser.');
+                return;
+            }
             
             // First, try to get permission for both camera and microphone
             await room.localParticipant.enableCameraAndMicrophone();
@@ -151,6 +203,11 @@ async function connectToRoom(meetingData) {
             } catch (micError) {
                 console.error('Microphone access denied:', micError);
                 audioEnabled = false;
+                if (micError.name === 'NotAllowedError') {
+                    console.warn('Microphone permission denied by user');
+                } else if (micError.name === 'NotFoundError') {
+                    console.warn('No microphone found');
+                }
             }
             
             try {
@@ -159,9 +216,19 @@ async function connectToRoom(meetingData) {
             } catch (camError) {
                 console.error('Camera access denied:', camError);
                 videoEnabled = false;
+                if (camError.name === 'NotAllowedError') {
+                    console.warn('Camera permission denied by user');
+                } else if (camError.name === 'NotFoundError') {
+                    console.warn('No camera found');
+                }
             }
             
             updateControlButtons();
+            
+            // Show a warning if both failed
+            if (!audioEnabled && !videoEnabled) {
+                showError('Kamera und Mikrofon konnten nicht aktiviert werden. Sie können trotzdem am Meeting teilnehmen.');
+            }
         }
 
         // Update participant count
@@ -174,9 +241,11 @@ async function connectToRoom(meetingData) {
             shareLinkInput.value = shareUrl;
         }
 
+        console.log('Meeting initialization completed successfully');
+
     } catch (error) {
         console.error('Error connecting to room:', error);
-        showError('Fehler beim Verbinden zum Meeting: ' + error.message);
+        showError(error.message || 'Unbekannter Fehler beim Verbinden zum Meeting');
     }
 }
 

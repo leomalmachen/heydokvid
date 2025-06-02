@@ -395,6 +395,21 @@ async def api_health_check():
     """Simple API health check"""
     return {"status": "healthy", "timestamp": datetime.now().isoformat()}
 
+@app.get("/test-livekit", response_class=HTMLResponse)
+async def test_livekit_frontend():
+    """Serve the LiveKit frontend test page"""
+    try:
+        with open("test_livekit_frontend.html", "r", encoding="utf-8") as f:
+            return f.read()
+    except FileNotFoundError:
+        return HTMLResponse(
+            content="<h1>Test file not found</h1><p>test_livekit_frontend.html not found</p>",
+            status_code=404
+        )
+    except Exception as e:
+        logger.error(f"Error serving LiveKit test page: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
 # Error handlers
 @app.exception_handler(404)
 async def not_found_handler(request: Request, exc):

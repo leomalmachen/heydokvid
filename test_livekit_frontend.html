@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LiveKit Frontend Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .log {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>LiveKit Frontend SDK Test</h1>
+        <p>Diese Seite testet das Laden des LiveKit JavaScript SDKs.</p>
+        
+        <div id="status" class="status info">
+            🔄 Lade LiveKit SDK...
+        </div>
+        
+        <div id="details"></div>
+        
+        <button onclick="testConnection()">Verbindung testen</button>
+        <button onclick="testMediaDevices()">Mediengeräte testen</button>
+        <button onclick="clearLog()">Log löschen</button>
+        
+        <div id="log" class="log"></div>
+    </div>
+
+    <script>
+        let logContainer = document.getElementById('log');
+        let statusContainer = document.getElementById('status');
+        let detailsContainer = document.getElementById('details');
+        
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.innerHTML = `[${timestamp}] ${message}`;
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+            console.log(message);
+        }
+        
+        function clearLog() {
+            logContainer.innerHTML = '';
+        }
+        
+        function updateStatus(message, type = 'info') {
+            statusContainer.className = `status ${type}`;
+            statusContainer.innerHTML = message;
+        }
+        
+        function updateDetails(html) {
+            detailsContainer.innerHTML = html;
+        }
+        
+        // Test LiveKit SDK loading
+        function testLiveKitLoading() {
+            log('Starting LiveKit SDK loading test...');
+            log('Browser: ' + navigator.userAgent);
+            log('Online: ' + navigator.onLine);
+            log('Protocol: ' + window.location.protocol);
+            
+            const cdnUrls = [
+                'https://unpkg.com/livekit-client@2.13.3/dist/livekit-client.umd.min.js',
+                'https://cdn.jsdelivr.net/npm/livekit-client@2.13.3/dist/livekit-client.umd.min.js',
+                'https://cdnjs.cloudflare.com/ajax/libs/livekit-client/2.8.1/livekit-client.umd.min.js',
+                'https://unpkg.com/livekit-client/dist/livekit-client.umd.min.js'
+            ];
+            
+            let attempts = 0;
+            
+            function tryLoadScript(url) {
+                return new Promise((resolve, reject) => {
+                    log(`Attempting to load: ${url}`);
+                    const script = document.createElement('script');
+                    script.src = url;
+                    script.crossOrigin = 'anonymous';
+                    
+                    const timeout = setTimeout(() => {
+                        reject(new Error('Timeout'));
+                    }, 10000);
+                    
+                    script.onload = () => {
+                        clearTimeout(timeout);
+                        log(`✅ Successfully loaded: ${url}`);
+                        resolve();
+                    };
+                    
+                    script.onerror = (error) => {
+                        clearTimeout(timeout);
+                        log(`❌ Failed to load: ${url}`);
+                        reject(error);
+                    };
+                    
+                    document.head.appendChild(script);
+                });
+            }
+            
+            async function loadLiveKit() {
+                for (const url of cdnUrls) {
+                    attempts++;
+                    try {
+                        await tryLoadScript(url);
+                        
+                        // Check if LiveKit is available
+                        setTimeout(() => {
+                            if (typeof LiveKit !== 'undefined') {
+                                log('✅ LiveKit SDK loaded successfully!');
+                                log('LiveKit version: ' + (LiveKit.version || 'Unknown'));
+                                log('Available components: ' + Object.keys(LiveKit).join(', '));
+                                
+                                updateStatus('✅ LiveKit SDK erfolgreich geladen!', 'success');
+                                updateDetails(`
+                                    <div class="status success">
+                                        <strong>LiveKit SDK Details:</strong><br>
+                                        Version: ${LiveKit.version || 'Unknown'}<br>
+                                        Components: ${Object.keys(LiveKit).length}<br>
+                                        URL: ${url}<br>
+                                        Attempts: ${attempts}
+                                    </div>
+                                `);
+                                
+                                // Test essential components
+                                testLiveKitComponents();
+                                
+                            } else {
+                                log('❌ LiveKit not found in global scope');
+                                throw new Error('LiveKit not available');
+                            }
+                        }, 1000);
+                        
+                        return; // Success, exit loop
+                        
+                    } catch (error) {
+                        log(`❌ Failed to load from ${url}: ${error.message}`);
+                        if (attempts >= cdnUrls.length) {
+                            updateStatus('❌ Alle CDN-Versuche fehlgeschlagen', 'error');
+                            updateDetails(`
+                                <div class="status error">
+                                    <strong>Fehlerdiagnose:</strong><br>
+                                    • Alle ${cdnUrls.length} CDN-URLs getestet<br>
+                                    • Netzwerkverbindung: ${navigator.onLine ? 'Online' : 'Offline'}<br>
+                                    • Browser: ${navigator.userAgent.split(' ')[0]}<br>
+                                    • Protokoll: ${window.location.protocol}<br><br>
+                                    <strong>Mögliche Lösungen:</strong><br>
+                                    • Ad-Blocker deaktivieren<br>
+                                    • Firewall-Einstellungen prüfen<br>
+                                    • Anderen Browser versuchen<br>
+                                    • VPN deaktivieren
+                                </div>
+                            `);
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            loadLiveKit();
+        }
+        
+        function testLiveKitComponents() {
+            log('Testing LiveKit components...');
+            
+            const requiredComponents = ['Room', 'RoomEvent', 'Track', 'VideoPresets'];
+            const missingComponents = [];
+            
+            for (const component of requiredComponents) {
+                if (LiveKit[component]) {
+                    log(`✅ ${component} available`);
+                } else {
+                    log(`❌ ${component} missing`);
+                    missingComponents.push(component);
+                }
+            }
+            
+            if (missingComponents.length === 0) {
+                log('✅ All required components available');
+            } else {
+                log(`❌ Missing components: ${missingComponents.join(', ')}`);
+            }
+        }
+        
+        function testConnection() {
+            if (typeof LiveKit === 'undefined') {
+                log('❌ LiveKit not loaded, cannot test connection');
+                return;
+            }
+            
+            log('Testing LiveKit Room creation...');
+            
+            try {
+                const room = new LiveKit.Room({
+                    adaptiveStream: true,
+                    dynacast: true
+                });
+                
+                log('✅ Room created successfully');
+                log('Room state: ' + room.state);
+                
+                // Test event handlers
+                room.on(LiveKit.RoomEvent.ConnectionStateChanged, (state) => {
+                    log('Connection state: ' + state);
+                });
+                
+                log('✅ Event handlers attached');
+                
+            } catch (error) {
+                log('❌ Room creation failed: ' + error.message);
+            }
+        }
+        
+        function testMediaDevices() {
+            log('Testing media devices...');
+            
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                log('❌ getUserMedia not supported');
+                return;
+            }
+            
+            navigator.mediaDevices.enumerateDevices()
+                .then(devices => {
+                    log('Available devices:');
+                    devices.forEach(device => {
+                        log(`  ${device.kind}: ${device.label || 'Unknown'}`);
+                    });
+                })
+                .catch(error => {
+                    log('❌ Error enumerating devices: ' + error.message);
+                });
+                
+            // Test getUserMedia
+            navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+                .then(stream => {
+                    log('✅ Camera and microphone access granted');
+                    stream.getTracks().forEach(track => track.stop());
+                })
+                .catch(error => {
+                    log('❌ Media access denied: ' + error.message);
+                });
+        }
+        
+        // Start the test
+        testLiveKitLoading();
+    </script>
+</body>
+</html> 
