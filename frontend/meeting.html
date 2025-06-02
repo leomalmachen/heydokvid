@@ -89,6 +89,10 @@
         
         function tryLoadLiveKit() {
             const cdnUrls = [
+                // Local fallback first (no external dependencies)
+                '/static/livekit-client.umd.min.js',
+                // API endpoint fallback
+                '/api/livekit-sdk',
                 // Latest stable version from multiple CDNs
                 'https://unpkg.com/livekit-client@2.13.3/dist/livekit-client.umd.min.js',
                 'https://cdn.jsdelivr.net/npm/livekit-client@2.13.3/dist/livekit-client.umd.min.js',

@@ -410,6 +410,20 @@ async def test_livekit_frontend():
         logger.error(f"Error serving LiveKit test page: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
+@app.get("/api/livekit-sdk")
+async def serve_livekit_sdk():
+    """Serve the local LiveKit SDK as a fallback"""
+    try:
+        with open("static/livekit-client.umd.min.js", "r", encoding="utf-8") as f:
+            content = f.read()
+            return HTMLResponse(content=content, media_type="application/javascript")
+    except FileNotFoundError:
+        logger.error("Local LiveKit SDK file not found")
+        return HTMLResponse(content="// Local LiveKit SDK not found", status_code=404)
+    except Exception as e:
+        logger.error(f"Error serving local LiveKit SDK: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
 # Error handlers
 @app.exception_handler(404)
 async def not_found_handler(request: Request, exc):
