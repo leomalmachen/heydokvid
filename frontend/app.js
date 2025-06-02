@@ -636,55 +636,26 @@ function handleTrackSubscribed(track, publication, participant) {
     });
     
     if (track.kind === LiveKit.Track.Kind.Video || track.kind === LiveKit.Track.Kind.Audio) {
-        // Enhanced: MORE AGGRESSIVE approach for frozen meetings
+        // FIXED: Conservative approach - no more aggressive retries
         let container = document.getElementById(`participant-${participant.sid}`);
         if (!container) {
             console.log('📦 Creating participant container for:', participant.identity);
             container = createParticipantContainer(participant, false);
             
-            // AGGRESSIVE: Multiple retries with different delays
-            const retryTimes = [200, 500, 1000, 2000]; // Escalating delays
-            
-            retryTimes.forEach((delay, index) => {
-                setTimeout(() => {
-                    const verifyContainer = document.getElementById(`participant-${participant.sid}`);
-                    if (verifyContainer) {
-                        console.log(`🔄 Retry ${index + 1}: Attempting track attachment for:`, participant.identity);
-                        attachTrackToContainer(track, publication, participant, verifyContainer);
-                    } else {
-                        console.error(`❌ Retry ${index + 1}: Container still missing for:`, participant.identity);
-                        if (index === retryTimes.length - 1) {
-                            // LAST RESORT: Force recreation
-                            console.log('🚨 LAST RESORT: Force recreating container for:', participant.identity);
-                            const newContainer = createParticipantContainer(participant, false);
-                            setTimeout(() => {
-                                attachTrackToContainer(track, publication, participant, newContainer);
-                            }, 500);
-                        }
-                    }
-                }, delay);
-            });
+            // Single retry with reasonable delay
+            setTimeout(() => {
+                const verifyContainer = document.getElementById(`participant-${participant.sid}`);
+                if (verifyContainer) {
+                    attachTrackToContainer(track, publication, participant, verifyContainer);
+                } else {
+                    console.error('❌ Container creation failed for:', participant.identity);
+                }
+            }, 300);
         } else {
             console.log('📦 Using existing container for:', participant.identity);
+            // Ensure container is properly visible before attaching
             container.style.display = 'block';
-            
-            // IMMEDIATE attempt plus BACKUP attempts
             attachTrackToContainer(track, publication, participant, container);
-            
-            // BACKUP attempts in case the first one fails
-            setTimeout(() => {
-                if (!checkTrackAttachment(track, container)) {
-                    console.log('🔄 BACKUP: Re-attempting track attachment for:', participant.identity);
-                    attachTrackToContainer(track, publication, participant, container);
-                }
-            }, 1000);
-            
-            setTimeout(() => {
-                if (!checkTrackAttachment(track, container)) {
-                    console.log('🔄 FINAL BACKUP: Last attempt for track attachment:', participant.identity);
-                    attachTrackToContainer(track, publication, participant, container);
-                }
-            }, 3000);
         }
     }
 }
@@ -913,25 +884,25 @@ function handleParticipantConnected(participant) {
         metadata: participant.metadata
     });
     
-    // Enhanced: Ensure no duplicate participants
+    // CRITICAL: Prevent duplicate processing
     if (participants.has(participant.sid)) {
-        console.warn('⚠️ Participant already exists, cleaning up old entry:', participant.identity);
-        handleParticipantDisconnected(participants.get(participant.sid));
+        console.warn('⚠️ Participant already exists, skipping duplicate:', participant.identity);
+        return; // STOP processing duplicates immediately
     }
     
     participants.set(participant.sid, participant);
     
-    // Enhanced: Create container with better timing and checks
+    // CRITICAL: Remove any existing container before creating new one
     let container = document.getElementById(`participant-${participant.sid}`);
     if (container) {
-        console.log('📦 Removing existing container for participant:', participant.identity);
+        console.log('🗑️ Removing existing container for participant:', participant.identity);
         container.remove();
     }
     
     console.log('📦 Creating fresh container for new participant:', participant.identity);
     container = createParticipantContainer(participant, false);
     
-    // Enhanced: Wait for container to be properly inserted before processing tracks
+    // Wait for container to be properly inserted before processing tracks
     setTimeout(() => {
         // Verify container is in DOM
         const verifyContainer = document.getElementById(`participant-${participant.sid}`);
@@ -943,38 +914,18 @@ function handleParticipantConnected(participant) {
         updateParticipantCount();
         updateParticipantDisplay();
         
-        // Enhanced: Subscribe to existing tracks with better handling
+        // Process existing tracks with simple approach
         console.log('📹 Processing existing tracks for:', participant.identity);
-        const trackPromises = [];
-        
         participant.tracks.forEach((trackPublication) => {
             if (trackPublication.track && trackPublication.isSubscribed) {
                 console.log('📹 Subscribing to existing track:', trackPublication.kind, 'from', participant.identity);
-                
-                // Create promise for each track attachment
-                const trackPromise = new Promise((resolve) => {
-                    // Add delay to prevent race conditions
-                    setTimeout(() => {
-                        handleTrackSubscribed(trackPublication.track, trackPublication, participant);
-                        resolve();
-                    }, 100 * trackPromises.length); // Stagger track attachments
-                });
-                
-                trackPromises.push(trackPromise);
+                setTimeout(() => {
+                    handleTrackSubscribed(trackPublication.track, trackPublication, participant);
+                }, 200); // Small delay to prevent race conditions
             }
         });
         
-        // Wait for all track attachments to complete
-        Promise.all(trackPromises).then(() => {
-            console.log('✅ All existing tracks processed for:', participant.identity);
-            
-            // Force a final layout update
-            setTimeout(() => {
-                updateParticipantDisplay();
-            }, 500);
-        });
-        
-    }, 300); // Increased delay for better stability
+    }, 300);
 }
 
 function handleParticipantDisconnected(participant) {
@@ -1050,62 +1001,37 @@ function handleParticipantDisconnected(participant) {
 function handleDisconnect(reason) {
     console.log('❌ Disconnect event triggered, reason:', reason);
     console.log('❌ Connection state:', room?.state);
-    console.log('❌ Room connected:', room?.state === LiveKit.ConnectionState.Connected);
-    console.log('❌ Last error:', room?.lastError);
     
-    // Enhanced: Better disconnect handling to prevent black screens
-    const wasConnected = room && room.state === LiveKit.ConnectionState.Connected;
+    // CRITICAL: Prevent reconnection loops
+    const isExpectedDisconnect = reason === 'user_left' || reason === 'manual' || reason === 'CLIENT_INITIATED';
     
-    // Enhanced: Check if this is an expected disconnect (user left) or unexpected
-    const isExpectedDisconnect = reason === 'user_left' || reason === 'manual';
-    
-    if (!isExpectedDisconnect && wasConnected) {
-        console.log('🔄 Unexpected disconnect detected, attempting recovery...');
-        
-        // Try to maintain participant displays during reconnection
-        const existingContainers = document.querySelectorAll('.participant-container');
-        existingContainers.forEach(container => {
-            const nameLabel = container.querySelector('.participant-name');
-            if (nameLabel && !nameLabel.textContent.includes('(Reconnecting)')) {
-                nameLabel.textContent += ' (Reconnecting...)';
-                nameLabel.style.color = '#fbbc04';
-            }
-        });
-        
-        // Enhanced: Attempt automatic reconnection with backoff
-        attemptReconnection(1);
-        return;
-    }
-    
-    // Check if we're actually disconnected or if this is a false positive
-    if (room && room.state === LiveKit.ConnectionState.Connected) {
-        console.log('⚠️ False disconnect event - room is still connected');
-        return;
-    }
-    
-    // Enhanced: Graceful cleanup for expected disconnects
     if (isExpectedDisconnect) {
         console.log('👋 Expected disconnect - cleaning up gracefully');
         performGracefulCleanup();
         return;
     }
     
-    // Handle unexpected disconnects
+    // Only attempt reconnection for truly unexpected disconnects
+    if (room && room.state !== LiveKit.ConnectionState.Disconnected) {
+        console.log('⚠️ False disconnect event - room is still connected');
+        return;
+    }
+    
     console.log('❌ Handling unexpected disconnect');
     
-    // Show reconnection UI
+    // Show reconnection UI but don't auto-reconnect aggressively
     showReconnectionUI();
     
-    // Try to reconnect after a short delay
+    // Single reconnect attempt after reasonable delay
     setTimeout(() => {
         attemptReconnection(1);
-    }, 2000);
+    }, 3000); // Increased delay
 }
 
-// Enhanced: Automatic reconnection with exponential backoff
+// Enhanced: More conservative reconnection
 function attemptReconnection(attempt) {
-    const maxAttempts = 5;
-    const baseDelay = 2000;
+    const maxAttempts = 3; // Reduced from 5
+    const baseDelay = 5000; // Increased base delay
     
     if (attempt > maxAttempts) {
         console.log('❌ Max reconnection attempts reached');
@@ -1129,32 +1055,32 @@ function attemptReconnection(attempt) {
         // Show reconnection status
         updateReconnectionStatus(`Reconnecting... (${attempt}/${maxAttempts})`);
         
+        // Clear existing room state before reconnecting
+        if (room) {
+            try {
+                room.disconnect();
+            } catch (e) {
+                console.warn('Error disconnecting old room:', e);
+            }
+        }
+        
         // Attempt to reconnect
         connectToRoom(data).then(() => {
             console.log('✅ Reconnection successful!');
             hideReconnectionUI();
-            
-            // Restore participant display names
-            setTimeout(() => {
-                const containers = document.querySelectorAll('.participant-container');
-                containers.forEach(container => {
-                    const nameLabel = container.querySelector('.participant-name');
-                    if (nameLabel && nameLabel.textContent.includes('(Reconnecting')) {
-                        nameLabel.textContent = nameLabel.textContent.replace(/ \(Reconnecting.*\)/, '');
-                        nameLabel.style.color = '#e8eaed';
-                    }
-                });
-            }, 1000);
-            
         }).catch((error) => {
             console.error(`❌ Reconnection attempt ${attempt} failed:`, error);
             
             // Calculate delay with exponential backoff
             const delay = Math.min(baseDelay * Math.pow(2, attempt - 1), 30000);
             
-            setTimeout(() => {
-                attemptReconnection(attempt + 1);
-            }, delay);
+            if (attempt < maxAttempts) {
+                setTimeout(() => {
+                    attemptReconnection(attempt + 1);
+                }, delay);
+            } else {
+                showFinalDisconnectUI();
+            }
         });
         
     } catch (error) {
@@ -1402,22 +1328,22 @@ function handleLocalTrackPublished(publication, participant) {
 function createParticipantContainer(participant, isLocal = false) {
     console.log('📦 CREATING CONTAINER for:', participant.identity, '(local:', isLocal, ')');
     
-    // Enhanced: Check if container already exists and remove it
+    // CRITICAL: Absolutely prevent duplicates
     const existingContainer = document.getElementById(`participant-${participant.sid}`);
     if (existingContainer) {
-        console.log('🗑️ Removing existing container for:', participant.identity);
-        existingContainer.remove();
+        console.log('⚠️ DUPLICATE PREVENTION: Container already exists for:', participant.identity);
+        return existingContainer; // Return existing instead of creating new
     }
     
     const container = document.createElement('div');
     container.className = 'participant-container';
     container.id = `participant-${participant.sid}`;
     
-    // Enhanced: Better initial state management
+    // Better initial state management
     container.style.opacity = '0';
     container.style.visibility = 'hidden';
     container.style.transition = 'opacity 0.3s ease, visibility 0.3s ease';
-    container.style.display = 'block'; // Ensure container takes space
+    container.style.display = 'block';
     
     const video = document.createElement('video');
     video.autoplay = true;
@@ -1426,9 +1352,9 @@ function createParticipantContainer(participant, isLocal = false) {
     video.style.width = '100%';
     video.style.height = '100%';
     video.style.objectFit = 'cover';
-    video.style.backgroundColor = '#202124'; // Prevent white flash
+    video.style.backgroundColor = '#202124';
     
-    // Enhanced: Better loading indicator with proper positioning
+    // Loading indicator
     const loadingIndicator = document.createElement('div');
     loadingIndicator.className = 'loading-indicator';
     loadingIndicator.innerHTML = `
@@ -1446,12 +1372,11 @@ function createParticipantContainer(participant, isLocal = false) {
         </div>
     `;
     
-    // Enhanced: Better name label with proper participant identification
+    // Name label with proper participant identification
     const nameLabel = document.createElement('div');
     nameLabel.className = 'participant-name';
     let displayName = participant.identity || participant.name || 'Teilnehmer';
     
-    // Enhanced: Better local participant identification
     if (isLocal) {
         displayName += ' (Du)';
         nameLabel.style.background = 'rgba(26, 115, 232, 0.8)'; // Blue for local user
@@ -1461,13 +1386,13 @@ function createParticipantContainer(participant, isLocal = false) {
     
     nameLabel.textContent = displayName;
     
-    // Enhanced: Connection quality indicator
+    // Connection quality indicator
     const connectionQuality = document.createElement('div');
     connectionQuality.className = 'connection-quality excellent';
     connectionQuality.title = 'Connection Quality: Excellent';
     connectionQuality.style.borderRadius = '50%';
     
-    // Enhanced: Assemble container with proper layering
+    // Assemble container
     container.appendChild(video);
     container.appendChild(loadingIndicator);
     container.appendChild(nameLabel);
@@ -1478,7 +1403,7 @@ function createParticipantContainer(participant, isLocal = false) {
         videoGrid.appendChild(container);
         console.log('✅ Container added to video grid for:', participant.identity);
         
-        // Enhanced: Force layout recalculation
+        // Force layout recalculation
         setTimeout(() => {
             optimizeVideoGrid();
         }, 100);
@@ -1487,7 +1412,7 @@ function createParticipantContainer(participant, isLocal = false) {
         return null;
     }
     
-    // Enhanced: Multiple ways to handle video loading
+    // Video ready handler
     const handleVideoReady = () => {
         console.log('📹 Video ready for:', participant.identity);
         loadingIndicator.style.display = 'none';
@@ -1495,24 +1420,22 @@ function createParticipantContainer(participant, isLocal = false) {
         container.style.visibility = 'visible';
         container.classList.add('loaded');
         
-        // Update connection quality based on video state
         if (video.videoWidth > 0 && video.videoHeight > 0) {
             connectionQuality.className = 'connection-quality excellent';
             connectionQuality.title = 'Connection Quality: Excellent';
         }
     };
     
-    // Enhanced: Multiple event listeners for maximum compatibility
+    // Multiple event listeners for maximum compatibility
     video.addEventListener('loadeddata', handleVideoReady, { once: true });
     video.addEventListener('canplay', handleVideoReady, { once: true });
     video.addEventListener('playing', handleVideoReady, { once: true });
     
-    // Enhanced: Fallback visibility timer
+    // Fallback visibility timer - but more conservative
     setTimeout(() => {
         if (container.style.opacity === '0') {
             console.log('⏰ Fallback visibility timeout for:', participant.identity);
             
-            // Check if we have any tracks attached
             const hasVideo = video.srcObject && video.srcObject.getVideoTracks().length > 0;
             const hasAudio = container.querySelector('audio')?.srcObject?.getAudioTracks().length > 0;
             
@@ -1529,9 +1452,9 @@ function createParticipantContainer(participant, isLocal = false) {
                 container.style.visibility = 'visible';
             }
         }
-    }, 3000);
+    }, 5000); // Increased to 5 seconds
     
-    // Enhanced: Handle video errors gracefully
+    // Handle video errors gracefully
     video.addEventListener('error', (error) => {
         console.error('❌ Video error for:', participant.identity, error);
         loadingIndicator.innerHTML = `
@@ -1540,36 +1463,9 @@ function createParticipantContainer(participant, isLocal = false) {
                 <small>Retrying...</small>
             </div>
         `;
-        
-        // Show container even with error
         container.style.opacity = '1';
         container.style.visibility = 'visible';
     });
-    
-    // Enhanced: Handle empty state for remote participants
-    if (!isLocal) {
-        // Set up observer to detect when tracks are attached
-        const trackObserver = new MutationObserver((mutations) => {
-            mutations.forEach((mutation) => {
-                if (mutation.type === 'childList') {
-                    const hasAudio = container.querySelector('audio');
-                    const hasVideoData = video.srcObject && video.srcObject.getTracks().length > 0;
-                    
-                    if (hasAudio || hasVideoData) {
-                        console.log('📹 Tracks detected for:', participant.identity);
-                        trackObserver.disconnect();
-                    }
-                }
-            });
-        });
-        
-        trackObserver.observe(container, { childList: true, subtree: true });
-        
-        // Cleanup observer after reasonable time
-        setTimeout(() => {
-            trackObserver.disconnect();
-        }, 30000);
-    }
     
     return container;
 }
