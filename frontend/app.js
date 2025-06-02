@@ -34,9 +34,10 @@ function handleVisibilityChange() {
     }
 }
 
-// PERSISTENT: Automatic reconnection logic
+// PERSISTENT: Reconnection system
 async function attemptReconnection() {
     if (isReconnecting || reconnectionAttempts >= MAX_RECONNECTION_ATTEMPTS) {
+        console.log('🚫 Reconnection skipped - already reconnecting or max attempts reached');
         return;
     }
     
@@ -44,20 +45,57 @@ async function attemptReconnection() {
     reconnectionAttempts++;
     
     console.log(`🔄 Attempting reconnection ${reconnectionAttempts}/${MAX_RECONNECTION_ATTEMPTS}...`);
+    showStatus(`Verbindung wird wiederhergestellt... (${reconnectionAttempts}/${MAX_RECONNECTION_ATTEMPTS})`, 'warning');
     
     try {
-        if (meetingData) {
-            await connectToRoom(meetingData);
-            reconnectionAttempts = 0; // Reset on successful reconnection
-            console.log('✅ Reconnection successful!');
+        // Clear the current room
+        if (room) {
+            room.disconnect();
+            room = null;
         }
+        
+        // Clear video grid
+        const videoGrid = document.getElementById('videoGrid');
+        if (videoGrid) {
+            videoGrid.innerHTML = '';
+        }
+        
+        // Recreate meeting data if needed
+        let currentMeetingData = sessionStorage.getItem('meetingData');
+        if (!currentMeetingData) {
+            const participantName = sessionStorage.getItem('participantName') || 'Teilnehmer';
+            
+            const response = await fetch(`/api/meetings/${meetingId}/join`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ participant_name: participantName })
+            });
+            
+            if (!response.ok) {
+                throw new Error('Fehler beim Wiederherstellen der Meeting-Daten');
+            }
+            
+            currentMeetingData = await response.json();
+            sessionStorage.setItem('meetingData', JSON.stringify(currentMeetingData));
+        } else {
+            currentMeetingData = JSON.parse(currentMeetingData);
+        }
+        
+        // Reconnect to room
+        await connectToRoom(currentMeetingData);
+        
+        console.log('✅ Reconnection successful!');
+        showStatus('Verbindung wiederhergestellt!', 'success');
+        reconnectionAttempts = 0;
+        
     } catch (error) {
-        console.error('❌ Reconnection failed:', error);
+        console.error(`❌ Reconnection attempt ${reconnectionAttempts} failed:`, error);
+        
         if (reconnectionAttempts >= MAX_RECONNECTION_ATTEMPTS) {
-            showError('Verbindung verloren. Bitte Seite neu laden.');
+            showError('Verbindung konnte nicht wiederhergestellt werden. Bitte laden Sie die Seite neu.');
         } else {
             // Try again after delay
-            setTimeout(attemptReconnection, 2000);
+            setTimeout(attemptReconnection, RECONNECTION_DELAY);
         }
     } finally {
         isReconnecting = false;
@@ -82,6 +120,90 @@ function loadMediaState() {
     }
     
     console.log('📱 Loaded media state:', { audioEnabled, videoEnabled });
+}
+
+// PERSISTENT: Get participant name with nice modal
+function getParticipantName() {
+    return new Promise((resolve, reject) => {
+        // Check if we already have a stored name
+        const storedName = sessionStorage.getItem('participantName');
+        if (storedName) {
+            resolve(storedName);
+            return;
+        }
+
+        // Show name input modal
+        const nameModal = document.getElementById('nameModal');
+        const nameInput = document.getElementById('participantNameInput');
+        const confirmBtn = document.getElementById('confirmJoin');
+        const cancelBtn = document.getElementById('cancelJoin');
+        const nameError = document.getElementById('nameError');
+
+        if (!nameModal || !nameInput || !confirmBtn || !cancelBtn) {
+            // Fallback to prompt if modal elements not found
+            const name = prompt('Dein Name:') || 'Teilnehmer';
+            sessionStorage.setItem('participantName', name);
+            resolve(name);
+            return;
+        }
+
+        // Show modal
+        nameModal.classList.add('show');
+        nameInput.focus();
+
+        // Handle confirm
+        const handleConfirm = () => {
+            const name = nameInput.value.trim();
+            
+            if (!name) {
+                nameError.textContent = 'Bitte geben Sie einen Namen ein';
+                nameError.style.display = 'block';
+                nameInput.focus();
+                return;
+            }
+
+            if (name.length < 2) {
+                nameError.textContent = 'Name muss mindestens 2 Zeichen lang sein';
+                nameError.style.display = 'block';
+                nameInput.focus();
+                return;
+            }
+
+            // Success
+            sessionStorage.setItem('participantName', name);
+            nameModal.classList.remove('show');
+            cleanup();
+            resolve(name);
+        };
+
+        // Handle cancel
+        const handleCancel = () => {
+            nameModal.classList.remove('show');
+            cleanup();
+            reject(new Error('User cancelled joining'));
+        };
+
+        // Handle Enter key
+        const handleKeyPress = (e) => {
+            if (e.key === 'Enter') {
+                handleConfirm();
+            }
+        };
+
+        // Cleanup function
+        const cleanup = () => {
+            confirmBtn.removeEventListener('click', handleConfirm);
+            cancelBtn.removeEventListener('click', handleCancel);
+            nameInput.removeEventListener('keypress', handleKeyPress);
+            nameError.style.display = 'none';
+            nameInput.value = '';
+        };
+
+        // Add event listeners
+        confirmBtn.addEventListener('click', handleConfirm);
+        cancelBtn.addEventListener('click', handleCancel);
+        nameInput.addEventListener('keypress', handleKeyPress);
+    });
 }
 
 // ULTRA-SIMPLE initialization
@@ -145,27 +267,33 @@ async function initializeMeeting() {
         meetingData = sessionStorage.getItem('meetingData');
         
         if (!meetingData) {
-            // BULLETPROOF: Prevent duplicate participants
-            let participantName = sessionStorage.getItem('participantName');
-            if (!participantName) {
-                participantName = prompt('Dein Name:') || 'Teilnehmer';
-                sessionStorage.setItem('participantName', participantName);
-            }
-            
-            console.log('🔗 Joining meeting...');
-            const response = await fetch(`/api/meetings/${meetingId}/join`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ participant_name: participantName })
-            });
+            // IMPROVED: Use nice modal for name input
+            try {
+                const participantName = await getParticipantName();
+                
+                console.log('🔗 Joining meeting...');
+                const response = await fetch(`/api/meetings/${meetingId}/join`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ participant_name: participantName })
+                });
 
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.detail || 'Could not join meeting');
-            }
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || 'Could not join meeting');
+                }
 
-            meetingData = await response.json();
-            sessionStorage.setItem('meetingData', JSON.stringify(meetingData));
+                meetingData = await response.json();
+                sessionStorage.setItem('meetingData', JSON.stringify(meetingData));
+                
+            } catch (nameError) {
+                if (nameError.message === 'User cancelled joining') {
+                    // Redirect back to homepage
+                    window.location.href = '/';
+                    return;
+                }
+                throw nameError;
+            }
         } else {
             meetingData = JSON.parse(meetingData);
         }
@@ -184,100 +312,137 @@ async function initializeMeeting() {
     }
 }
 
-// ULTRA-SIMPLE room connection with persistent media
-async function connectToRoom(meetingData) {
-    try {
-        console.log('🔗 Connecting with ULTRA-SIMPLE settings...');
+// GOOGLE MEET STYLE: Create participant video container
+function createParticipantContainer(participant, isLocal = false) {
+    console.log(`📹 Creating ${isLocal ? 'LOCAL' : 'REMOTE'} container for:`, participant.name || participant.identity);
+    
+    // BULLETPROOF: Prevent duplicates
+    const existingContainer = document.getElementById(`participant-${participant.identity}`);
+    if (existingContainer) {
+        console.log('⚠️ Container already exists for:', participant.identity);
+        return existingContainer;
+    }
+    
+    const container = document.createElement('div');
+    container.className = 'participant-container';
+    container.id = `participant-${participant.identity}`;
+    container.setAttribute('data-participant', participant.identity);
+    
+    // Create video element
+    const video = document.createElement('video');
+    video.autoplay = true;
+    video.playsInline = true;
+    video.muted = isLocal; // IMPORTANT: Mute local to prevent feedback
+    video.id = `video-${participant.identity}`;
+    
+    // Create overlay for participant name and controls
+    const overlay = document.createElement('div');
+    overlay.className = 'participant-overlay';
+    
+    const nameLabel = document.createElement('div');
+    nameLabel.className = 'participant-name';
+    nameLabel.textContent = participant.name || participant.identity;
+    if (isLocal) nameLabel.textContent += ' (Du)';
+    
+    // Audio indicator
+    const audioIndicator = document.createElement('div');
+    audioIndicator.className = 'audio-indicator';
+    audioIndicator.innerHTML = '🎤';
+    audioIndicator.style.display = 'none';
+    
+    overlay.appendChild(nameLabel);
+    overlay.appendChild(audioIndicator);
+    
+    container.appendChild(video);
+    container.appendChild(overlay);
+    
+    // Add to grid
+    const videoGrid = document.getElementById('videoGrid');
+    if (videoGrid) {
+        videoGrid.appendChild(container);
+        console.log(`✅ ${isLocal ? 'LOCAL' : 'REMOTE'} container added to grid:`, participant.identity);
         
-        // ULTRA-SIMPLE LiveKit room - minimal config
+        // MEGA-IMPORTANT: Trigger layout recalculation
+        updateVideoGridLayout();
+    } else {
+        console.error('❌ Video grid not found!');
+    }
+    
+    return container;
+}
+
+// ULTRA-ADVANCED: Connect to LiveKit room
+async function connectToRoom(data) {
+    console.log('🔗 Connecting to LiveKit room...', data.livekit_url);
+    
+    try {
+        // Initialize room
         room = new LiveKit.Room({
-            adaptiveStream: false, // Disable adaptive streaming
-            dynacast: false,       // Disable dynacast
-            audioCaptureDefaults: {
-                echoCancellation: true,
-                noiseSuppression: true,
-                autoGainControl: true,
-            },
+            adaptiveStream: true,
+            dynacast: true,
             videoCaptureDefaults: {
-                resolution: { width: 640, height: 480 }, 
-                frameRate: 15,
-            },
-            publishDefaults: {
-                videoSimulcastLayers: [], 
-                stopMicTrackOnMute: false,
-                videoCodec: 'vp8',
-                videoEncoding: {
-                    maxBitrate: 500000,
-                    maxFramerate: 15,
-                },
+                resolution: LiveKit.VideoPresets.h720.resolution,
             },
         });
-
-        // SIMPLE event handlers
-        room.on(LiveKit.RoomEvent.TrackSubscribed, handleTrackSubscribed);
+        
+        // BULLETPROOF: Event handlers setup
+        room.on(LiveKit.RoomEvent.Connected, () => {
+            console.log('🎉 Room connected successfully!');
+            
+            // CRITICAL: Process local participant first
+            console.log('👤 Processing LOCAL participant:', room.localParticipant.identity);
+            const localContainer = createParticipantContainer(room.localParticipant, true);
+            
+            // MEGA-IMPORTANT: Process ALL existing remote participants
+            console.log(`👥 Processing ${room.remoteParticipants.size} existing REMOTE participants`);
+            room.remoteParticipants.forEach((participant) => {
+                console.log('👤 Processing existing REMOTE participant:', participant.identity);
+                handleParticipantConnected(participant);
+                
+                // CRITICAL: Subscribe to their existing tracks
+                participant.trackPublications.forEach((publication) => {
+                    if (publication.isSubscribed && publication.track) {
+                        console.log('🎵 Attaching existing track:', publication.kind, 'from', participant.identity);
+                        handleTrackSubscribed(publication.track, publication, participant);
+                    }
+                });
+            });
+            
+            // Enable local camera and microphone with stored state
+            enableLocalMedia();
+        });
+        
         room.on(LiveKit.RoomEvent.ParticipantConnected, handleParticipantConnected);
         room.on(LiveKit.RoomEvent.ParticipantDisconnected, handleParticipantDisconnected);
-        room.on(LiveKit.RoomEvent.Disconnected, handleDisconnect);
-        room.on(LiveKit.RoomEvent.LocalTrackPublished, handleLocalTrackPublished);
-        room.on(LiveKit.RoomEvent.Connected, handleRoomConnected);
-
-        // Connect
-        console.log('🔌 Connecting to LiveKit...');
-        await room.connect(meetingData.livekit_url, meetingData.token);
-        console.log('✅ Connected to room!');
-
-        // Hide loading
-        const loadingElement = document.getElementById('loadingState');
-        if (loadingElement) {
-            loadingElement.style.display = 'none';
-        }
-
-        localParticipant = room.localParticipant;
+        room.on(LiveKit.RoomEvent.TrackSubscribed, handleTrackSubscribed);
+        room.on(LiveKit.RoomEvent.TrackUnsubscribed, handleTrackUnsubscribed);
+        room.on(LiveKit.RoomEvent.TrackMuted, handleTrackMuted);
+        room.on(LiveKit.RoomEvent.TrackUnmuted, handleTrackUnmuted);
         
-        // CRITICAL: Create local participant container immediately
-        console.log('🏗️ Creating local participant container...');
-        createConsistentContainer(localParticipant, true);
-        
-        // PERSISTENT media setup - restore previous state
-        try {
-            console.log('🎥 Setting up PERSISTENT media...');
-            
-            // Apply saved media state immediately
-            await room.localParticipant.setMicrophoneEnabled(audioEnabled);
-            await room.localParticipant.setCameraEnabled(videoEnabled);
-            
-            // Update UI buttons to reflect current state
-            updateMediaButtons();
-            
-            console.log('✅ Media setup completed with persistent state');
-            
-        } catch (mediaError) {
-            console.warn('⚠️ Media setup failed, continuing without:', mediaError);
-        }
-
-        // IMPORTANT: Process existing participants in the room
-        console.log('👥 Processing existing participants...');
-        room.participants.forEach((participant) => {
-            console.log('🔄 Adding existing participant:', participant.identity);
-            handleParticipantConnected(participant);
+        // Enhanced error handling
+        room.on(LiveKit.RoomEvent.Disconnected, (reason) => {
+            console.log('❌ Room disconnected:', reason);
+            if (reason !== LiveKit.DisconnectReason.CLIENT_INITIATED) {
+                attemptReconnection();
+            }
         });
-
-        // Update UI
-        updateParticipantCount();
-        updateConsistentGrid();
-
-        // Set share link
-        const shareUrl = window.location.href;
-        const shareLinkInput = document.getElementById('shareLinkInput');
-        if (shareLinkInput) {
-            shareLinkInput.value = shareUrl;
-        }
-
-        // Reset reconnection attempts on successful connection
-        reconnectionAttempts = 0;
-
+        
+        room.on(LiveKit.RoomEvent.Reconnecting, () => {
+            console.log('🔄 Room reconnecting...');
+            showStatus('Verbindung wird wiederhergestellt...', 'warning');
+        });
+        
+        room.on(LiveKit.RoomEvent.Reconnected, () => {
+            console.log('✅ Room reconnected!');
+            showStatus('Verbindung wiederhergestellt!', 'success');
+        });
+        
+        // Connect to room
+        await room.connect(data.livekit_url, data.token);
+        console.log('✅ Connected to room successfully!');
+        
     } catch (error) {
-        console.error('❌ Connection failed:', error);
+        console.error('❌ Failed to connect to room:', error);
         throw error;
     }
 }
@@ -308,94 +473,201 @@ function handleRoomConnected() {
     updateConsistentGrid();
 }
 
-// BULLETPROOF track subscription
-function handleTrackSubscribed(track, publication, participant) {
-    console.log('📹 Track subscribed:', track.kind, 'from', participant.identity);
-    
-    // BULLETPROOF: Check if container already exists
-    let container = document.getElementById(`participant-${participant.sid}`);
-    if (!container) {
-        console.log('📦 Creating container for:', participant.identity);
-        container = createConsistentContainer(participant, false);
-    }
-    
-    // SIMPLE track attachment
-    attachTrackSimple(track, container);
-    
-    // Update grid after track attachment
-    updateConsistentGrid();
-}
-
-// BULLETPROOF participant connection with duplicate prevention
+// MEGA-IMPROVED: Handle new participant joining
 function handleParticipantConnected(participant) {
-    console.log('👤 Participant connected:', participant.identity);
+    console.log('👤 NEW PARTICIPANT CONNECTED:', participant.identity);
     
-    // BULLETPROOF: Prevent duplicates
-    if (participants.has(participant.sid)) {
-        console.log('⚠️ Participant already exists, ignoring:', participant.identity);
-        return;
-    }
+    // BULLETPROOF: Create container for new participant
+    const container = createParticipantContainer(participant, false);
     
-    participants.set(participant.sid, participant);
-    
-    // Create container
-    createConsistentContainer(participant, false);
-    
-    // IMPORTANT: Subscribe to existing tracks
-    participant.tracks.forEach((publication) => {
-        if (publication.track) {
-            console.log('🔗 Subscribing to existing track:', publication.kind, 'from', participant.identity);
+    // IMPORTANT: Subscribe to their tracks immediately
+    participant.trackPublications.forEach((publication) => {
+        if (publication.isSubscribed && publication.track) {
+            console.log('🎵 Subscribing to existing track:', publication.kind, 'from', participant.identity);
             handleTrackSubscribed(publication.track, publication, participant);
         }
     });
     
-    // Update UI with consistent layout
+    // CRITICAL: Listen for future track events
+    participant.on(LiveKit.ParticipantEvent.TrackSubscribed, (track, publication) => {
+        console.log('🎵 Track subscribed event for:', participant.identity, track.kind);
+        handleTrackSubscribed(track, publication, participant);
+    });
+    
+    participant.on(LiveKit.ParticipantEvent.TrackUnsubscribed, (track, publication) => {
+        console.log('🔇 Track unsubscribed for:', participant.identity, track.kind);
+        handleTrackUnsubscribed(track, publication, participant);
+    });
+    
+    // Update UI
     updateParticipantCount();
-    updateConsistentGrid();
+    updateVideoGridLayout();
+    
+    console.log('✅ Participant setup completed for:', participant.identity);
 }
 
-// SIMPLE participant disconnect
+// BULLETPROOF: Handle participant leaving
 function handleParticipantDisconnected(participant) {
-    console.log('👋 Participant disconnected:', participant.identity);
+    console.log('👋 PARTICIPANT DISCONNECTED:', participant.identity);
     
-    participants.delete(participant.sid);
-    
-    const container = document.getElementById(`participant-${participant.sid}`);
+    // Remove their container
+    const container = document.getElementById(`participant-${participant.identity}`);
     if (container) {
         container.remove();
+        console.log('🗑️ Removed container for:', participant.identity);
     }
     
+    // Update UI
     updateParticipantCount();
-    updateConsistentGrid();
+    updateVideoGridLayout();
 }
 
-// PERSISTENT disconnect handling - prevent unnecessary disconnects
-function handleDisconnect(reason) {
-    console.log('💥 Disconnected from room:', reason);
+// ULTRA-ROBUST: Handle track subscription (when video/audio arrives)
+function handleTrackSubscribed(track, publication, participant) {
+    console.log(`🎵 TRACK SUBSCRIBED: ${track.kind} from ${participant.identity}`);
     
-    // Only show error if it's not due to page visibility
-    if (!document.hidden && reason !== 'CLIENT_INITIATED') {
-        console.log('🔄 Unexpected disconnect, attempting reconnection...');
-        setTimeout(attemptReconnection, 1000);
-    }
-}
-
-function handleLocalTrackPublished(publication, participant) {
-    console.log('📤 Local track published:', publication.kind);
-    
-    // Create local participant container if not exists
-    let container = document.getElementById(`participant-${participant.sid}`);
+    // Get participant container
+    const container = document.getElementById(`participant-${participant.identity}`);
     if (!container) {
-        container = createConsistentContainer(participant, true);
+        console.warn('⚠️ No container found for participant:', participant.identity);
+        // Try to create it
+        createParticipantContainer(participant, false);
+        return;
     }
     
-    // Attach local track
-    if (publication.track) {
-        attachTrackSimple(publication.track, container);
+    // Get video element
+    const video = container.querySelector('video');
+    if (!video) {
+        console.error('❌ No video element found in container for:', participant.identity);
+        return;
     }
     
-    // Update grid after local track
-    updateConsistentGrid();
+    if (track.kind === 'video') {
+        console.log('📹 Attaching VIDEO track for:', participant.identity);
+        track.attach(video);
+        
+        // Show video, hide avatar
+        video.style.display = 'block';
+        
+        // Handle video track events
+        track.on(LiveKit.TrackEvent.Muted, () => {
+            console.log('📹❌ Video muted for:', participant.identity);
+            video.style.display = 'none';
+        });
+        
+        track.on(LiveKit.TrackEvent.Unmuted, () => {
+            console.log('📹✅ Video unmuted for:', participant.identity);
+            video.style.display = 'block';
+        });
+        
+    } else if (track.kind === 'audio') {
+        console.log('🔊 Attaching AUDIO track for:', participant.identity);
+        track.attach(video); // Audio can also be attached to video element
+        
+        // Handle audio indicators
+        const audioIndicator = container.querySelector('.audio-indicator');
+        if (audioIndicator) {
+            track.on(LiveKit.TrackEvent.Muted, () => {
+                audioIndicator.style.display = 'none';
+            });
+            
+            track.on(LiveKit.TrackEvent.Unmuted, () => {
+                audioIndicator.style.display = 'block';
+            });
+            
+            // Set initial state
+            audioIndicator.style.display = track.isMuted ? 'none' : 'block';
+        }
+    }
+    
+    console.log(`✅ Track attached successfully: ${track.kind} for ${participant.identity}`);
+}
+
+// Handle track unsubscription
+function handleTrackUnsubscribed(track, publication, participant) {
+    console.log(`🔇 TRACK UNSUBSCRIBED: ${track.kind} from ${participant.identity}`);
+    
+    if (track) {
+        track.detach();
+    }
+}
+
+// Handle track muted
+function handleTrackMuted(publication, participant) {
+    console.log(`🔇 Track muted: ${publication.kind} from ${participant.identity}`);
+}
+
+// Handle track unmuted
+function handleTrackUnmuted(publication, participant) {
+    console.log(`🔊 Track unmuted: ${publication.kind} from ${participant.identity}`);
+}
+
+// PERSISTENT: Enable local media with saved state
+async function enableLocalMedia() {
+    if (!room || !room.localParticipant) {
+        console.error('❌ No room or local participant available');
+        return;
+    }
+    
+    try {
+        console.log('🎥 Enabling local media with saved state...');
+        
+        // Enable camera and microphone based on saved state
+        await room.localParticipant.setCameraEnabled(videoEnabled);
+        await room.localParticipant.setMicrophoneEnabled(audioEnabled);
+        
+        // Update UI buttons
+        updateMediaButtons();
+        
+        // Get local tracks and attach them
+        room.localParticipant.audioTrackPublications.forEach((publication) => {
+            if (publication.track) {
+                const container = document.getElementById(`participant-${room.localParticipant.identity}`);
+                if (container) {
+                    const video = container.querySelector('video');
+                    if (video) {
+                        publication.track.attach(video);
+                    }
+                }
+            }
+        });
+        
+        room.localParticipant.videoTrackPublications.forEach((publication) => {
+            if (publication.track) {
+                const container = document.getElementById(`participant-${room.localParticipant.identity}`);
+                if (container) {
+                    const video = container.querySelector('video');
+                    if (video) {
+                        publication.track.attach(video);
+                        video.style.display = videoEnabled ? 'block' : 'none';
+                    }
+                }
+            }
+        });
+        
+        console.log('✅ Local media enabled successfully');
+        
+        // Hide loading and show controls
+        const loadingElement = document.getElementById('loadingState');
+        if (loadingElement) {
+            loadingElement.style.display = 'none';
+        }
+        
+        // Update participant count and layout
+        updateParticipantCount();
+        updateVideoGridLayout();
+        
+        // Set share link
+        const shareUrl = window.location.href;
+        const shareLinkInput = document.getElementById('shareLinkInput');
+        if (shareLinkInput) {
+            shareLinkInput.value = shareUrl;
+        }
+        
+    } catch (error) {
+        console.error('❌ Failed to enable local media:', error);
+        showError('Fehler beim Aktivieren von Kamera/Mikrofon: ' + error.message);
+    }
 }
 
 // CONSISTENT container creation for all users (Google Meet style)
@@ -581,23 +853,50 @@ function updateMediaButtons() {
     console.log('🎛️ Media buttons updated:', { audioEnabled, videoEnabled });
 }
 
-// SIMPLE helper functions
+// Update participant count in UI
 function updateParticipantCount() {
-    // Count all participants including local participant
-    const remoteParticipants = room ? room.participants.size : 0;
-    const localParticipant = room && room.localParticipant ? 1 : 0;
-    const totalCount = remoteParticipants + localParticipant;
+    if (!room) return;
     
-    console.log('👥 Participant count update:', { 
-        remote: remoteParticipants, 
-        local: localParticipant, 
-        total: totalCount 
-    });
+    const totalParticipants = 1 + room.remoteParticipants.size; // Local + remote
+    console.log(`👥 Total participants: ${totalParticipants}`);
     
-    const participantCountElement = document.getElementById('participantCount');
-    if (participantCountElement) {
-        participantCountElement.textContent = totalCount;
+    // Update UI element if it exists
+    const countElement = document.querySelector('.participant-count');
+    if (countElement) {
+        countElement.textContent = `${totalParticipants} Teilnehmer`;
     }
+    
+    // Update page title
+    document.title = `HeyDok Video (${totalParticipants} Teilnehmer)`;
+}
+
+// GOOGLE MEET STYLE: Update video grid layout
+function updateVideoGridLayout() {
+    const videoGrid = document.getElementById('videoGrid');
+    if (!videoGrid) return;
+    
+    const containers = videoGrid.querySelectorAll('.participant-container');
+    const participantCount = containers.length;
+    
+    console.log(`🎨 Updating grid layout for ${participantCount} participants`);
+    
+    // Remove existing grid classes
+    videoGrid.className = 'video-grid';
+    
+    // Apply grid layout based on participant count
+    if (participantCount === 1) {
+        videoGrid.classList.add('grid-1');
+    } else if (participantCount === 2) {
+        videoGrid.classList.add('grid-2');
+    } else if (participantCount <= 4) {
+        videoGrid.classList.add('grid-4');
+    } else if (participantCount <= 6) {
+        videoGrid.classList.add('grid-6');
+    } else {
+        videoGrid.classList.add('grid-many');
+    }
+    
+    console.log(`✅ Grid updated with class: grid-${participantCount <= 4 ? participantCount : participantCount <= 6 ? '6' : 'many'}`);
 }
 
 function showError(message) {

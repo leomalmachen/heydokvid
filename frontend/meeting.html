@@ -91,6 +91,22 @@
                 <button class="btn btn-secondary" onclick="document.getElementById('shareModal').classList.remove('show')">Schließen</button>
             </div>
         </div>
+
+        <!-- Name Input Modal for Guests -->
+        <div id="nameModal" class="modal">
+            <div class="modal-content">
+                <h2>🎥 Meeting beitreten</h2>
+                <p>Geben Sie Ihren Namen ein, um dem Meeting beizutreten:</p>
+                <div style="margin: 1.5rem 0;">
+                    <input type="text" id="participantNameInput" placeholder="Ihr Name" maxlength="50" style="width: 100%; padding: 0.75rem; border: 1px solid #5f6368; border-radius: 4px; background: #202124; color: #e8eaed; font-size: 1rem;">
+                </div>
+                <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+                    <button id="cancelJoin" class="btn btn-secondary">Abbrechen</button>
+                    <button id="confirmJoin" class="btn btn-primary">Meeting beitreten</button>
+                </div>
+                <div id="nameError" style="color: #ea4335; margin-top: 0.5rem; font-size: 0.875rem; display: none;"></div>
+            </div>
+        </div>
     </div>
 
     <!-- LiveKit Client SDK - Direct loading from local file -->
