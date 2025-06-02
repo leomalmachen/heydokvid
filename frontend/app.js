@@ -431,9 +431,9 @@ async function connectToRoom(meetingData) {
         localParticipant = room.localParticipant;
         console.log('Local participant:', localParticipant.identity);
 
-        // Request camera and microphone permissions and enable them
+        // Request camera and microphone permissions and enable them with rock-solid stability
         try {
-            console.log('🎥 Requesting camera and microphone permissions...');
+            console.log('🎥 Starting STABLE media setup process...');
             
             // Check if browser supports getUserMedia
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -442,75 +442,168 @@ async function connectToRoom(meetingData) {
                 return;
             }
             
-            // First, request permissions explicitly
-            console.log('🔐 Requesting explicit media permissions...');
-            const stream = await navigator.mediaDevices.getUserMedia({ 
-                video: true, 
-                audio: true 
+            // Step 1: Get explicit permissions first (CRITICAL for stability)
+            console.log('🔐 Step 1: Requesting explicit browser permissions...');
+            const permissionStream = await navigator.mediaDevices.getUserMedia({ 
+                video: { 
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 },
+                    frameRate: { ideal: 30, max: 30 }
+                }, 
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true
+                }
             });
             
-            console.log('✅ Media permissions granted');
-            console.log('📹 Video tracks:', stream.getVideoTracks().length);
-            console.log('🎤 Audio tracks:', stream.getAudioTracks().length);
+            console.log('✅ Browser permissions granted successfully');
+            console.log('📹 Video tracks available:', permissionStream.getVideoTracks().length);
+            console.log('🎤 Audio tracks available:', permissionStream.getAudioTracks().length);
             
-            // Stop the test stream - we'll let LiveKit handle the actual streaming
-            stream.getTracks().forEach(track => track.stop());
+            // Step 2: Stop permission stream immediately (let LiveKit handle actual streaming)
+            permissionStream.getTracks().forEach(track => {
+                track.stop();
+                console.log('🛑 Permission track stopped:', track.kind);
+            });
             
-            // Now enable through LiveKit with better error handling
-            console.log('🚀 Enabling camera and microphone through LiveKit...');
+            // Step 3: Wait a moment for cleanup
+            await new Promise(resolve => setTimeout(resolve, 500));
             
+            // Step 4: Enable through LiveKit with bulletproof error handling
+            console.log('🚀 Step 2: Enabling tracks through LiveKit...');
+            
+            // Enable audio first (usually more stable)
+            console.log('🎤 Enabling microphone...');
             try {
-                // Enable microphone first
-                console.log('🎤 Enabling microphone...');
                 await room.localParticipant.setMicrophoneEnabled(true);
                 audioEnabled = true;
-                console.log('✅ Microphone enabled successfully');
+                console.log('✅ Microphone enabled and published successfully');
                 
-                // Then enable camera
-                console.log('📹 Enabling camera...');
+                // Verify audio track was actually published
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                const audioTrack = room.localParticipant.getTrack(LiveKit.Track.Source.Microphone);
+                if (audioTrack && audioTrack.track) {
+                    console.log('✅ Audio track verification passed');
+                } else {
+                    console.warn('⚠️ Audio track verification failed, retrying...');
+                    throw new Error('Audio track not properly published');
+                }
+                
+            } catch (audioError) {
+                console.error('❌ Microphone enable failed:', audioError);
+                audioEnabled = false;
+            }
+            
+            // Enable video second
+            console.log('📹 Enabling camera...');
+            try {
                 await room.localParticipant.setCameraEnabled(true);
                 videoEnabled = true;
-                console.log('✅ Camera enabled successfully');
+                console.log('✅ Camera enabled and published successfully');
                 
-            } catch (enableError) {
-                console.error('❌ Error during LiveKit enable:', enableError);
+                // Verify video track was actually published
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                const videoTrack = room.localParticipant.getTrack(LiveKit.Track.Source.Camera);
+                if (videoTrack && videoTrack.track) {
+                    console.log('✅ Video track verification passed');
+                    
+                    // Ensure local video is immediately visible
+                    setTimeout(() => {
+                        const localContainer = document.getElementById(`participant-${room.localParticipant.sid}`);
+                        if (localContainer) {
+                            const videoElement = localContainer.querySelector('video');
+                            if (videoElement && videoTrack.track) {
+                                try {
+                                    videoTrack.track.attach(videoElement);
+                                    videoElement.play().catch(e => console.warn('Local video autoplay prevented:', e));
+                                    console.log('✅ Local video immediately attached');
+                                } catch (e) {
+                                    console.warn('Local video immediate attachment failed:', e);
+                                }
+                            }
+                        }
+                    }, 500);
+                    
+                } else {
+                    console.warn('⚠️ Video track verification failed, retrying...');
+                    throw new Error('Video track not properly published');
+                }
                 
-                // Try alternative method - publish tracks manually
-                console.log('🔄 Trying alternative track publishing method...');
+            } catch (videoError) {
+                console.error('❌ Camera enable failed:', videoError);
+                videoEnabled = false;
+            }
+            
+            // Step 5: If standard method failed, try alternative robust publishing
+            if (!audioEnabled || !videoEnabled) {
+                console.log('🔄 Standard method partially failed, trying robust alternative...');
                 
                 try {
-                    const audioTrack = await LiveKit.createLocalAudioTrack();
-                    const videoTrack = await LiveKit.createLocalVideoTrack();
+                    if (!audioEnabled) {
+                        console.log('🎤 Creating robust audio track...');
+                        const audioTrack = await LiveKit.createLocalAudioTrack({
+                            echoCancellation: true,
+                            noiseSuppression: true,
+                            autoGainControl: true
+                        });
+                        
+                        console.log('📤 Publishing robust audio track...');
+                        await room.localParticipant.publishTrack(audioTrack, {
+                            name: 'microphone',
+                            source: LiveKit.Track.Source.Microphone
+                        });
+                        
+                        audioEnabled = true;
+                        console.log('✅ Robust audio track published successfully');
+                    }
                     
-                    console.log('📹 Publishing video track...');
-                    await room.localParticipant.publishTrack(videoTrack);
+                    if (!videoEnabled) {
+                        console.log('📹 Creating robust video track...');
+                        const videoTrack = await LiveKit.createLocalVideoTrack({
+                            resolution: LiveKit.VideoPresets.h720.resolution,
+                            frameRate: 30
+                        });
+                        
+                        console.log('📤 Publishing robust video track...');
+                        await room.localParticipant.publishTrack(videoTrack, {
+                            name: 'camera',
+                            source: LiveKit.Track.Source.Camera
+                        });
+                        
+                        videoEnabled = true;
+                        console.log('✅ Robust video track published successfully');
+                    }
                     
-                    console.log('🎤 Publishing audio track...');
-                    await room.localParticipant.publishTrack(audioTrack);
-                    
-                    videoEnabled = true;
-                    audioEnabled = true;
-                    console.log('✅ Tracks published successfully via alternative method');
-                    
-                } catch (publishError) {
-                    console.error('❌ Alternative track publishing failed:', publishError);
-                    // Continue without throwing - user can still participate
+                } catch (robustError) {
+                    console.error('❌ Robust publishing also failed:', robustError);
                 }
             }
+            
+            // Step 6: Final verification and UI update
+            console.log('🔍 Final track verification...');
+            console.log('📊 Final state - Audio:', audioEnabled, 'Video:', videoEnabled);
             
             // Update button states
             updateControlButtons();
             
+            // Force update participant display
+            setTimeout(() => {
+                updateParticipantDisplay();
+            }, 1000);
+            
+            console.log('🎉 Media setup completed successfully!');
+            
         } catch (error) {
-            console.error('❌ Media permission error:', error);
+            console.error('❌ CRITICAL: Media setup completely failed:', error);
             
             if (error.name === 'NotAllowedError') {
                 showError('Kamera/Mikrofon-Zugriff wurde verweigert. Bitte erlauben Sie den Zugriff und laden Sie die Seite neu.');
             } else if (error.name === 'NotFoundError') {
                 showError('Keine Kamera oder Mikrofon gefunden. Bitte überprüfen Sie Ihre Geräte.');
             } else {
-                console.warn('Media setup partially failed, but continuing...', error);
-                // Don't show error for partial failures - user can still join
+                console.warn('Continuing without full media setup...', error);
+                // Don't show error - allow participation without media
             }
         }
 
@@ -533,54 +626,125 @@ async function connectToRoom(meetingData) {
 }
 
 function handleTrackSubscribed(track, publication, participant) {
-    console.log('📹 Track subscribed:', track.kind, participant.identity);
+    console.log('📹 TRACK SUBSCRIBED:', track.kind, 'from', participant.identity);
     console.log('📹 Track details:', {
         trackSid: track.sid,
         enabled: track.enabled,
         muted: track.muted,
-        source: track.source
+        source: track.source,
+        participant: participant.identity
     });
     
     if (track.kind === LiveKit.Track.Kind.Video || track.kind === LiveKit.Track.Kind.Audio) {
-        // Get or create participant container
+        // Critical: Ensure container exists BEFORE trying to attach
         let container = document.getElementById(`participant-${participant.sid}`);
         if (!container) {
-            container = createParticipantContainer(participant);
+            console.log('📦 Creating participant container for:', participant.identity);
+            container = createParticipantContainer(participant, false);
+            
+            // Wait a moment for DOM to be ready
+            setTimeout(() => {
+                attachTrackToContainer(track, publication, participant, container);
+            }, 100);
+        } else {
+            console.log('📦 Using existing container for:', participant.identity);
+            attachTrackToContainer(track, publication, participant, container);
         }
+    }
+}
 
-        // Attach track with better error handling
+function attachTrackToContainer(track, publication, participant, container) {
+    console.log('🔗 ATTACHING TRACK:', track.kind, 'to container for', participant.identity);
+    
+    try {
         if (track.kind === LiveKit.Track.Kind.Video) {
             const videoElement = container.querySelector('video');
-            if (videoElement) {
-                try {
-                    track.attach(videoElement);
-                    console.log('✅ Video track attached successfully');
-                    
-                    // Add event listeners to track video element state
-                    videoElement.addEventListener('loadeddata', () => {
-                        console.log('📹 Video data loaded');
-                    });
-                    
-                    videoElement.addEventListener('error', (e) => {
-                        console.error('❌ Video element error:', e);
-                    });
-                    
-                } catch (attachError) {
-                    console.error('❌ Error attaching video track:', attachError);
-                }
+            if (!videoElement) {
+                console.error('❌ No video element found in container for:', participant.identity);
+                return;
             }
+            
+            console.log('📹 Attaching video track...');
+            
+            // Critical: Detach any existing track first
+            const existingTracks = videoElement.srcObject?.getTracks() || [];
+            existingTracks.forEach(existingTrack => existingTrack.stop());
+            
+            // Attach the new track
+            track.attach(videoElement);
+            
+            // Ensure video plays
+            videoElement.onloadeddata = () => {
+                console.log('📹 Video data loaded for:', participant.identity);
+                videoElement.play().catch(playError => {
+                    console.warn('Video autoplay prevented for:', participant.identity, playError);
+                    // Try to play again after user interaction
+                    document.addEventListener('click', () => {
+                        videoElement.play().catch(e => console.warn('Manual play failed:', e));
+                    }, { once: true });
+                });
+            };
+            
+            // Error handling
+            videoElement.onerror = (error) => {
+                console.error('❌ Video element error for:', participant.identity, error);
+                // Try to reattach after error
+                setTimeout(() => {
+                    try {
+                        track.attach(videoElement);
+                        console.log('🔄 Video track reattached after error');
+                    } catch (reattachError) {
+                        console.error('❌ Video reattach failed:', reattachError);
+                    }
+                }, 2000);
+            };
+            
+            console.log('✅ Video track attached successfully for:', participant.identity);
+            
         } else if (track.kind === LiveKit.Track.Kind.Audio) {
-            // Audio tracks are attached to a hidden element
+            console.log('🎤 Attaching audio track...');
+            
+            // Remove any existing audio elements for this participant
+            const existingAudio = container.querySelectorAll('audio');
+            existingAudio.forEach(audio => audio.remove());
+            
+            // Create new audio element
             const audioElement = document.createElement('audio');
             audioElement.autoplay = true;
-            try {
-                track.attach(audioElement);
-                container.appendChild(audioElement);
-                console.log('✅ Audio track attached successfully');
-            } catch (attachError) {
-                console.error('❌ Error attaching audio track:', attachError);
-            }
+            audioElement.playsInline = true;
+            audioElement.controls = false; // Hidden controls
+            
+            // Attach track
+            track.attach(audioElement);
+            container.appendChild(audioElement);
+            
+            // Ensure audio plays
+            audioElement.onloadeddata = () => {
+                console.log('🎤 Audio data loaded for:', participant.identity);
+                audioElement.play().catch(playError => {
+                    console.warn('Audio autoplay prevented for:', participant.identity, playError);
+                });
+            };
+            
+            console.log('✅ Audio track attached successfully for:', participant.identity);
         }
+        
+        // Update container visibility
+        container.style.opacity = '1';
+        container.style.visibility = 'visible';
+        
+    } catch (attachError) {
+        console.error('❌ CRITICAL: Track attachment failed for:', participant.identity, attachError);
+        
+        // Retry attachment after delay
+        setTimeout(() => {
+            console.log('🔄 Retrying track attachment for:', participant.identity);
+            try {
+                attachTrackToContainer(track, publication, participant, container);
+            } catch (retryError) {
+                console.error('❌ Track attachment retry failed:', retryError);
+            }
+        }, 2000);
     }
 }
 
@@ -600,19 +764,55 @@ function handleTrackUnsubscribed(track, publication, participant) {
 }
 
 function handleParticipantConnected(participant) {
-    console.log('Participant connected:', participant.identity);
+    console.log('👥 PARTICIPANT CONNECTED:', participant.identity);
+    console.log('👥 Participant details:', {
+        sid: participant.sid,
+        identity: participant.identity,
+        name: participant.name,
+        metadata: participant.metadata
+    });
+    
     participants.set(participant.sid, participant);
+    
+    // Create container immediately when participant connects
+    let container = document.getElementById(`participant-${participant.sid}`);
+    if (!container) {
+        console.log('📦 Creating container for new participant:', participant.identity);
+        container = createParticipantContainer(participant, false);
+    }
+    
     updateParticipantCount();
+    
+    // Subscribe to existing tracks immediately
+    participant.tracks.forEach((trackPublication) => {
+        if (trackPublication.track) {
+            console.log('📹 Subscribing to existing track:', trackPublication.kind, 'from', participant.identity);
+            handleTrackSubscribed(trackPublication.track, trackPublication, participant);
+        }
+    });
 }
 
 function handleParticipantDisconnected(participant) {
-    console.log('Participant disconnected:', participant.identity);
+    console.log('👥 PARTICIPANT DISCONNECTED:', participant.identity);
     participants.delete(participant.sid);
     
-    // Remove participant container
+    // Remove participant container with cleanup
     const container = document.getElementById(`participant-${participant.sid}`);
     if (container) {
+        console.log('🗑️ Cleaning up container for:', participant.identity);
+        
+        // Stop all media elements
+        const mediaElements = container.querySelectorAll('video, audio');
+        mediaElements.forEach(element => {
+            if (element.srcObject) {
+                element.srcObject.getTracks().forEach(track => track.stop());
+            }
+            element.remove();
+        });
+        
+        // Remove container
         container.remove();
+        console.log('✅ Container cleaned up for:', participant.identity);
     }
     
     updateParticipantCount();
@@ -707,14 +907,35 @@ function handleLocalTrackPublished(publication, participant) {
 }
 
 function createParticipantContainer(participant, isLocal = false) {
+    console.log('📦 CREATING CONTAINER for:', participant.identity, '(local:', isLocal, ')');
+    
     const container = document.createElement('div');
     container.className = 'participant-container';
     container.id = `participant-${participant.sid}`;
+    
+    // Initially hidden until tracks are attached
+    container.style.opacity = '0';
+    container.style.visibility = 'hidden';
+    container.style.transition = 'opacity 0.3s ease';
     
     const video = document.createElement('video');
     video.autoplay = true;
     video.playsInline = true;
     video.muted = isLocal; // Mute local video to prevent echo
+    video.style.width = '100%';
+    video.style.height = '100%';
+    video.style.objectFit = 'cover';
+    
+    // Add loading indicator
+    const loadingIndicator = document.createElement('div');
+    loadingIndicator.className = 'loading-indicator';
+    loadingIndicator.innerHTML = '🔄 Verbinde...';
+    loadingIndicator.style.position = 'absolute';
+    loadingIndicator.style.top = '50%';
+    loadingIndicator.style.left = '50%';
+    loadingIndicator.style.transform = 'translate(-50%, -50%)';
+    loadingIndicator.style.color = 'white';
+    loadingIndicator.style.fontSize = '14px';
     
     const nameLabel = document.createElement('div');
     nameLabel.className = 'participant-name';
@@ -722,12 +943,23 @@ function createParticipantContainer(participant, isLocal = false) {
     if (isLocal) nameLabel.textContent += ' (Du)';
     
     container.appendChild(video);
+    container.appendChild(loadingIndicator);
     container.appendChild(nameLabel);
     
     const videoGrid = document.getElementById('videoGrid');
     if (videoGrid) {
         videoGrid.appendChild(container);
+        console.log('✅ Container added to video grid for:', participant.identity);
+    } else {
+        console.error('❌ Video grid not found!');
     }
+    
+    // Remove loading indicator when video loads
+    video.addEventListener('loadeddata', () => {
+        loadingIndicator.style.display = 'none';
+        container.style.opacity = '1';
+        container.style.visibility = 'visible';
+    });
     
     return container;
 }
@@ -760,6 +992,49 @@ function updateControlButtons() {
         if (videoOn) videoOn.classList.toggle('hidden', !videoEnabled);
         if (videoOff) videoOff.classList.toggle('hidden', videoEnabled);
     }
+}
+
+function updateParticipantDisplay() {
+    console.log('🔄 UPDATING PARTICIPANT DISPLAY');
+    
+    if (!room) {
+        console.warn('Room not available for participant display update');
+        return;
+    }
+    
+    console.log('👥 Current participants:');
+    console.log('- Local:', room.localParticipant.identity);
+    
+    room.participants.forEach((participant, sid) => {
+        console.log(`- Remote: ${participant.identity} (${sid})`);
+        
+        // Ensure container exists
+        let container = document.getElementById(`participant-${sid}`);
+        if (!container) {
+            console.log('📦 Creating missing container for:', participant.identity);
+            container = createParticipantContainer(participant, false);
+        }
+        
+        // Re-attach all tracks
+        participant.tracks.forEach((trackPublication) => {
+            if (trackPublication.track && trackPublication.isSubscribed) {
+                console.log('🔄 Re-attaching track:', trackPublication.kind, 'for', participant.identity);
+                attachTrackToContainer(trackPublication.track, trackPublication, participant, container);
+            }
+        });
+    });
+    
+    // Ensure local participant container exists
+    if (room.localParticipant) {
+        let localContainer = document.getElementById(`participant-${room.localParticipant.sid}`);
+        if (!localContainer) {
+            console.log('📦 Creating missing local container');
+            localContainer = createParticipantContainer(room.localParticipant, true);
+        }
+    }
+    
+    updateParticipantCount();
+    console.log('✅ Participant display update completed');
 }
 
 // Setup event listeners when DOM is ready
