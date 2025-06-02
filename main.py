@@ -9,7 +9,6 @@ from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.security import HTTPSRedirectMiddleware
 from pydantic import BaseModel, Field
 import uvicorn
 
@@ -57,7 +56,16 @@ else:
 
 # Add HTTPS redirect middleware in production
 if app_url and app_url.startswith('https://'):
-    app.add_middleware(HTTPSRedirectMiddleware)
+    @app.middleware("http")
+    async def https_redirect_middleware(request: Request, call_next):
+        """Redirect HTTP to HTTPS in production"""
+        if request.url.scheme == "http":
+            url = request.url.replace(scheme="https")
+            return JSONResponse(
+                status_code=301,
+                headers={"Location": str(url)}
+            )
+        return await call_next(request)
 
 app.add_middleware(
     CORSMiddleware,
