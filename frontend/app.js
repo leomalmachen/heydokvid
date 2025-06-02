@@ -4,10 +4,162 @@ let localParticipant;
 let audioEnabled = true;
 let videoEnabled = true;
 const participants = new Map();
+let isTabVisible = true;
+let visibilityCheckInterval;
 
 // Get meeting ID from URL
 const pathParts = window.location.pathname.split('/');
 const meetingId = pathParts[pathParts.length - 1];
+
+// Handle page visibility changes to keep connection alive
+function handleVisibilityChange() {
+    if (document.hidden) {
+        console.log('📴 Tab hidden - implementing keep-alive strategies');
+        isTabVisible = false;
+        
+        // Start keep-alive ping
+        if (room && room.state === LiveKit.ConnectionState.Connected) {
+            startKeepAlive();
+        }
+        
+        // Prevent media stream pause
+        preventMediaPause();
+        
+    } else {
+        console.log('👁️ Tab visible - resuming normal operation');
+        isTabVisible = true;
+        
+        // Stop keep-alive ping
+        stopKeepAlive();
+        
+        // Ensure media streams are active
+        resumeMediaStreams();
+        
+        // Check connection state and reconnect if needed
+        if (room && room.state !== LiveKit.ConnectionState.Connected) {
+            console.log('🔄 Tab refocused - checking connection status');
+            setTimeout(checkAndReconnect, 1000);
+        }
+    }
+}
+
+function startKeepAlive() {
+    if (visibilityCheckInterval) return;
+    
+    console.log('💓 Starting keep-alive ping');
+    visibilityCheckInterval = setInterval(() => {
+        if (room && room.state === LiveKit.ConnectionState.Connected) {
+            // Send a small data message to keep connection active
+            try {
+                room.localParticipant.publishData(
+                    new TextEncoder().encode('ping'), 
+                    LiveKit.DataPacket_Kind.RELIABLE
+                );
+            } catch (error) {
+                console.warn('Keep-alive ping failed:', error);
+            }
+        }
+    }, 10000); // Every 10 seconds
+}
+
+function stopKeepAlive() {
+    if (visibilityCheckInterval) {
+        console.log('💓 Stopping keep-alive ping');
+        clearInterval(visibilityCheckInterval);
+        visibilityCheckInterval = null;
+    }
+}
+
+function preventMediaPause() {
+    console.log('🔒 Preventing media stream pause during tab hide');
+    
+    // Keep video tracks active by setting a small constraint
+    if (room && room.localParticipant) {
+        const videoTrack = room.localParticipant.getTrack(LiveKit.Track.Source.Camera);
+        if (videoTrack && videoTrack.track) {
+            try {
+                // Ensure track remains active
+                videoTrack.track.enabled = true;
+                console.log('✅ Video track kept active');
+            } catch (error) {
+                console.warn('Could not maintain video track:', error);
+            }
+        }
+        
+        const audioTrack = room.localParticipant.getTrack(LiveKit.Track.Source.Microphone);
+        if (audioTrack && audioTrack.track) {
+            try {
+                // Ensure track remains active
+                audioTrack.track.enabled = audioEnabled;
+                console.log('✅ Audio track kept active');
+            } catch (error) {
+                console.warn('Could not maintain audio track:', error);
+            }
+        }
+    }
+}
+
+function resumeMediaStreams() {
+    console.log('▶️ Resuming media streams after tab focus');
+    
+    if (room && room.localParticipant) {
+        // Re-enable video if it was enabled
+        if (videoEnabled) {
+            setTimeout(async () => {
+                try {
+                    const videoTrack = room.localParticipant.getTrack(LiveKit.Track.Source.Camera);
+                    if (!videoTrack || !videoTrack.track || !videoTrack.track.enabled) {
+                        console.log('🔄 Re-enabling video after tab focus');
+                        await room.localParticipant.setCameraEnabled(true);
+                    }
+                } catch (error) {
+                    console.warn('Could not resume video:', error);
+                }
+            }, 500);
+        }
+        
+        // Re-enable audio if it was enabled
+        if (audioEnabled) {
+            setTimeout(async () => {
+                try {
+                    const audioTrack = room.localParticipant.getTrack(LiveKit.Track.Source.Microphone);
+                    if (!audioTrack || !audioTrack.track || !audioTrack.track.enabled) {
+                        console.log('🔄 Re-enabling audio after tab focus');
+                        await room.localParticipant.setMicrophoneEnabled(true);
+                    }
+                } catch (error) {
+                    console.warn('Could not resume audio:', error);
+                }
+            }, 500);
+        }
+    }
+}
+
+async function checkAndReconnect() {
+    if (!room || room.state === LiveKit.ConnectionState.Connected) {
+        return;
+    }
+    
+    console.log('🔄 Connection lost during tab switch, attempting reconnect...');
+    
+    try {
+        // Get fresh meeting data
+        const meetingData = sessionStorage.getItem('meetingData');
+        if (meetingData) {
+            const data = JSON.parse(meetingData);
+            await room.connect(data.livekit_url, data.token);
+            console.log('✅ Reconnected successfully after tab switch');
+        }
+    } catch (error) {
+        console.error('❌ Reconnection failed:', error);
+        // Try to reload the page as last resort
+        setTimeout(() => {
+            if (confirm('Verbindung verloren. Seite neu laden?')) {
+                location.reload();
+            }
+        }, 2000);
+    }
+}
 
 // Initialize the meeting only when LiveKit is ready
 async function initializeMeeting() {
@@ -104,17 +256,37 @@ async function connectToRoom(meetingData) {
             throw new Error('Ungültige Meeting-Daten: URL oder Token fehlt');
         }
         
-        // Create room instance with better error handling
+        // Create room instance with better error handling and background optimization
         room = new LiveKit.Room({
             adaptiveStream: true,
             dynacast: true,
+            // Optimize for background operation
+            audioCaptureDefaults: {
+                autoGainControl: true,
+                echoCancellation: true,
+                noiseSuppression: true,
+            },
+            videoCaptureDefaults: {
+                resolution: LiveKit.VideoPresets.h720.resolution,
+            },
             publishDefaults: {
                 videoSimulcastLayers: [
                     LiveKit.VideoPresets.h90,
                     LiveKit.VideoPresets.h180,
                     LiveKit.VideoPresets.h360,
                 ],
+                // Keep publishing even when tab is hidden
+                stopMicTrackOnMute: false,
+                videoCodec: 'vp8', // More stable codec
             },
+            // Reconnection settings
+            reconnectPolicy: {
+                nextRetryDelayInMs: (context) => {
+                    console.log(`Reconnect attempt ${context.retryCount}`);
+                    return Math.min(1000 * Math.pow(2, context.retryCount), 30000);
+                },
+                maxRetryCount: 10,
+            }
         });
 
         // Set up event handlers with better error logging
@@ -672,6 +844,9 @@ function setupEventListeners() {
         leaveMeetingBtn.addEventListener('click', async () => {
             if (confirm('Meeting wirklich verlassen?')) {
                 try {
+                    // Cleanup before disconnect
+                    stopKeepAlive();
+                    
                     if (room) {
                         await room.disconnect();
                     }
@@ -694,6 +869,31 @@ function setupEventListeners() {
             }
         });
     }
+    
+    // Setup page visibility handling to keep connection alive
+    console.log('🔧 Setting up page visibility handling');
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    // Handle beforeunload to maintain connection
+    window.addEventListener('beforeunload', (event) => {
+        console.log('⚠️ Page unloading - maintaining connection');
+        // Don't disconnect immediately, let the user come back
+        event.preventDefault();
+        return 'Meeting ist noch aktiv. Wirklich verlassen?';
+    });
+    
+    // Handle page focus/blur for additional stability  
+    window.addEventListener('focus', () => {
+        console.log('👁️ Window focused');
+        if (!isTabVisible) {
+            handleVisibilityChange(); // Force check
+        }
+    });
+    
+    window.addEventListener('blur', () => {
+        console.log('👁️ Window blurred');
+        // Don't immediately react, let visibilitychange handle it
+    });
 }
 
 // Make initializeMeeting globally available
