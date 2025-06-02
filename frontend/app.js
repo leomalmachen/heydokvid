@@ -196,6 +196,7 @@ async function connectToRoom(meetingData) {
         room.on(LiveKit.RoomEvent.ParticipantDisconnected, handleParticipantDisconnected);
         room.on(LiveKit.RoomEvent.Disconnected, handleDisconnect);
         room.on(LiveKit.RoomEvent.LocalTrackPublished, handleLocalTrackPublished);
+        room.on(LiveKit.RoomEvent.Connected, handleRoomConnected);
 
         // Connect
         console.log('🔌 Connecting to LiveKit...');
@@ -209,6 +210,10 @@ async function connectToRoom(meetingData) {
         }
 
         localParticipant = room.localParticipant;
+        
+        // CRITICAL: Create local participant container immediately
+        console.log('🏗️ Creating local participant container...');
+        createConsistentContainer(localParticipant, true);
         
         // PERSISTENT media setup - restore previous state
         try {
@@ -226,6 +231,13 @@ async function connectToRoom(meetingData) {
         } catch (mediaError) {
             console.warn('⚠️ Media setup failed, continuing without:', mediaError);
         }
+
+        // IMPORTANT: Process existing participants in the room
+        console.log('👥 Processing existing participants...');
+        room.participants.forEach((participant) => {
+            console.log('🔄 Adding existing participant:', participant.identity);
+            handleParticipantConnected(participant);
+        });
 
         // Update UI
         updateParticipantCount();
@@ -247,6 +259,32 @@ async function connectToRoom(meetingData) {
     }
 }
 
+// NEW: Handle room connected event
+function handleRoomConnected() {
+    console.log('🎉 Room connected successfully!');
+    
+    // Ensure local participant container exists
+    if (localParticipant) {
+        let localContainer = document.getElementById(`participant-${localParticipant.sid}`);
+        if (!localContainer) {
+            console.log('🔧 Creating missing local container...');
+            createConsistentContainer(localParticipant, true);
+        }
+    }
+    
+    // Process any existing participants
+    if (room && room.participants) {
+        room.participants.forEach((participant) => {
+            if (!participants.has(participant.sid)) {
+                console.log('🔧 Adding missing participant:', participant.identity);
+                handleParticipantConnected(participant);
+            }
+        });
+    }
+    
+    updateConsistentGrid();
+}
+
 // BULLETPROOF track subscription
 function handleTrackSubscribed(track, publication, participant) {
     console.log('📹 Track subscribed:', track.kind, 'from', participant.identity);
@@ -260,6 +298,9 @@ function handleTrackSubscribed(track, publication, participant) {
     
     // SIMPLE track attachment
     attachTrackSimple(track, container);
+    
+    // Update grid after track attachment
+    updateConsistentGrid();
 }
 
 // BULLETPROOF participant connection with duplicate prevention
@@ -276,6 +317,14 @@ function handleParticipantConnected(participant) {
     
     // Create container
     createConsistentContainer(participant, false);
+    
+    // IMPORTANT: Subscribe to existing tracks
+    participant.tracks.forEach((publication) => {
+        if (publication.track) {
+            console.log('🔗 Subscribing to existing track:', publication.kind, 'from', participant.identity);
+            handleTrackSubscribed(publication.track, publication, participant);
+        }
+    });
     
     // Update UI with consistent layout
     updateParticipantCount();
@@ -321,6 +370,9 @@ function handleLocalTrackPublished(publication, participant) {
     if (publication.track) {
         attachTrackSimple(publication.track, container);
     }
+    
+    // Update grid after local track
+    updateConsistentGrid();
 }
 
 // CONSISTENT container creation for all users (Google Meet style)
@@ -418,6 +470,7 @@ function updateConsistentGrid() {
     
     const count = containers.length;
     console.log('📐 Updating CONSISTENT grid for', count, 'participants');
+    console.log('📋 Container IDs:', Array.from(containers).map(c => c.id));
     
     // Remove all previous classes and styles
     videoGrid.className = '';
@@ -431,7 +484,11 @@ function updateConsistentGrid() {
     videoGrid.style.justifyItems = 'stretch';
     
     // CONSISTENT: Google Meet style layout for ALL scenarios
-    if (count === 1) {
+    if (count === 0) {
+        // No participants yet - show loading
+        console.log('📋 No participants to display');
+        return;
+    } else if (count === 1) {
         // Single participant - centered
         videoGrid.style.gridTemplateColumns = '1fr';
         videoGrid.style.maxWidth = '600px';
@@ -462,6 +519,14 @@ function updateConsistentGrid() {
         participants: count,
         columns: videoGrid.style.gridTemplateColumns,
         layout: 'Google Meet style'
+    });
+    
+    // DEBUGGING: Log all current containers
+    console.log('🔍 Current participants in DOM:');
+    containers.forEach((container, index) => {
+        const nameLabel = container.querySelector('.participant-name');
+        const hasVideo = container.querySelector('video');
+        console.log(`  ${index + 1}. ${container.id} - ${nameLabel?.textContent} - Video: ${hasVideo ? 'Yes' : 'No'}`);
     });
 }
 
@@ -495,10 +560,20 @@ function updateMediaButtons() {
 
 // SIMPLE helper functions
 function updateParticipantCount() {
-    const count = room ? room.participants.size + 1 : 1;
+    // Count all participants including local participant
+    const remoteParticipants = room ? room.participants.size : 0;
+    const localParticipant = room && room.localParticipant ? 1 : 0;
+    const totalCount = remoteParticipants + localParticipant;
+    
+    console.log('👥 Participant count update:', { 
+        remote: remoteParticipants, 
+        local: localParticipant, 
+        total: totalCount 
+    });
+    
     const participantCountElement = document.getElementById('participantCount');
     if (participantCountElement) {
-        participantCountElement.textContent = count;
+        participantCountElement.textContent = totalCount;
     }
 }
 
