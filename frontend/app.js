@@ -256,28 +256,39 @@ async function connectToRoom(meetingData) {
             throw new Error('Ungültige Meeting-Daten: URL oder Token fehlt');
         }
         
-        // Create room instance with better error handling and background optimization
+        // Create room instance with better error handling and HIGH QUALITY video settings
         room = new LiveKit.Room({
             adaptiveStream: true,
             dynacast: true,
-            // Optimize for background operation
+            // HIGH QUALITY: Optimize for best video quality
             audioCaptureDefaults: {
                 autoGainControl: true,
                 echoCancellation: true,
                 noiseSuppression: true,
+                sampleRate: 48000, // High quality audio
             },
             videoCaptureDefaults: {
-                resolution: LiveKit.VideoPresets.h720.resolution,
+                resolution: LiveKit.VideoPresets.h1080.resolution, // Upgraded to 1080p
+                frameRate: 30,
             },
             publishDefaults: {
+                // HIGH QUALITY: Better video encoding
                 videoSimulcastLayers: [
-                    LiveKit.VideoPresets.h90,
                     LiveKit.VideoPresets.h180,
-                    LiveKit.VideoPresets.h360,
+                    LiveKit.VideoPresets.h360, 
+                    LiveKit.VideoPresets.h720,
+                    LiveKit.VideoPresets.h1080, // Added 1080p layer
                 ],
-                // Keep publishing even when tab is hidden
                 stopMicTrackOnMute: false,
-                videoCodec: 'vp8', // More stable codec
+                videoCodec: 'h264', // Better codec for quality
+                // Force high quality settings
+                videoEncoding: {
+                    maxBitrate: 2500000, // 2.5 Mbps for high quality
+                    maxFramerate: 30,
+                },
+                audioEncoding: {
+                    maxBitrate: 128000, // High quality audio
+                },
             },
             // Reconnection settings
             reconnectPolicy: {
@@ -446,14 +457,16 @@ async function connectToRoom(meetingData) {
             console.log('🔐 Step 1: Requesting explicit browser permissions...');
             const permissionStream = await navigator.mediaDevices.getUserMedia({ 
                 video: { 
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 },
-                    frameRate: { ideal: 30, max: 30 }
+                    width: { ideal: 1920, min: 1280 }, // Higher resolution
+                    height: { ideal: 1080, min: 720 },
+                    frameRate: { ideal: 30, max: 30 },
+                    facingMode: 'user'
                 }, 
                 audio: {
                     echoCancellation: true,
                     noiseSuppression: true,
-                    autoGainControl: true
+                    autoGainControl: true,
+                    sampleRate: 48000 // High quality audio
                 }
             });
             
@@ -561,8 +574,9 @@ async function connectToRoom(meetingData) {
                     if (!videoEnabled) {
                         console.log('📹 Creating robust video track...');
                         const videoTrack = await LiveKit.createLocalVideoTrack({
-                            resolution: LiveKit.VideoPresets.h720.resolution,
-                            frameRate: 30
+                            resolution: LiveKit.VideoPresets.h1080.resolution, // High quality
+                            frameRate: 30,
+                            facingMode: 'user'
                         });
                         
                         console.log('📤 Publishing robust video track...');
@@ -1619,29 +1633,57 @@ function optimizeVideoGrid() {
     const participantCount = containers.length;
     console.log('📐 Optimizing grid layout for', participantCount, 'participants');
     
-    // Enhanced: Better responsive grid layouts
+    // CONSISTENT LAYOUT: Ensure everyone sees the same layout
     let gridConfig;
     
     switch (participantCount) {
         case 1:
-            gridConfig = { columns: '1fr', maxWidth: '800px' };
+            gridConfig = { 
+                columns: '1fr', 
+                maxWidth: '600px',
+                aspectRatio: '16/9'
+            };
             break;
         case 2:
-            gridConfig = { columns: 'repeat(2, 1fr)', maxWidth: 'none' };
+            // CRITICAL: Always side-by-side for 2 participants
+            gridConfig = { 
+                columns: 'repeat(2, 1fr)', 
+                maxWidth: 'none',
+                aspectRatio: '16/9',
+                gap: '1rem'
+            };
             break;
         case 3:
         case 4:
-            gridConfig = { columns: 'repeat(2, 1fr)', maxWidth: 'none' };
+            gridConfig = { 
+                columns: 'repeat(2, 1fr)', 
+                maxWidth: 'none',
+                aspectRatio: '16/9',
+                gap: '0.5rem'
+            };
             break;
         case 5:
         case 6:
-            gridConfig = { columns: 'repeat(3, 1fr)', maxWidth: 'none' };
+            gridConfig = { 
+                columns: 'repeat(3, 1fr)', 
+                maxWidth: 'none',
+                aspectRatio: '16/9',
+                gap: '0.5rem'
+            };
             break;
         default:
-            gridConfig = { columns: 'repeat(auto-fit, minmax(250px, 1fr))', maxWidth: 'none' };
+            gridConfig = { 
+                columns: 'repeat(auto-fit, minmax(250px, 1fr))', 
+                maxWidth: 'none',
+                aspectRatio: '16/9',
+                gap: '0.5rem'
+            };
     }
     
+    // Apply consistent grid settings
     videoGrid.style.gridTemplateColumns = gridConfig.columns;
+    videoGrid.style.gap = gridConfig.gap || '1rem';
+    
     if (gridConfig.maxWidth !== 'none') {
         videoGrid.style.maxWidth = gridConfig.maxWidth;
         videoGrid.style.margin = '0 auto';
@@ -1650,11 +1692,26 @@ function optimizeVideoGrid() {
         videoGrid.style.margin = '0';
     }
     
-    // Ensure all containers are visible and properly sized
-    containers.forEach(container => {
+    // CRITICAL: Ensure all containers have consistent aspect ratio
+    containers.forEach((container, index) => {
         container.style.opacity = '1';
         container.style.visibility = 'visible';
+        container.style.aspectRatio = gridConfig.aspectRatio;
+        container.style.minHeight = '200px'; // Minimum height for readability
+        
+        // Ensure videos fill the container properly
+        const video = container.querySelector('video');
+        if (video) {
+            video.style.width = '100%';
+            video.style.height = '100%';
+            video.style.objectFit = 'cover';
+        }
     });
+    
+    // Force browser layout recalculation
+    videoGrid.style.display = 'none';
+    videoGrid.offsetHeight; // Trigger reflow
+    videoGrid.style.display = 'grid';
     
     console.log('✅ Grid layout optimized:', gridConfig);
 }
