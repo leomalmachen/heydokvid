@@ -206,51 +206,43 @@ header p {
     color: #9aa0a6;
 }
 
-/* Video Grid - CONSISTENT layout for all participants */
+/* Video Grid - SIMPLE and UNIVERSAL layout for ALL browsers */
 #videoGrid {
     display: grid;
     gap: 1rem;
     padding: 1rem;
     height: 100%;
     width: 100%;
-    
-    /* CRITICAL: Force consistent 2-participant layout */
-    grid-template-columns: repeat(2, 1fr);
-    grid-auto-rows: minmax(200px, 1fr);
-    
-    /* Ensure grid takes available space */
     flex: 1;
     align-items: stretch;
     justify-items: stretch;
+    
+    /* DEFAULT: Always 2 columns for consistency */
+    grid-template-columns: repeat(2, 1fr);
+    grid-auto-rows: minmax(200px, 1fr);
 }
 
-/* Single participant - centered */
-#videoGrid:has(.participant-container:only-child) {
+/* SIMPLE: Override for single participant */
+#videoGrid.single-participant {
     grid-template-columns: 1fr;
     max-width: 600px;
     margin: 0 auto;
 }
 
-/* Force 2 participants side-by-side */
-#videoGrid:has(.participant-container:nth-child(2):last-child) {
-    grid-template-columns: repeat(2, 1fr) !important;
-    max-width: none !important;
-    margin: 0 !important;
+/* SIMPLE: Force 2 participants side-by-side */
+#videoGrid.two-participants {
+    grid-template-columns: repeat(2, 1fr);
+    max-width: none;
+    margin: 0;
 }
 
-/* 3-4 participants */
-#videoGrid:has(.participant-container:nth-child(3)) {
+/* SIMPLE: 3-4 participants */
+#videoGrid.multiple-participants {
     grid-template-columns: repeat(2, 1fr);
 }
 
-/* 5-6 participants */
-#videoGrid:has(.participant-container:nth-child(5)) {
-    grid-template-columns: repeat(3, 1fr);
-    gap: 0.5rem;
-}
-
-/* 7+ participants */
-#videoGrid:has(.participant-container:nth-child(7)) {
+/* SIMPLE: Many participants */
+#videoGrid.many-participants {
     grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
     gap: 0.5rem;
 }
@@ -261,22 +253,18 @@ header p {
     border-radius: 8px;
     overflow: hidden;
     
-    /* CONSISTENT aspect ratio */
+    /* SIMPLE: Fixed aspect ratio */
     aspect-ratio: 16/9;
     min-height: 200px;
+    
+    /* SIMPLE: Always visible */
+    opacity: 1;
+    visibility: visible;
     
     /* Ensure proper layout */
     display: flex;
     align-items: center;
     justify-content: center;
-    
-    /* Smooth transitions */
-    transition: opacity 0.3s ease, transform 0.2s ease;
-}
-
-.participant-container:hover {
-    transform: scale(1.02);
-    z-index: 10;
 }
 
 .participant-container video {
@@ -284,11 +272,6 @@ header p {
     height: 100% !important;
     object-fit: cover;
     background: #202124;
-    
-    /* HIGH QUALITY: Ensure crisp video rendering */
-    image-rendering: optimizeQuality;
-    image-rendering: -webkit-optimize-contrast;
-    image-rendering: crisp-edges;
 }
 
 /* Enhanced: Better loading indicator */

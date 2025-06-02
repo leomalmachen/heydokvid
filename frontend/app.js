@@ -256,38 +256,36 @@ async function connectToRoom(meetingData) {
             throw new Error('Ungültige Meeting-Daten: URL oder Token fehlt');
         }
         
-        // Create room instance with better error handling and HIGH QUALITY video settings
+        // Create room instance with STABLE settings (reduced quality for better connection)
         room = new LiveKit.Room({
             adaptiveStream: true,
             dynacast: true,
-            // HIGH QUALITY: Optimize for best video quality
+            // STABLE: Lower quality for better connection stability
             audioCaptureDefaults: {
                 autoGainControl: true,
                 echoCancellation: true,
                 noiseSuppression: true,
-                sampleRate: 48000, // High quality audio
             },
             videoCaptureDefaults: {
-                resolution: LiveKit.VideoPresets.h1080.resolution, // Upgraded to 1080p
+                resolution: LiveKit.VideoPresets.h720.resolution, // Back to 720p for stability
                 frameRate: 30,
             },
             publishDefaults: {
-                // HIGH QUALITY: Better video encoding
+                // STABLE: Reduced quality for better connection
                 videoSimulcastLayers: [
                     LiveKit.VideoPresets.h180,
                     LiveKit.VideoPresets.h360, 
-                    LiveKit.VideoPresets.h720,
-                    LiveKit.VideoPresets.h1080, // Added 1080p layer
+                    LiveKit.VideoPresets.h720, // Max 720p
                 ],
                 stopMicTrackOnMute: false,
-                videoCodec: 'h264', // Better codec for quality
-                // Force high quality settings
+                videoCodec: 'vp8', // VP8 is more stable than H264
+                // STABLE: Lower bitrate for connection stability
                 videoEncoding: {
-                    maxBitrate: 2500000, // 2.5 Mbps for high quality
+                    maxBitrate: 1000000, // 1 Mbps (reduced from 2.5)
                     maxFramerate: 30,
                 },
                 audioEncoding: {
-                    maxBitrate: 128000, // High quality audio
+                    maxBitrate: 64000, // Reduced audio bitrate
                 },
             },
             // Reconnection settings
@@ -453,20 +451,19 @@ async function connectToRoom(meetingData) {
                 return;
             }
             
-            // Step 1: Get explicit permissions first (CRITICAL for stability)
-            console.log('🔐 Step 1: Requesting explicit browser permissions...');
+            // Step 1: Get explicit permissions first (STABLE settings)
+            console.log('🔐 Step 1: Requesting stable browser permissions...');
             const permissionStream = await navigator.mediaDevices.getUserMedia({ 
                 video: { 
-                    width: { ideal: 1920, min: 1280 }, // Higher resolution
-                    height: { ideal: 1080, min: 720 },
+                    width: { ideal: 1280, min: 640 }, // Reduced for stability
+                    height: { ideal: 720, min: 480 },
                     frameRate: { ideal: 30, max: 30 },
                     facingMode: 'user'
                 }, 
                 audio: {
                     echoCancellation: true,
                     noiseSuppression: true,
-                    autoGainControl: true,
-                    sampleRate: 48000 // High quality audio
+                    autoGainControl: true
                 }
             });
             
@@ -572,21 +569,21 @@ async function connectToRoom(meetingData) {
                     }
                     
                     if (!videoEnabled) {
-                        console.log('📹 Creating robust video track...');
+                        console.log('📹 Creating stable video track...');
                         const videoTrack = await LiveKit.createLocalVideoTrack({
-                            resolution: LiveKit.VideoPresets.h1080.resolution, // High quality
+                            resolution: LiveKit.VideoPresets.h720.resolution, // Stable quality
                             frameRate: 30,
                             facingMode: 'user'
                         });
                         
-                        console.log('📤 Publishing robust video track...');
+                        console.log('📤 Publishing stable video track...');
                         await room.localParticipant.publishTrack(videoTrack, {
                             name: 'camera',
                             source: LiveKit.Track.Source.Camera
                         });
                         
                         videoEnabled = true;
-                        console.log('✅ Robust video track published successfully');
+                        console.log('✅ Stable video track published successfully');
                     }
                     
                 } catch (robustError) {
@@ -1016,8 +1013,9 @@ function handleDisconnect(reason) {
     console.log('❌ Disconnect event triggered, reason:', reason);
     console.log('❌ Connection state:', room?.state);
     
-    // CRITICAL: Prevent reconnection loops
-    const isExpectedDisconnect = reason === 'user_left' || reason === 'manual' || reason === 'CLIENT_INITIATED';
+    // CRITICAL: Be much more conservative about reconnection
+    const isExpectedDisconnect = reason === 'user_left' || reason === 'manual' || 
+                                reason === 'CLIENT_INITIATED' || reason === 'disconnect';
     
     if (isExpectedDisconnect) {
         console.log('👋 Expected disconnect - cleaning up gracefully');
@@ -1025,159 +1023,23 @@ function handleDisconnect(reason) {
         return;
     }
     
-    // Only attempt reconnection for truly unexpected disconnects
-    if (room && room.state !== LiveKit.ConnectionState.Disconnected) {
-        console.log('⚠️ False disconnect event - room is still connected');
+    // CONSERVATIVE: Only reconnect for very specific cases
+    if (room && (room.state === LiveKit.ConnectionState.Connected || 
+                 room.state === LiveKit.ConnectionState.Connecting)) {
+        console.log('⚠️ Room still connected/connecting - ignoring disconnect event');
         return;
     }
     
-    console.log('❌ Handling unexpected disconnect');
+    console.log('❌ Handling unexpected disconnect - but being conservative');
     
-    // Show reconnection UI but don't auto-reconnect aggressively
-    showReconnectionUI();
-    
-    // Single reconnect attempt after reasonable delay
-    setTimeout(() => {
-        attemptReconnection(1);
-    }, 3000); // Increased delay
+    // DON'T auto-reconnect - let user decide
+    showFinalDisconnectUI();
 }
 
-// Enhanced: More conservative reconnection
+// DISABLED: Remove aggressive reconnection
 function attemptReconnection(attempt) {
-    const maxAttempts = 3; // Reduced from 5
-    const baseDelay = 5000; // Increased base delay
-    
-    if (attempt > maxAttempts) {
-        console.log('❌ Max reconnection attempts reached');
-        showFinalDisconnectUI();
-        return;
-    }
-    
-    console.log(`🔄 Reconnection attempt ${attempt}/${maxAttempts}`);
-    
-    // Get stored meeting data
-    const meetingData = sessionStorage.getItem('meetingData');
-    if (!meetingData) {
-        console.error('❌ No meeting data for reconnection');
-        showFinalDisconnectUI();
-        return;
-    }
-    
-    try {
-        const data = JSON.parse(meetingData);
-        
-        // Show reconnection status
-        updateReconnectionStatus(`Reconnecting... (${attempt}/${maxAttempts})`);
-        
-        // Clear existing room state before reconnecting
-        if (room) {
-            try {
-                room.disconnect();
-            } catch (e) {
-                console.warn('Error disconnecting old room:', e);
-            }
-        }
-        
-        // Attempt to reconnect
-        connectToRoom(data).then(() => {
-            console.log('✅ Reconnection successful!');
-            hideReconnectionUI();
-        }).catch((error) => {
-            console.error(`❌ Reconnection attempt ${attempt} failed:`, error);
-            
-            // Calculate delay with exponential backoff
-            const delay = Math.min(baseDelay * Math.pow(2, attempt - 1), 30000);
-            
-            if (attempt < maxAttempts) {
-                setTimeout(() => {
-                    attemptReconnection(attempt + 1);
-                }, delay);
-            } else {
-                showFinalDisconnectUI();
-            }
-        });
-        
-    } catch (error) {
-        console.error('❌ Error during reconnection attempt:', error);
-        showFinalDisconnectUI();
-    }
-}
-
-// Enhanced: Show reconnection UI overlay
-function showReconnectionUI() {
-    // Remove existing reconnection UI if any
-    const existingUI = document.getElementById('reconnectionUI');
-    if (existingUI) {
-        existingUI.remove();
-    }
-    
-    const reconnectionUI = document.createElement('div');
-    reconnectionUI.id = 'reconnectionUI';
-    reconnectionUI.innerHTML = `
-        <div style="
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.8);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 1000;
-            backdrop-filter: blur(4px);
-        ">
-            <div style="
-                background: #303134;
-                padding: 2rem;
-                border-radius: 8px;
-                text-align: center;
-                max-width: 400px;
-                width: 90%;
-            ">
-                <div style="
-                    width: 48px;
-                    height: 48px;
-                    border: 4px solid #5f6368;
-                    border-top-color: #8ab4f8;
-                    border-radius: 50%;
-                    animation: spin 1s linear infinite;
-                    margin: 0 auto 1rem;
-                "></div>
-                <h3 style="margin-bottom: 1rem; color: #e8eaed;">Verbindung wiederherstellend...</h3>
-                <p id="reconnectionStatus" style="color: #9aa0a6; margin-bottom: 1rem;">Versuche erneut zu verbinden...</p>
-                <button onclick="location.reload()" style="
-                    background: #1a73e8;
-                    color: white;
-                    border: none;
-                    padding: 0.5rem 1rem;
-                    border-radius: 4px;
-                    cursor: pointer;
-                ">Seite neu laden</button>
-            </div>
-        </div>
-    `;
-    
-    document.body.appendChild(reconnectionUI);
-}
-
-// Enhanced: Update reconnection status
-function updateReconnectionStatus(message) {
-    const statusElement = document.getElementById('reconnectionStatus');
-    if (statusElement) {
-        statusElement.textContent = message;
-    }
-}
-
-// Enhanced: Hide reconnection UI
-function hideReconnectionUI() {
-    const reconnectionUI = document.getElementById('reconnectionUI');
-    if (reconnectionUI) {
-        reconnectionUI.style.opacity = '0';
-        setTimeout(() => {
-            reconnectionUI.remove();
-        }, 300);
-    }
+    console.log('🚫 Auto-reconnection disabled to prevent loops');
+    showFinalDisconnectUI();
 }
 
 // Enhanced: Show final disconnect UI when all reconnection attempts failed
@@ -1623,7 +1485,7 @@ function checkTrackAttachment(track, container) {
     return false;
 }
 
-// Enhanced: Optimize video grid layout for multiple participants
+// SIMPLE: Optimize video grid layout with CLASS-BASED approach (works in ALL browsers)
 function optimizeVideoGrid() {
     const videoGrid = document.getElementById('videoGrid');
     const containers = document.querySelectorAll('.participant-container');
@@ -1631,73 +1493,30 @@ function optimizeVideoGrid() {
     if (!videoGrid || containers.length === 0) return;
     
     const participantCount = containers.length;
-    console.log('📐 Optimizing grid layout for', participantCount, 'participants');
+    console.log('📐 Setting SIMPLE grid layout for', participantCount, 'participants');
     
-    // CONSISTENT LAYOUT: Ensure everyone sees the same layout
-    let gridConfig;
+    // REMOVE all existing classes
+    videoGrid.className = '';
     
-    switch (participantCount) {
-        case 1:
-            gridConfig = { 
-                columns: '1fr', 
-                maxWidth: '600px',
-                aspectRatio: '16/9'
-            };
-            break;
-        case 2:
-            // CRITICAL: Always side-by-side for 2 participants
-            gridConfig = { 
-                columns: 'repeat(2, 1fr)', 
-                maxWidth: 'none',
-                aspectRatio: '16/9',
-                gap: '1rem'
-            };
-            break;
-        case 3:
-        case 4:
-            gridConfig = { 
-                columns: 'repeat(2, 1fr)', 
-                maxWidth: 'none',
-                aspectRatio: '16/9',
-                gap: '0.5rem'
-            };
-            break;
-        case 5:
-        case 6:
-            gridConfig = { 
-                columns: 'repeat(3, 1fr)', 
-                maxWidth: 'none',
-                aspectRatio: '16/9',
-                gap: '0.5rem'
-            };
-            break;
-        default:
-            gridConfig = { 
-                columns: 'repeat(auto-fit, minmax(250px, 1fr))', 
-                maxWidth: 'none',
-                aspectRatio: '16/9',
-                gap: '0.5rem'
-            };
-    }
-    
-    // Apply consistent grid settings
-    videoGrid.style.gridTemplateColumns = gridConfig.columns;
-    videoGrid.style.gap = gridConfig.gap || '1rem';
-    
-    if (gridConfig.maxWidth !== 'none') {
-        videoGrid.style.maxWidth = gridConfig.maxWidth;
-        videoGrid.style.margin = '0 auto';
+    // ADD appropriate class based on participant count
+    if (participantCount === 1) {
+        videoGrid.classList.add('single-participant');
+        console.log('✅ Applied: single-participant layout');
+    } else if (participantCount === 2) {
+        videoGrid.classList.add('two-participants');
+        console.log('✅ Applied: two-participants layout (side-by-side)');
+    } else if (participantCount <= 4) {
+        videoGrid.classList.add('multiple-participants');
+        console.log('✅ Applied: multiple-participants layout');
     } else {
-        videoGrid.style.maxWidth = 'none';
-        videoGrid.style.margin = '0';
+        videoGrid.classList.add('many-participants');
+        console.log('✅ Applied: many-participants layout');
     }
     
-    // CRITICAL: Ensure all containers have consistent aspect ratio
+    // ENSURE all containers are properly visible
     containers.forEach((container, index) => {
         container.style.opacity = '1';
         container.style.visibility = 'visible';
-        container.style.aspectRatio = gridConfig.aspectRatio;
-        container.style.minHeight = '200px'; // Minimum height for readability
         
         // Ensure videos fill the container properly
         const video = container.querySelector('video');
@@ -1708,12 +1527,7 @@ function optimizeVideoGrid() {
         }
     });
     
-    // Force browser layout recalculation
-    videoGrid.style.display = 'none';
-    videoGrid.offsetHeight; // Trigger reflow
-    videoGrid.style.display = 'grid';
-    
-    console.log('✅ Grid layout optimized:', gridConfig);
+    console.log('✅ SIMPLE grid layout applied successfully');
 }
 
 // Setup event listeners when DOM is ready
