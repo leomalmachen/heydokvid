@@ -136,7 +136,15 @@ async function connectToRoom(meetingData) {
                     console.log('🔄 Connecting...');
                 } else if (state === LiveKit.ConnectionState.Connected) {
                     console.log('✅ Connected successfully!');
+                } else if (state === LiveKit.ConnectionState.Reconnecting) {
+                    console.log('🔄 Reconnecting...');
                 }
+            })
+            .on(LiveKit.RoomEvent.Reconnecting, () => {
+                console.log('🔄 Room reconnecting event');
+            })
+            .on(LiveKit.RoomEvent.Reconnected, () => {
+                console.log('✅ Room reconnected event');
             })
             .on(LiveKit.RoomEvent.RoomMetadataChanged, (metadata) => {
                 console.log('📝 Room metadata changed:', metadata);
@@ -152,7 +160,13 @@ async function connectToRoom(meetingData) {
                 console.log('📡 Signal connection established');
             })
             .on(LiveKit.RoomEvent.SignalDisconnected, () => {
-                console.log('📡 Signal connection lost');
+                console.log('📡 Signal connection lost - but may reconnect automatically');
+            })
+            .on(LiveKit.RoomEvent.TrackMuted, (publication, participant) => {
+                console.log('🔇 Track muted:', publication.kind, participant?.identity);
+            })
+            .on(LiveKit.RoomEvent.TrackUnmuted, (publication, participant) => {
+                console.log('🔊 Track unmuted:', publication.kind, participant?.identity);
             });
 
         // Add connection timeout
@@ -324,15 +338,46 @@ function handleParticipantDisconnected(participant) {
 }
 
 function handleDisconnect(reason) {
-    console.log('❌ Disconnected from room, reason:', reason);
+    console.log('❌ Disconnect event triggered, reason:', reason);
     console.log('❌ Connection state:', room?.state);
+    console.log('❌ Room connected:', room?.state === LiveKit.ConnectionState.Connected);
     console.log('❌ Last error:', room?.lastError);
+    
+    // Check if we're actually disconnected or if this is a false positive
+    if (room && room.state === LiveKit.ConnectionState.Connected) {
+        console.log('⚠️ False disconnect detected - room is still connected, ignoring disconnect event');
+        return; // Don't handle disconnect if we're still connected
+    }
+    
+    // Check if this is just a reconnection attempt
+    if (reason && (reason.includes('reconnect') || reason.includes('temporary'))) {
+        console.log('🔄 Temporary disconnect for reconnection, waiting...');
+        setTimeout(() => {
+            if (room && room.state === LiveKit.ConnectionState.Connected) {
+                console.log('✅ Reconnection successful, staying in meeting');
+                return;
+            }
+        }, 3000);
+        return;
+    }
+    
+    console.log('❌ Confirmed disconnect - showing user options');
     
     // Don't immediately redirect, give user more information
     showError(`Verbindung zum Meeting wurde getrennt. Grund: ${reason || 'Unbekannt'}`);
     
     // Wait longer before redirect and give user option to retry
     setTimeout(() => {
+        if (room && room.state === LiveKit.ConnectionState.Connected) {
+            console.log('✅ Connection restored during timeout, canceling redirect');
+            // Hide error message
+            const loadingState = document.getElementById('loadingState');
+            if (loadingState) {
+                loadingState.style.display = 'none';
+            }
+            return;
+        }
+        
         if (confirm('Möchten Sie zur Startseite zurückkehren oder das Meeting erneut versuchen?')) {
             window.location.href = '/';
         } else {
