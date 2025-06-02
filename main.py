@@ -439,6 +439,18 @@ async def test_livekit_fix():
         logger.error(f"Error serving LiveKit fix test page: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
+@app.get("/debug", response_class=HTMLResponse)
+async def debug_meeting():
+    """Serve the meeting debug tool"""
+    try:
+        with open("frontend/debug_meeting.html", "r", encoding="utf-8") as f:
+            return f.read()
+    except FileNotFoundError:
+        return HTMLResponse(
+            content="<h1>Debug tool not found</h1><p>debug_meeting.html not found</p>",
+            status_code=404
+        )
+
 # Error handlers
 @app.exception_handler(404)
 async def not_found_handler(request: Request, exc):

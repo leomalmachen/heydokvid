@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Meeting Debug Monitor</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+            background: #0a0a0a;
+            color: #e8eaed;
+            margin: 0;
+            padding: 1rem;
+            font-size: 12px;
+        }
+        .debug-panel {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            height: 100vh;
+        }
+        .log-section {
+            background: #1a1a1a;
+            border-radius: 8px;
+            padding: 1rem;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        .log-header {
+            background: #303134;
+            padding: 0.5rem;
+            margin: -1rem -1rem 1rem -1rem;
+            font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .log-content {
+            background: #000;
+            border-radius: 4px;
+            padding: 0.5rem;
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            overflow-y: auto;
+            flex: 1;
+            white-space: pre-wrap;
+            line-height: 1.4;
+        }
+        .controls {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+        button {
+            background: #1a73e8;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        button:hover { background: #1557b0; }
+        button.danger { background: #ea4335; }
+        button.success { background: #34a853; }
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 0.5rem;
+        }
+        .status-connected { background: #34a853; }
+        .status-connecting { background: #fbbc04; }
+        .status-disconnected { background: #ea4335; }
+        .event-log { color: #8ab4f8; }
+        .error-log { color: #ea4335; }
+        .warning-log { color: #fbbc04; }
+        .success-log { color: #34a853; }
+        .info-log { color: #e8eaed; }
+        .participant-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+        .participant-card {
+            background: #303134;
+            border-radius: 4px;
+            padding: 0.5rem;
+            border-left: 3px solid #1a73e8;
+        }
+        .participant-card.local {
+            border-left-color: #34a853;
+        }
+        .track-info {
+            font-size: 10px;
+            color: #9aa0a6;
+            margin-top: 0.25rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="debug-panel">
+        <div class="log-section">
+            <div class="log-header">
+                <span>🔍 Meeting Events</span>
+                <div>
+                    <span class="status-indicator" id="connectionStatus"></span>
+                    <span id="statusText">Disconnected</span>
+                </div>
+            </div>
+            <div class="controls">
+                <button onclick="startMonitoring()">Start Monitoring</button>
+                <button onclick="clearEventLog()">Clear Events</button>
+                <button onclick="exportLogs()" class="success">Export Logs</button>
+            </div>
+            <div id="eventLog" class="log-content">Waiting for monitoring to start...\n</div>
+            
+            <div style="margin-top: 1rem;">
+                <strong>Participants:</strong>
+                <div id="participantGrid" class="participant-grid"></div>
+            </div>
+        </div>
+        
+        <div class="log-section">
+            <div class="log-header">
+                <span>🎥 Track & Media Debug</span>
+                <span id="trackCount">0 tracks</span>
+            </div>
+            <div class="controls">
+                <button onclick="debugTracks()">Debug Tracks</button>
+                <button onclick="clearTrackLog()">Clear Tracks</button>
+                <button onclick="simulateJoin()" class="success">Simulate Join</button>
+            </div>
+            <div id="trackLog" class="log-content">Track information will appear here...\n</div>
+        </div>
+    </div>
+
+    <script>
+        let eventLog = document.getElementById('eventLog');
+        let trackLog = document.getElementById('trackLog');
+        let monitoring = false;
+        let startTime = Date.now();
+        
+        function getTimestamp() {
+            const elapsed = ((Date.now() - startTime) / 1000).toFixed(3);
+            return `[${elapsed}s]`;
+        }
+        
+        function logEvent(message, type = 'info') {
+            const timestamp = getTimestamp();
+            const className = type + '-log';
+            eventLog.innerHTML += `<span class="${className}">${timestamp} ${message}</span>\n`;
+            eventLog.scrollTop = eventLog.scrollHeight;
+        }
+        
+        function logTrack(message, type = 'info') {
+            const timestamp = getTimestamp();
+            const className = type + '-log';
+            trackLog.innerHTML += `<span class="${className}">${timestamp} ${message}</span>\n`;
+            trackLog.scrollTop = trackLog.scrollHeight;
+        }
+        
+        function clearEventLog() {
+            eventLog.innerHTML = '';
+            startTime = Date.now();
+        }
+        
+        function clearTrackLog() {
+            trackLog.innerHTML = '';
+        }
+        
+        function updateStatus(status, text) {
+            const indicator = document.getElementById('connectionStatus');
+            const statusText = document.getElementById('statusText');
+            
+            indicator.className = `status-indicator status-${status}`;
+            statusText.textContent = text;
+        }
+        
+        function updateParticipants(participants) {
+            const grid = document.getElementById('participantGrid');
+            grid.innerHTML = '';
+            
+            participants.forEach(p => {
+                const card = document.createElement('div');
+                card.className = `participant-card ${p.isLocal ? 'local' : ''}`;
+                card.innerHTML = `
+                    <strong>${p.name}</strong> ${p.isLocal ? '(You)' : ''}
+                    <div class="track-info">
+                        Video: ${p.hasVideo ? '✅' : '❌'} | Audio: ${p.hasAudio ? '✅' : '❌'}
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+        
+        function startMonitoring() {
+            if (monitoring) return;
+            monitoring = true;
+            
+            logEvent('🚀 Starting meeting debug monitoring...', 'event');
+            
+            // Override console methods to capture logs
+            const originalLog = console.log;
+            const originalError = console.error;
+            const originalWarn = console.warn;
+            
+            console.log = function(...args) {
+                const message = args.join(' ');
+                
+                if (message.includes('LiveKit') || message.includes('Meeting') || 
+                    message.includes('Track') || message.includes('Participant')) {
+                    
+                    if (message.includes('error') || message.includes('❌')) {
+                        logEvent(`🔴 ${message}`, 'error');
+                    } else if (message.includes('warning') || message.includes('⚠️')) {
+                        logEvent(`🟡 ${message}`, 'warning');
+                    } else if (message.includes('✅') || message.includes('successful')) {
+                        logEvent(`🟢 ${message}`, 'success');
+                    } else {
+                        logEvent(`📝 ${message}`, 'info');
+                    }
+                }
+                
+                if (message.includes('Track') || message.includes('Video') || message.includes('Audio')) {
+                    logTrack(message, 'info');
+                }
+                
+                originalLog.apply(console, args);
+            };
+            
+            console.error = function(...args) {
+                const message = args.join(' ');
+                logEvent(`❌ ERROR: ${message}`, 'error');
+                logTrack(`❌ ERROR: ${message}`, 'error');
+                originalError.apply(console, args);
+            };
+            
+            console.warn = function(...args) {
+                const message = args.join(' ');
+                logEvent(`⚠️ WARNING: ${message}`, 'warning');
+                originalWarn.apply(console, args);
+            };
+            
+            // Monitor for meeting-related window events
+            if (window.parent !== window) {
+                logEvent('📺 Running in frame/popup - monitoring parent window', 'info');
+            }
+            
+            // Try to access meeting variables from main window
+            setTimeout(() => {
+                try {
+                    if (window.opener && window.opener.room) {
+                        logEvent('🔗 Found meeting room in opener window', 'success');
+                        monitorRoom(window.opener.room);
+                    } else if (window.parent && window.parent.room) {
+                        logEvent('🔗 Found meeting room in parent window', 'success');
+                        monitorRoom(window.parent.room);
+                    } else {
+                        logEvent('❌ No meeting room found to monitor', 'error');
+                        logEvent('💡 Open this debug tool in a popup from the meeting page', 'info');
+                    }
+                } catch (error) {
+                    logEvent(`❌ Error accessing meeting: ${error.message}`, 'error');
+                }
+            }, 1000);
+        }
+        
+        function monitorRoom(room) {
+            logEvent(`🎯 Monitoring room: ${room.sid || 'unknown'}`, 'success');
+            updateStatus('connected', 'Monitoring');
+            
+            // Monitor room events
+            room.on('participantConnected', (participant) => {
+                logEvent(`👤 Participant connected: ${participant.identity}`, 'success');
+                logTrack(`👤 New participant: ${participant.identity} (SID: ${participant.sid})`, 'event');
+                updateParticipantDisplay(room);
+            });
+            
+            room.on('participantDisconnected', (participant) => {
+                logEvent(`👤 Participant disconnected: ${participant.identity}`, 'warning');
+                updateParticipantDisplay(room);
+            });
+            
+            room.on('trackSubscribed', (track, publication, participant) => {
+                logEvent(`📹 Track subscribed: ${track.kind} from ${participant.identity}`, 'success');
+                logTrack(`📥 SUBSCRIBED: ${track.kind} track from ${participant.identity}`, 'success');
+                logTrack(`   - Track SID: ${track.sid}`, 'info');
+                logTrack(`   - Enabled: ${track.enabled}`, 'info');
+                logTrack(`   - Muted: ${track.muted}`, 'info');
+                updateParticipantDisplay(room);
+            });
+            
+            room.on('trackUnsubscribed', (track, publication, participant) => {
+                logEvent(`📹 Track unsubscribed: ${track.kind} from ${participant.identity}`, 'warning');
+                logTrack(`📤 UNSUBSCRIBED: ${track.kind} track from ${participant.identity}`, 'warning');
+                updateParticipantDisplay(room);
+            });
+            
+            room.on('connectionStateChanged', (state) => {
+                logEvent(`🔄 Connection state: ${state}`, 'event');
+                
+                if (state === 'connected') {
+                    updateStatus('connected', 'Connected');
+                } else if (state === 'connecting') {
+                    updateStatus('connecting', 'Connecting');
+                } else {
+                    updateStatus('disconnected', 'Disconnected');
+                }
+            });
+            
+            room.on('disconnected', (reason) => {
+                logEvent(`❌ Disconnected: ${reason}`, 'error');
+                updateStatus('disconnected', 'Disconnected');
+            });
+            
+            // Initial participant display
+            updateParticipantDisplay(room);
+        }
+        
+        function updateParticipantDisplay(room) {
+            const participants = [];
+            
+            // Add local participant
+            if (room.localParticipant) {
+                const local = room.localParticipant;
+                participants.push({
+                    name: local.identity,
+                    isLocal: true,
+                    hasVideo: !!local.getTrack('camera')?.track,
+                    hasAudio: !!local.getTrack('microphone')?.track
+                });
+            }
+            
+            // Add remote participants
+            room.participants.forEach(participant => {
+                participants.push({
+                    name: participant.identity,
+                    isLocal: false,
+                    hasVideo: !!Array.from(participant.tracks.values()).find(p => p.kind === 'video')?.track,
+                    hasAudio: !!Array.from(participant.tracks.values()).find(p => p.kind === 'audio')?.track
+                });
+            });
+            
+            updateParticipants(participants);
+            
+            const trackCount = participants.reduce((sum, p) => {
+                return sum + (p.hasVideo ? 1 : 0) + (p.hasAudio ? 1 : 0);
+            }, 0);
+            
+            document.getElementById('trackCount').textContent = `${trackCount} tracks`;
+        }
+        
+        function debugTracks() {
+            logTrack('🔍 Running track diagnostics...', 'event');
+            
+            try {
+                if (window.opener && window.opener.room) {
+                    const room = window.opener.room;
+                    
+                    logTrack(`📊 Room State: ${room.state}`, 'info');
+                    logTrack(`📊 Participants: ${room.participants.size + 1}`, 'info');
+                    
+                    // Check local participant
+                    const local = room.localParticipant;
+                    logTrack(`👤 Local: ${local.identity} (${local.sid})`, 'info');
+                    local.tracks.forEach((pub, source) => {
+                        logTrack(`   📹 ${source}: ${pub.track ? 'attached' : 'not attached'}`, pub.track ? 'success' : 'warning');
+                    });
+                    
+                    // Check remote participants
+                    room.participants.forEach(participant => {
+                        logTrack(`👤 Remote: ${participant.identity} (${participant.sid})`, 'info');
+                        participant.tracks.forEach((pub, source) => {
+                            logTrack(`   📹 ${source}: subscribed=${pub.isSubscribed}, track=${!!pub.track}`, pub.track ? 'success' : 'warning');
+                        });
+                    });
+                    
+                } else {
+                    logTrack('❌ No room found for debugging', 'error');
+                }
+            } catch (error) {
+                logTrack(`❌ Debug error: ${error.message}`, 'error');
+            }
+        }
+        
+        function simulateJoin() {
+            logEvent('🎭 Simulating participant join...', 'event');
+            
+            setTimeout(() => {
+                logEvent('👤 Simulated participant connecting...', 'info');
+                logTrack('📹 Simulated video track subscription...', 'info');
+            }, 500);
+            
+            setTimeout(() => {
+                logEvent('✅ Simulated participant joined successfully', 'success');
+                logTrack('✅ Simulated tracks attached', 'success');
+            }, 1500);
+        }
+        
+        function exportLogs() {
+            const events = eventLog.textContent;
+            const tracks = trackLog.textContent;
+            
+            const logData = `=== MEETING DEBUG LOGS ===\nTimestamp: ${new Date().toISOString()}\n\n=== EVENTS ===\n${events}\n\n=== TRACKS ===\n${tracks}`;
+            
+            const blob = new Blob([logData], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `meeting-debug-${Date.now()}.txt`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+        
+        // Auto-start monitoring
+        window.addEventListener('load', () => {
+            setTimeout(startMonitoring, 500);
+        });
+    </script>
+</body>
+</html> 
