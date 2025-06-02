@@ -86,6 +86,9 @@ except Exception as e:
 # In-memory storage for meetings (use Redis/Database in production)
 meetings: Dict[str, dict] = {}
 
+# Track active participants to prevent duplicates
+active_participants: Dict[str, set] = {}
+
 # Cleanup old meetings periodically (simple in-memory cleanup)
 def cleanup_old_meetings():
     """Remove meetings older than 24 hours"""
@@ -200,48 +203,40 @@ async def create_meeting(
     livekit_client: LiveKitClient = Depends(get_livekit_client)
 ):
     """Create a new meeting"""
-    try:
-        # Clean up old meetings before creating new ones
-        cleanup_old_meetings()
-        
-        meeting_id = generate_meeting_id()
-        room_name = livekit_client.get_room_name(meeting_id)
-        
-        logger.info(f"Creating meeting {meeting_id} for host {request.host_name}")
-        
-        # Generate host token
-        token = livekit_client.generate_token(
-            room_name=room_name,
-            participant_name=request.host_name,
-            is_host=True
-        )
-        
-        # Store meeting in memory
-        meetings[meeting_id] = {
-            "id": meeting_id,
-            "room_name": room_name,
-            "created_at": datetime.now().isoformat(),
-            "host_name": request.host_name,
-            "participants": [],
-            "is_active": True
-        }
-        
-        base_url = get_base_url()
-        meeting_url = f"{base_url}/meeting/{meeting_id}"
-        
-        logger.info(f"Meeting {meeting_id} created successfully. URL: {meeting_url}")
-        
-        return MeetingResponse(
-            meeting_id=meeting_id,
-            meeting_url=meeting_url,
-            livekit_url=livekit_client.url,
-            token=token,
-            participants_count=0
-        )
-        
-    except Exception as e:
-        logger.error(f"Error creating meeting: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to create meeting: {str(e)}")
+    cleanup_old_meetings()
+    
+    meeting_id = generate_meeting_id()
+    room_name = livekit_client.get_room_name(meeting_id)
+    
+    # Generate host token
+    token = livekit_client.generate_token(
+        room_name=room_name,
+        participant_name=request.host_name,
+        is_host=True
+    )
+    
+    # Store meeting in memory with participant tracking
+    meetings[meeting_id] = {
+        "id": meeting_id,
+        "room_name": room_name,
+        "created_at": datetime.now().isoformat(),
+        "host_name": request.host_name,
+        "participants": [{"name": request.host_name, "role": "host", "joined_at": datetime.now().isoformat()}],
+        "max_participants": 10  # Reasonable limit
+    }
+    
+    # Initialize participant tracking for this meeting
+    active_participants[meeting_id] = {request.host_name}
+    
+    base_url = get_base_url()
+    
+    return MeetingResponse(
+        meeting_id=meeting_id,
+        meeting_url=f"{base_url}/meeting/{meeting_id}",
+        livekit_url=livekit_client.url,
+        token=token,
+        participants_count=1
+    )
 
 @app.post("/api/meetings/{meeting_id}/join", response_model=MeetingResponse)
 async def join_meeting(
@@ -249,56 +244,62 @@ async def join_meeting(
     request: JoinMeetingRequest,
     livekit_client: LiveKitClient = Depends(get_livekit_client)
 ):
-    """Join an existing meeting"""
-    try:
-        # Check if meeting exists, create if not (handles Heroku memory loss)
-        if meeting_id not in meetings:
-            logger.info(f"Meeting {meeting_id} not found in memory, creating entry for join request")
-            # Create meeting entry for this meeting ID
-            meetings[meeting_id] = {
-                "id": meeting_id,
-                "room_name": f"meeting-{meeting_id}",
-                "created_at": datetime.now().isoformat(),
-                "host_name": "Host",
-                "participants": [],
-                "is_active": True
-            }
-        
-        meeting = meetings[meeting_id]
-        room_name = meeting["room_name"]
-        
-        logger.info(f"User {request.participant_name} joining meeting {meeting_id}")
-        
-        # Generate participant token
-        token = livekit_client.generate_token(
-            room_name=room_name,
-            participant_name=request.participant_name,
-            is_host=False
-        )
-        
-        # Add participant to meeting
-        participant_info = {
-            "name": request.participant_name,
+    """Join an existing meeting with duplicate prevention"""
+    # Check if meeting exists
+    if meeting_id not in meetings:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    
+    meeting = meetings[meeting_id]
+    
+    # Check participant limit
+    if len(meeting["participants"]) >= meeting.get("max_participants", 10):
+        raise HTTPException(status_code=429, detail="Meeting is full")
+    
+    # IMPORTANT: Prevent duplicate participants
+    if meeting_id not in active_participants:
+        active_participants[meeting_id] = set()
+    
+    participant_name = request.participant_name.strip()
+    
+    # Check if participant already exists in this meeting
+    if participant_name in active_participants[meeting_id]:
+        logger.warning(f"Participant {participant_name} already exists in meeting {meeting_id}")
+        # Return existing token or generate new one for reconnection
+        pass  # Allow reconnection with new token
+    else:
+        # Add to active participants
+        active_participants[meeting_id].add(participant_name)
+    
+    room_name = meeting["room_name"]
+    
+    # Generate participant token
+    token = livekit_client.generate_token(
+        room_name=room_name,
+        participant_name=participant_name,
+        is_host=False
+    )
+    
+    # Add participant to meeting if not already present
+    existing_participant = next((p for p in meeting["participants"] if p["name"] == participant_name), None)
+    if not existing_participant:
+        meeting["participants"].append({
+            "name": participant_name,
+            "role": "participant",
             "joined_at": datetime.now().isoformat()
-        }
-        meeting["participants"].append(participant_info)
-        
-        base_url = get_base_url()
-        meeting_url = f"{base_url}/meeting/{meeting_id}"
-        
-        logger.info(f"User {request.participant_name} joined meeting {meeting_id} successfully")
-        
-        return MeetingResponse(
-            meeting_id=meeting_id,
-            meeting_url=meeting_url,
-            livekit_url=livekit_client.url,
-            token=token,
-            participants_count=len(meeting["participants"])
-        )
-        
-    except Exception as e:
-        logger.error(f"Error joining meeting {meeting_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to join meeting: {str(e)}")
+        })
+    else:
+        # Update join time for reconnection
+        existing_participant["joined_at"] = datetime.now().isoformat()
+    
+    base_url = get_base_url()
+    
+    return MeetingResponse(
+        meeting_id=meeting_id,
+        meeting_url=f"{base_url}/meeting/{meeting_id}",
+        livekit_url=livekit_client.url,
+        token=token,
+        participants_count=len(meeting["participants"])
+    )
 
 @app.get("/meeting/{meeting_id}", response_class=HTMLResponse)
 async def meeting_room(meeting_id: str):
@@ -450,6 +451,21 @@ async def debug_meeting():
             content="<h1>Debug tool not found</h1><p>debug_meeting.html not found</p>",
             status_code=404
         )
+
+# Add new endpoint to handle participant disconnect
+@app.post("/api/meetings/{meeting_id}/leave")
+async def leave_meeting(meeting_id: str, participant_name: str):
+    """Handle participant leaving the meeting"""
+    if meeting_id in active_participants:
+        active_participants[meeting_id].discard(participant_name)
+        
+        # Clean up empty meetings
+        if not active_participants[meeting_id]:
+            active_participants.pop(meeting_id, None)
+            meetings.pop(meeting_id, None)
+            logger.info(f"Cleaned up empty meeting: {meeting_id}")
+    
+    return {"status": "left"}
 
 # Error handlers
 @app.exception_handler(404)

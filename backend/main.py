@@ -44,6 +44,9 @@ livekit = LiveKitClient()
 # In-memory storage for meetings
 meetings: Dict[str, dict] = {}
 
+# Track active participants to prevent duplicates
+active_participants: Dict[str, set] = {}
+
 # Request/Response models
 class CreateMeetingRequest(BaseModel):
     host_name: str = "Host"
@@ -88,14 +91,18 @@ async def create_meeting(request: CreateMeetingRequest):
         is_host=True
     )
     
-    # Store meeting in memory
+    # Store meeting in memory with participant tracking
     meetings[meeting_id] = {
         "id": meeting_id,
         "room_name": room_name,
         "created_at": datetime.now().isoformat(),
         "host_name": request.host_name,
-        "participants": []
+        "participants": [{"name": request.host_name, "role": "host", "joined_at": datetime.now().isoformat()}],
+        "max_participants": 10  # Reasonable limit
     }
+    
+    # Initialize participant tracking for this meeting
+    active_participants[meeting_id] = {request.host_name}
     
     # Get base URL - properly handle production URL
     base_url = os.getenv("APP_URL")
@@ -112,26 +119,51 @@ async def create_meeting(request: CreateMeetingRequest):
 
 @app.post("/api/meetings/{meeting_id}/join", response_model=MeetingResponse)
 async def join_meeting(meeting_id: str, request: JoinMeetingRequest):
-    """Join an existing meeting"""
+    """Join an existing meeting with duplicate prevention"""
     # Check if meeting exists
     if meeting_id not in meetings:
         raise HTTPException(status_code=404, detail="Meeting not found")
     
     meeting = meetings[meeting_id]
+    
+    # Check participant limit
+    if len(meeting["participants"]) >= meeting.get("max_participants", 10):
+        raise HTTPException(status_code=429, detail="Meeting is full")
+    
+    # IMPORTANT: Prevent duplicate participants
+    if meeting_id not in active_participants:
+        active_participants[meeting_id] = set()
+    
+    participant_name = request.participant_name.strip()
+    
+    # Check if participant already exists in this meeting
+    if participant_name in active_participants[meeting_id]:
+        # Allow reconnection with new token
+        pass
+    else:
+        # Add to active participants
+        active_participants[meeting_id].add(participant_name)
+    
     room_name = meeting["room_name"]
     
     # Generate participant token
     token = livekit.generate_token(
         room_name=room_name,
-        participant_name=request.participant_name,
+        participant_name=participant_name,
         is_host=False
     )
     
-    # Add participant to meeting
-    meeting["participants"].append({
-        "name": request.participant_name,
-        "joined_at": datetime.now().isoformat()
-    })
+    # Add participant to meeting if not already present
+    existing_participant = next((p for p in meeting["participants"] if p["name"] == participant_name), None)
+    if not existing_participant:
+        meeting["participants"].append({
+            "name": participant_name,
+            "role": "participant",
+            "joined_at": datetime.now().isoformat()
+        })
+    else:
+        # Update join time for reconnection
+        existing_participant["joined_at"] = datetime.now().isoformat()
     
     # Get base URL - properly handle production URL
     base_url = os.getenv("APP_URL")
@@ -186,6 +218,20 @@ async def health_check():
 async def api_health_check():
     """API Health check endpoint"""
     return {"status": "healthy", "meetings_count": len(meetings)}
+
+# Add new endpoint to handle participant disconnect
+@app.post("/api/meetings/{meeting_id}/leave")
+async def leave_meeting(meeting_id: str, participant_name: str):
+    """Handle participant leaving the meeting"""
+    if meeting_id in active_participants:
+        active_participants[meeting_id].discard(participant_name)
+        
+        # Clean up empty meetings
+        if not active_participants[meeting_id]:
+            active_participants.pop(meeting_id, None)
+            meetings.pop(meeting_id, None)
+    
+    return {"status": "left"}
 
 if __name__ == "__main__":
     import uvicorn

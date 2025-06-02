@@ -206,7 +206,7 @@ header p {
     color: #9aa0a6;
 }
 
-/* Video Grid - SIMPLE and UNIVERSAL layout for ALL browsers */
+/* Video Grid - CONSISTENT and UNIVERSAL layout for ALL browsers and users */
 #videoGrid {
     display: grid;
     gap: 1rem;
@@ -217,34 +217,24 @@ header p {
     align-items: stretch;
     justify-items: stretch;
     
-    /* DEFAULT: Always 2 columns for consistency */
+    /* CONSISTENT: Default grid that works for all scenarios */
     grid-template-columns: repeat(2, 1fr);
     grid-auto-rows: minmax(200px, 1fr);
+    
+    /* BULLETPROOF: Ensure consistent behavior across browsers */
+    box-sizing: border-box;
+    max-height: calc(100vh - 160px); /* Account for header + controls */
+    overflow: hidden;
 }
 
-/* SIMPLE: Override for single participant */
-#videoGrid.single-participant {
-    grid-template-columns: 1fr;
-    max-width: 600px;
-    margin: 0 auto;
-}
-
-/* SIMPLE: Force 2 participants side-by-side */
-#videoGrid.two-participants {
-    grid-template-columns: repeat(2, 1fr);
-    max-width: none;
-    margin: 0;
-}
-
-/* SIMPLE: 3-4 participants */
-#videoGrid.multiple-participants {
-    grid-template-columns: repeat(2, 1fr);
-}
-
-/* SIMPLE: Many participants */
+/* CONSISTENT: Override classes that may be applied dynamically */
+#videoGrid.single-participant,
+#videoGrid.two-participants,
+#videoGrid.multiple-participants,
 #videoGrid.many-participants {
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: 0.5rem;
+    /* Let JavaScript handle all layout logic for consistency */
+    display: grid !important;
+    gap: 1rem !important;
 }
 
 .participant-container {
@@ -253,28 +243,52 @@ header p {
     border-radius: 8px;
     overflow: hidden;
     
-    /* SIMPLE: Fixed aspect ratio */
+    /* CONSISTENT: Fixed aspect ratio for ALL users */
     aspect-ratio: 16/9;
     min-height: 200px;
     
-    /* SIMPLE: Always visible */
+    /* BULLETPROOF: Always visible and properly sized */
     opacity: 1;
     visibility: visible;
+    width: 100%;
+    height: 100%;
     
-    /* Ensure proper layout */
+    /* CONSISTENT: Flex layout for proper centering */
     display: flex;
     align-items: center;
     justify-content: center;
+    
+    /* ENHANCED: Better visual feedback */
+    border: 2px solid transparent;
+    transition: border-color 0.2s ease;
 }
 
+/* CONSISTENT: Hover effect for all containers */
+.participant-container:hover {
+    border-color: #5f6368;
+}
+
+/* BULLETPROOF: Video element sizing */
 .participant-container video {
     width: 100% !important;
     height: 100% !important;
     object-fit: cover;
     background: #202124;
+    border-radius: inherit;
+    
+    /* CONSISTENT: Remove any browser-specific styling */
+    margin: 0;
+    padding: 0;
+    border: none;
+    outline: none;
 }
 
-/* Enhanced: Better loading indicator */
+/* CONSISTENT: Audio elements should be hidden but functional */
+.participant-container audio {
+    display: none;
+}
+
+/* ENHANCED: Better loading indicator */
 .loading-indicator {
     position: absolute;
     top: 50%;
@@ -284,13 +298,15 @@ header p {
     font-size: 14px;
     text-align: center;
     z-index: 2;
-    background: rgba(32, 33, 36, 0.8);
-    padding: 0.5rem 1rem;
-    border-radius: 4px;
-    backdrop-filter: blur(4px);
+    background: rgba(32, 33, 36, 0.9);
+    padding: 0.75rem 1.25rem;
+    border-radius: 6px;
+    backdrop-filter: blur(8px);
+    border: 1px solid #5f6368;
+    font-weight: 500;
 }
 
-/* Enhanced: Play button styling */
+/* ENHANCED: Play button styling */
 .play-button {
     position: absolute;
     top: 50%;
@@ -302,35 +318,43 @@ header p {
     border-radius: 50%;
     width: 60px;
     height: 60px;
-    font-size: 18px;
+    font-size: 20px;
     cursor: pointer;
     z-index: 10;
-    transition: all 0.2s ease;
+    transition: all 0.3s ease;
     display: flex;
     align-items: center;
     justify-content: center;
+    backdrop-filter: blur(4px);
 }
 
 .play-button:hover {
     background: rgba(26, 115, 232, 1);
     transform: translate(-50%, -50%) scale(1.1);
+    box-shadow: 0 4px 12px rgba(26, 115, 232, 0.4);
 }
 
+/* CONSISTENT: Participant name styling for all users */
 .participant-name {
     position: absolute;
-    bottom: 0.5rem;
-    left: 0.5rem;
-    background: rgba(0, 0, 0, 0.7);
-    padding: 0.25rem 0.75rem;
-    border-radius: 4px;
+    bottom: 0.75rem;
+    left: 0.75rem;
+    background: rgba(0, 0, 0, 0.8);
+    padding: 0.4rem 0.8rem;
+    border-radius: 6px;
     font-size: 0.875rem;
     z-index: 5;
     color: #e8eaed;
     font-weight: 500;
-    backdrop-filter: blur(4px);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    max-width: calc(100% - 1.5rem);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
-/* Enhanced: Error state styling */
+/* ENHANCED: Better error state styling */
 .error-state {
     position: absolute;
     top: 50%;
@@ -339,33 +363,41 @@ header p {
     text-align: center;
     color: #ea4335;
     z-index: 5;
-    background: rgba(32, 33, 36, 0.9);
-    padding: 1rem;
+    background: rgba(32, 33, 36, 0.95);
+    padding: 1.5rem;
     border-radius: 8px;
-    border: 1px solid #ea4335;
-    backdrop-filter: blur(4px);
+    border: 2px solid #ea4335;
+    backdrop-filter: blur(8px);
+    max-width: 90%;
+    font-weight: 500;
 }
 
-/* Enhanced: Connection quality indicators */
+/* ENHANCED: Connection quality indicators */
 .connection-quality {
     position: absolute;
-    top: 0.5rem;
-    right: 0.5rem;
-    width: 20px;
-    height: 20px;
+    top: 0.75rem;
+    right: 0.75rem;
+    width: 24px;
+    height: 24px;
     z-index: 5;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(4px);
 }
 
 .connection-quality.excellent {
     background: #34a853;
+    border-color: rgba(52, 168, 83, 0.3);
 }
 
 .connection-quality.good {
     background: #fbbc04;
+    border-color: rgba(251, 188, 4, 0.3);
 }
 
 .connection-quality.poor {
     background: #ea4335;
+    border-color: rgba(234, 67, 53, 0.3);
 }
 
 /* Loading State */
@@ -452,67 +484,84 @@ header p {
     .home-main {
         flex-direction: column;
     }
-    
+
     .divider {
-        width: 100%;
-        justify-content: center;
-        margin: 1rem 0;
+        display: none;
     }
-    
-    /* Enhanced: Better mobile grid layout */
-    .video-grid {
+
+    /* RESPONSIVE: Mobile video grid optimizations - maintain consistency */
+    #videoGrid {
+        gap: 0.75rem;
+        padding: 0.75rem;
+        max-height: calc(100vh - 140px);
+        
+        /* MOBILE: Always use single column for very small screens */
         grid-template-columns: 1fr !important;
-        padding: 0.5rem;
-        gap: 0.5rem;
-        max-width: none !important;
-        margin: 0 !important;
+        grid-auto-rows: minmax(150px, auto);
     }
     
     .participant-container {
-        aspect-ratio: 4/3; /* Better for mobile */
         min-height: 150px;
+        border-radius: 6px;
+        aspect-ratio: 16/9;
     }
     
+    .participant-name {
+        bottom: 0.5rem;
+        left: 0.5rem;
+        padding: 0.3rem 0.6rem;
+        font-size: 0.8rem;
+        max-width: calc(100% - 1rem);
+    }
+    
+    .connection-quality {
+        top: 0.5rem;
+        right: 0.5rem;
+        width: 20px;
+        height: 20px;
+    }
+
     .meeting-header {
-        padding: 0.5rem 1rem;
-        flex-direction: column;
+        padding: 0.75rem 1rem;
+        flex-wrap: wrap;
         gap: 0.5rem;
-        align-items: center;
     }
-    
+
     .meeting-info h1 {
         font-size: 1.2rem;
-        text-align: center;
     }
-    
+
     .participant-count {
-        order: -1;
+        font-size: 0.875rem;
     }
-    
+
     .control-btn {
-        width: 40px;
-        height: 40px;
+        width: 44px;
+        height: 44px;
+        min-width: 44px;
     }
-    
-    /* Enhanced: Better mobile video controls */
+
     .control-bar {
-        padding: 0.5rem;
+        padding: 0.75rem;
     }
-    
+
     .controls {
-        gap: 0.5rem;
-        justify-content: space-around;
+        justify-content: space-evenly;
+        gap: 0.75rem;
     }
 }
 
 /* Enhanced: Tablet responsive */
 @media (max-width: 1024px) and (min-width: 769px) {
-    .video-grid {
-        grid-template-columns: repeat(2, 1fr) !important;
-        gap: 0.75rem;
-        padding: 0.75rem;
+    #videoGrid {
+        gap: 0.875rem;
+        padding: 0.875rem;
+        
+        /* TABLET: Use 2 columns max for better visibility */
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)) !important;
+        grid-auto-rows: minmax(180px, 1fr);
     }
-    
+
     .participant-container {
         min-height: 180px;
     }
@@ -520,13 +569,16 @@ header p {
 
 /* Enhanced: Large screen optimizations */
 @media (min-width: 1200px) {
-    .video-grid {
-        padding: 1.5rem;
-        gap: 1.5rem;
+    #videoGrid {
+        gap: 1.25rem;
+        padding: 1.25rem;
+        
+        /* LARGE: Allow more flexible layouts for bigger screens */
+        grid-auto-rows: minmax(220px, 1fr);
     }
-    
+
     .participant-container {
-        min-height: 250px;
+        min-height: 220px;
     }
 }
 
@@ -540,28 +592,32 @@ header p {
 /* Enhanced: Accessibility improvements */
 @media (prefers-reduced-motion: reduce) {
     .participant-container,
-    .video-grid,
-    .control-btn,
-    .play-button {
-        transition: none;
+    .participant-container video,
+    .play-button,
+    .loading-indicator,
+    .connection-quality {
+        transition: none !important;
+        animation: none !important;
     }
-    
+
     .spinner {
-        animation: none;
+        animation: none !important;
     }
 }
 
 /* Enhanced: Dark mode consistency */
 @media (prefers-color-scheme: dark) {
     .participant-container {
-        background: #1a1a1a;
+        border-color: rgba(255, 255, 255, 0.1);
     }
-    
+
     .participant-name {
-        background: rgba(0, 0, 0, 0.8);
+        background: rgba(0, 0, 0, 0.9);
+        border-color: rgba(255, 255, 255, 0.2);
     }
-    
+
     .loading-indicator {
-        background: rgba(26, 26, 26, 0.9);
+        background: rgba(0, 0, 0, 0.95);
+        border-color: rgba(255, 255, 255, 0.2);
     }
 } 
