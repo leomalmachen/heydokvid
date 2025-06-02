@@ -89,39 +89,47 @@
         // Verify LiveKit is loaded
         if (typeof LiveKit === 'undefined') {
             console.error('LiveKit SDK failed to load from local file');
-            document.getElementById('error-message').innerHTML = `
-                <div class="error-container">
-                    <h2>⚠️ Video SDK Fehler</h2>
-                    <p>LiveKit konnte nicht geladen werden.</p>
-                    <div class="error-details">
-                        <h3>Mögliche Ursachen:</h3>
-                        <ul>
-                            <li>• Netzwerkverbindung blockiert</li>
-                            <li>• Browser-Erweiterungen (z.B. Ad-Blocker)</li>
-                            <li>• Firewall oder Proxy-Einstellungen</li>
-                            <li>• Browser unterstützt kein WebRTC</li>
-                            <li>• CDN-Server nicht erreichbar</li>
-                        </ul>
+            const loadingState = document.getElementById('loadingState');
+            if (loadingState) {
+                loadingState.innerHTML = `
+                    <div style="text-align: center; color: #ea4335; max-width: 600px; margin: 0 auto;">
+                        <h3>⚠️ Video SDK Fehler</h3>
+                        <p>LiveKit konnte nicht geladen werden.</p>
+                        <div style="text-align: left; background: #f5f5f5; padding: 1rem; border-radius: 4px; margin: 1rem 0; font-size: 0.9rem;">
+                            <strong>Mögliche Ursachen:</strong><br>
+                            • Netzwerkverbindung blockiert<br>
+                            • Browser-Erweiterungen (z.B. Ad-Blocker)<br>
+                            • Firewall oder Proxy-Einstellungen<br>
+                            • Browser unterstützt kein WebRTC<br>
+                            • CDN-Server nicht erreichbar<br><br>
+                            
+                            <strong>Debug-Informationen:</strong><br>
+                            Meeting ID: {{MEETING_ID}}<br>
+                            Online: ${navigator.onLine ? 'Ja' : 'Nein'}<br>
+                            Protokoll: ${window.location.protocol}<br>
+                            Versuche: Direkte lokale Datei fehlgeschlagen<br>
+                            Cookies: ${navigator.cookieEnabled ? 'Aktiviert' : 'Deaktiviert'}<br>
+                        </div>
                         
-                        <h3>Debug-Informationen:</h3>
-                        <p>Meeting ID: ${meetingId}</p>
-                        <p>Online: ${navigator.onLine ? 'Ja' : 'Nein'}</p>
-                        <p>Protokoll: ${window.location.protocol}</p>
-                        <p>Versuche: Direkte lokale Datei fehlgeschlagen</p>
-                        <p>Cookies: ${document.cookie ? 'Aktiviert' : 'Deaktiviert'}</p>
+                        <button onclick="location.reload()" style="margin-top: 1rem; padding: 0.5rem 1rem; background: #1a73e8; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 0.5rem;">
+                            Seite neu laden
+                        </button>
+                        <button onclick="testDirectConnection()" style="padding: 0.5rem 1rem; background: #34a853; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                            Verbindung testen
+                        </button>
                     </div>
-                    
-                    <div class="error-actions">
-                        <button onclick="location.reload()" class="btn-primary">Seite neu laden</button>
-                        <button onclick="window.open('https://developer.mozilla.org/en-US/docs/Web/API/WebRTC_API', '_blank')" class="btn-secondary">Browser-Konsole öffnen</button>
-                        <button onclick="testDirectConnection()" class="btn-success">Direkte Verbindung testen</button>
-                    </div>
-                </div>
-            `;
-            document.getElementById('error-message').style.display = 'block';
+                `;
+            }
         } else {
             console.log('✅ LiveKit SDK loaded successfully from local file');
             console.log('LiveKit version:', LiveKit.version || 'Unknown');
+            console.log('LiveKit available methods:', Object.keys(LiveKit));
+            
+            // Hide loading state and initialize the meeting
+            const loadingState = document.getElementById('loadingState');
+            if (loadingState) {
+                loadingState.style.display = 'none';
+            }
             
             // Initialize the meeting automatically
             document.addEventListener('DOMContentLoaded', function() {
@@ -130,11 +138,20 @@
                     initializeMeeting();
                 } else {
                     console.error('❌ initializeMeeting function not found');
+                    // Try to load it after a short delay
+                    setTimeout(() => {
+                        if (typeof initializeMeeting === 'function') {
+                            console.log('🚀 Delayed initialization...');
+                            initializeMeeting();
+                        } else {
+                            console.error('❌ initializeMeeting still not found after delay');
+                        }
+                    }, 1000);
                 }
             });
         }
         
-        function testDirectConnection() {
+        window.testDirectConnection = function() {
             fetch('/api/livekit-sdk')
                 .then(response => {
                     if (response.ok) {
