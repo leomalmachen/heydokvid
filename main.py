@@ -9,6 +9,7 @@ from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.security import HTTPSRedirectMiddleware
 from pydantic import BaseModel, Field
 import uvicorn
 
@@ -53,6 +54,10 @@ if app_url:
     ]
 else:
     logger.info("Development mode detected. Allowing all origins.")
+
+# Add HTTPS redirect middleware in production
+if app_url and app_url.startswith('https://'):
+    app.add_middleware(HTTPSRedirectMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
@@ -155,6 +160,35 @@ def get_livekit_client() -> LiveKitClient:
     if livekit is None:
         raise HTTPException(status_code=503, detail="LiveKit service unavailable - please check configuration")
     return livekit
+
+@app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    """Add security headers to all responses"""
+    response = await call_next(request)
+    
+    # Security headers for better browser security
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    
+    # Content Security Policy for WebRTC
+    csp_policy = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdn.jsdelivr.net; "
+        "style-src 'self' 'unsafe-inline'; "
+        "media-src 'self' blob: data: https:; "
+        "connect-src 'self' https: wss: blob:; "
+        "img-src 'self' data: blob: https:; "
+        "font-src 'self' data: https:; "
+        "object-src 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self'"
+    )
+    response.headers["Content-Security-Policy"] = csp_policy
+    
+    return response
 
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
@@ -395,6 +429,22 @@ async def health_check():
 async def api_health_check():
     """Simple API health check"""
     return {"status": "healthy", "timestamp": datetime.now().isoformat()}
+
+@app.get("/robots.txt", response_class=HTMLResponse)
+async def robots_txt():
+    """Serve robots.txt to help with SEO and security"""
+    return HTMLResponse(
+        content="User-agent: *\nDisallow: /api/\nAllow: /\n",
+        media_type="text/plain"
+    )
+
+@app.get("/.well-known/security.txt", response_class=HTMLResponse)
+async def security_txt():
+    """Security.txt for responsible disclosure"""
+    return HTMLResponse(
+        content="Contact: mailto:security@heydok.com\nPreferred-Languages: en, de\n",
+        media_type="text/plain"
+    )
 
 @app.get("/test-livekit", response_class=HTMLResponse)
 async def test_livekit_frontend():

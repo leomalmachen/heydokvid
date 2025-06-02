@@ -96,6 +96,11 @@ async function initializeMeeting() {
     console.log('🔥 ULTRA-SIMPLE initialization starting...');
     
     try {
+        // SECURITY: Check if we're in a secure context
+        if (!window.isSecureContext) {
+            throw new Error('Diese App benötigt eine sichere HTTPS-Verbindung für Kamera und Mikrofon.');
+        }
+        
         // Load previous media state
         loadMediaState();
         
@@ -117,6 +122,24 @@ async function initializeMeeting() {
         }
         
         console.log('✅ LiveKit available, proceeding...');
+        
+        // SECURITY: Pre-check media permissions
+        try {
+            console.log('🔒 Checking media permissions...');
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                // Test media access to avoid later issues
+                const testStream = await navigator.mediaDevices.getUserMedia({ 
+                    video: true, 
+                    audio: true 
+                });
+                // Immediately stop the test stream
+                testStream.getTracks().forEach(track => track.stop());
+                console.log('✅ Media permissions granted');
+            }
+        } catch (mediaError) {
+            console.warn('⚠️ Media permission check failed:', mediaError);
+            // Continue anyway, but user will be prompted later
+        }
         
         // Get meeting data - SIMPLE approach
         meetingData = sessionStorage.getItem('meetingData');
