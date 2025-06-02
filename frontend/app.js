@@ -164,9 +164,53 @@ async function connectToRoom(meetingData) {
             })
             .on(LiveKit.RoomEvent.TrackMuted, (publication, participant) => {
                 console.log('🔇 Track muted:', publication.kind, participant?.identity);
+                console.log('🔇 Muted track details:', {
+                    trackSid: publication.trackSid,
+                    source: publication.source,
+                    isLocal: participant === room.localParticipant
+                });
             })
             .on(LiveKit.RoomEvent.TrackUnmuted, (publication, participant) => {
                 console.log('🔊 Track unmuted:', publication.kind, participant?.identity);
+                console.log('🔊 Unmuted track details:', {
+                    trackSid: publication.trackSid,
+                    source: publication.source,
+                    isLocal: participant === room.localParticipant
+                });
+            })
+            .on(LiveKit.RoomEvent.LocalTrackUnpublished, (publication, participant) => {
+                console.log('❌ Local track unpublished:', publication.kind);
+                console.log('❌ Unpublished track details:', {
+                    trackSid: publication.trackSid,
+                    trackName: publication.trackName,
+                    source: publication.source
+                });
+                
+                // If video track is unpublished unexpectedly, try to republish
+                if (publication.kind === LiveKit.Track.Kind.Video && videoEnabled) {
+                    console.log('🔄 Attempting to republish video track...');
+                    setTimeout(async () => {
+                        try {
+                            await room.localParticipant.setCameraEnabled(true);
+                            console.log('✅ Video track republished successfully');
+                        } catch (republishError) {
+                            console.error('❌ Failed to republish video track:', republishError);
+                        }
+                    }, 1000);
+                }
+                
+                // If audio track is unpublished unexpectedly, try to republish
+                if (publication.kind === LiveKit.Track.Kind.Audio && audioEnabled) {
+                    console.log('🔄 Attempting to republish audio track...');
+                    setTimeout(async () => {
+                        try {
+                            await room.localParticipant.setMicrophoneEnabled(true);
+                            console.log('✅ Audio track republished successfully');
+                        } catch (republishError) {
+                            console.error('❌ Failed to republish audio track:', republishError);
+                        }
+                    }, 1000);
+                }
             });
 
         // Add connection timeout
@@ -217,7 +261,7 @@ async function connectToRoom(meetingData) {
 
         // Request camera and microphone permissions and enable them
         try {
-            console.log('Requesting camera and microphone permissions...');
+            console.log('🎥 Requesting camera and microphone permissions...');
             
             // Check if browser supports getUserMedia
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -226,48 +270,75 @@ async function connectToRoom(meetingData) {
                 return;
             }
             
-            // First, try to get permission for both camera and microphone
-            await room.localParticipant.enableCameraAndMicrophone();
-            console.log('Camera and microphone enabled successfully');
+            // First, request permissions explicitly
+            console.log('🔐 Requesting explicit media permissions...');
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                video: true, 
+                audio: true 
+            });
+            
+            console.log('✅ Media permissions granted');
+            console.log('📹 Video tracks:', stream.getVideoTracks().length);
+            console.log('🎤 Audio tracks:', stream.getAudioTracks().length);
+            
+            // Stop the test stream - we'll let LiveKit handle the actual streaming
+            stream.getTracks().forEach(track => track.stop());
+            
+            // Now enable through LiveKit with better error handling
+            console.log('🚀 Enabling camera and microphone through LiveKit...');
+            
+            try {
+                // Enable microphone first
+                console.log('🎤 Enabling microphone...');
+                await room.localParticipant.setMicrophoneEnabled(true);
+                audioEnabled = true;
+                console.log('✅ Microphone enabled successfully');
+                
+                // Then enable camera
+                console.log('📹 Enabling camera...');
+                await room.localParticipant.setCameraEnabled(true);
+                videoEnabled = true;
+                console.log('✅ Camera enabled successfully');
+                
+            } catch (enableError) {
+                console.error('❌ Error during LiveKit enable:', enableError);
+                
+                // Try alternative method - publish tracks manually
+                console.log('🔄 Trying alternative track publishing method...');
+                
+                try {
+                    const audioTrack = await LiveKit.createLocalAudioTrack();
+                    const videoTrack = await LiveKit.createLocalVideoTrack();
+                    
+                    console.log('📹 Publishing video track...');
+                    await room.localParticipant.publishTrack(videoTrack);
+                    
+                    console.log('🎤 Publishing audio track...');
+                    await room.localParticipant.publishTrack(audioTrack);
+                    
+                    videoEnabled = true;
+                    audioEnabled = true;
+                    console.log('✅ Tracks published successfully via alternative method');
+                    
+                } catch (publishError) {
+                    console.error('❌ Alternative track publishing failed:', publishError);
+                    // Continue without throwing - user can still participate
+                }
+            }
             
             // Update button states
             updateControlButtons();
             
         } catch (error) {
-            console.warn('Error enabling camera/microphone together:', error);
+            console.error('❌ Media permission error:', error);
             
-            // Try to enable them separately with better error handling
-            try {
-                await room.localParticipant.setMicrophoneEnabled(true);
-                console.log('Microphone enabled');
-            } catch (micError) {
-                console.error('Microphone access denied:', micError);
-                audioEnabled = false;
-                if (micError.name === 'NotAllowedError') {
-                    console.warn('Microphone permission denied by user');
-                } else if (micError.name === 'NotFoundError') {
-                    console.warn('No microphone found');
-                }
-            }
-            
-            try {
-                await room.localParticipant.setCameraEnabled(true);
-                console.log('Camera enabled');
-            } catch (camError) {
-                console.error('Camera access denied:', camError);
-                videoEnabled = false;
-                if (camError.name === 'NotAllowedError') {
-                    console.warn('Camera permission denied by user');
-                } else if (camError.name === 'NotFoundError') {
-                    console.warn('No camera found');
-                }
-            }
-            
-            updateControlButtons();
-            
-            // Show a warning if both failed
-            if (!audioEnabled && !videoEnabled) {
-                showError('Kamera und Mikrofon konnten nicht aktiviert werden. Sie können trotzdem am Meeting teilnehmen.');
+            if (error.name === 'NotAllowedError') {
+                showError('Kamera/Mikrofon-Zugriff wurde verweigert. Bitte erlauben Sie den Zugriff und laden Sie die Seite neu.');
+            } else if (error.name === 'NotFoundError') {
+                showError('Keine Kamera oder Mikrofon gefunden. Bitte überprüfen Sie Ihre Geräte.');
+            } else {
+                console.warn('Media setup partially failed, but continuing...', error);
+                // Don't show error for partial failures - user can still join
             }
         }
 
@@ -290,7 +361,13 @@ async function connectToRoom(meetingData) {
 }
 
 function handleTrackSubscribed(track, publication, participant) {
-    console.log('Track subscribed:', track.kind, participant.identity);
+    console.log('📹 Track subscribed:', track.kind, participant.identity);
+    console.log('📹 Track details:', {
+        trackSid: track.sid,
+        enabled: track.enabled,
+        muted: track.muted,
+        source: track.source
+    });
     
     if (track.kind === LiveKit.Track.Kind.Video || track.kind === LiveKit.Track.Kind.Audio) {
         // Get or create participant container
@@ -299,23 +376,55 @@ function handleTrackSubscribed(track, publication, participant) {
             container = createParticipantContainer(participant);
         }
 
-        // Attach track
+        // Attach track with better error handling
         if (track.kind === LiveKit.Track.Kind.Video) {
             const videoElement = container.querySelector('video');
-            track.attach(videoElement);
+            if (videoElement) {
+                try {
+                    track.attach(videoElement);
+                    console.log('✅ Video track attached successfully');
+                    
+                    // Add event listeners to track video element state
+                    videoElement.addEventListener('loadeddata', () => {
+                        console.log('📹 Video data loaded');
+                    });
+                    
+                    videoElement.addEventListener('error', (e) => {
+                        console.error('❌ Video element error:', e);
+                    });
+                    
+                } catch (attachError) {
+                    console.error('❌ Error attaching video track:', attachError);
+                }
+            }
         } else if (track.kind === LiveKit.Track.Kind.Audio) {
             // Audio tracks are attached to a hidden element
             const audioElement = document.createElement('audio');
             audioElement.autoplay = true;
-            track.attach(audioElement);
-            container.appendChild(audioElement);
+            try {
+                track.attach(audioElement);
+                container.appendChild(audioElement);
+                console.log('✅ Audio track attached successfully');
+            } catch (attachError) {
+                console.error('❌ Error attaching audio track:', attachError);
+            }
         }
     }
 }
 
 function handleTrackUnsubscribed(track, publication, participant) {
-    console.log('Track unsubscribed:', track.kind, participant.identity);
-    track.detach();
+    console.log('📹 Track unsubscribed:', track.kind, participant.identity);
+    console.log('📹 Unsubscribed track details:', {
+        trackSid: track.sid,
+        reason: publication?.unsubscribed ? 'unsubscribed' : 'unknown'
+    });
+    
+    try {
+        track.detach();
+        console.log('✅ Track detached successfully');
+    } catch (detachError) {
+        console.error('❌ Error detaching track:', detachError);
+    }
 }
 
 function handleParticipantConnected(participant) {
@@ -387,18 +496,41 @@ function handleDisconnect(reason) {
 }
 
 function handleLocalTrackPublished(publication, participant) {
-    console.log('Local track published:', publication.kind);
+    console.log('📹 Local track published:', publication.kind);
+    console.log('📹 Publication details:', {
+        trackSid: publication.trackSid,
+        trackName: publication.trackName,
+        source: publication.source,
+        enabled: publication.track?.enabled,
+        muted: publication.track?.muted
+    });
     
     // Create container for local participant if not exists
     let container = document.getElementById(`participant-${participant.sid}`);
     if (!container) {
         container = createParticipantContainer(participant, true);
+        console.log('📹 Created local participant container');
     }
 
-    // Attach local video
-    if (publication.kind === LiveKit.Track.Kind.Video) {
+    // Attach local video with better error handling
+    if (publication.kind === LiveKit.Track.Kind.Video && publication.track) {
         const videoElement = container.querySelector('video');
-        publication.track.attach(videoElement);
+        if (videoElement) {
+            try {
+                publication.track.attach(videoElement);
+                console.log('✅ Local video track attached successfully');
+                
+                // Ensure video is playing
+                videoElement.play().catch(playError => {
+                    console.warn('Auto-play prevented, but this is normal:', playError);
+                });
+                
+            } catch (attachError) {
+                console.error('❌ Error attaching local video track:', attachError);
+            }
+        } else {
+            console.error('❌ Video element not found in local container');
+        }
     }
 }
 
