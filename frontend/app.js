@@ -10,7 +10,7 @@ const pathParts = window.location.pathname.split('/');
 const meetingId = pathParts[pathParts.length - 1];
 
 // Initialize the meeting only when LiveKit is ready
-async function initMeeting() {
+async function initializeMeeting() {
     console.log('Initializing meeting:', meetingId);
     
     // Wait for LiveKit to be available if it's still loading
@@ -23,10 +23,18 @@ async function initMeeting() {
         }
     }
     
-    // Check if LiveKit is available
+    // Check if LiveKit is available - try both LiveKit and LivekitClient
+    const LiveKit = typeof window.LiveKit !== 'undefined' ? window.LiveKit : 
+                   typeof window.LivekitClient !== 'undefined' ? window.LivekitClient : undefined;
+    
     if (typeof LiveKit === 'undefined') {
         showError('LiveKit Video SDK konnte nicht geladen werden. Bitte laden Sie die Seite neu.');
         return;
+    }
+    
+    // Make LiveKit globally available under the expected name
+    if (typeof window.LiveKit === 'undefined' && typeof window.LivekitClient !== 'undefined') {
+        window.LiveKit = window.LivekitClient;
     }
     
     console.log('LiveKit SDK is ready, proceeding with meeting initialization...');
@@ -483,16 +491,19 @@ function setupEventListeners() {
     }
 }
 
-// Initialize when page loads
+// Make initializeMeeting globally available
+window.initializeMeeting = initializeMeeting;
+
+// DOM ready check and initialization
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
         console.log('DOM loaded, setting up event listeners and initializing meeting...');
         setupEventListeners();
-        initMeeting();
+        initializeMeeting();
     });
 } else {
     // DOM already loaded
     console.log('DOM already loaded, setting up event listeners and initializing meeting...');
     setupEventListeners();
-    initMeeting();
+    initializeMeeting();
 } 

@@ -86,7 +86,10 @@
     <!-- App.js - Main application logic -->
     <script src="/frontend/app.js"></script>
     <script>
-        // Verify LiveKit is loaded
+        // Verify LiveKit is loaded - check both LiveKit and LivekitClient
+        const LiveKit = typeof window.LiveKit !== 'undefined' ? window.LiveKit : 
+                       typeof window.LivekitClient !== 'undefined' ? window.LivekitClient : undefined;
+        
         if (typeof LiveKit === 'undefined') {
             console.error('LiveKit SDK failed to load from local file');
             const loadingState = document.getElementById('loadingState');
@@ -109,6 +112,8 @@
                             Protokoll: ${window.location.protocol}<br>
                             Versuche: Direkte lokale Datei fehlgeschlagen<br>
                             Cookies: ${navigator.cookieEnabled ? 'Aktiviert' : 'Deaktiviert'}<br>
+                            LiveKit: ${typeof window.LiveKit}<br>
+                            LivekitClient: ${typeof window.LivekitClient}<br>
                         </div>
                         
                         <button onclick="location.reload()" style="margin-top: 1rem; padding: 0.5rem 1rem; background: #1a73e8; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 0.5rem;">
@@ -121,6 +126,11 @@
                 `;
             }
         } else {
+            // Make LiveKit globally available under the expected name
+            if (typeof window.LiveKit === 'undefined' && typeof window.LivekitClient !== 'undefined') {
+                window.LiveKit = window.LivekitClient;
+            }
+            
             console.log('✅ LiveKit SDK loaded successfully from local file');
             console.log('LiveKit version:', LiveKit.version || 'Unknown');
             console.log('LiveKit available methods:', Object.keys(LiveKit));

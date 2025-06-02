@@ -424,6 +424,21 @@ async def serve_livekit_sdk():
         logger.error(f"Error serving local LiveKit SDK: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
+@app.get("/test-livekit-fix", response_class=HTMLResponse)
+async def test_livekit_fix():
+    """Serve the LiveKit fix test page"""
+    try:
+        with open("test_livekit_fix.html", "r", encoding="utf-8") as f:
+            return f.read()
+    except FileNotFoundError:
+        return HTMLResponse(
+            content="<h1>Test file not found</h1><p>test_livekit_fix.html not found</p>",
+            status_code=404
+        )
+    except Exception as e:
+        logger.error(f"Error serving LiveKit fix test page: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
 # Error handlers
 @app.exception_handler(404)
 async def not_found_handler(request: Request, exc):

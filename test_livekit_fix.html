@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>LiveKit Test</title>
+</head>
+<body>
+    <h1>LiveKit Integration Test</h1>
+    <div id="status">Loading...</div>
+    
+    <!-- Load LiveKit -->
+    <script src="/static/livekit-client.umd.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const statusDiv = document.getElementById('status');
+            
+            // Check which LiveKit object is available
+            const hasLiveKit = typeof window.LiveKit !== 'undefined';
+            const hasLivekitClient = typeof window.LivekitClient !== 'undefined';
+            
+            statusDiv.innerHTML = `
+                <h3>LiveKit SDK Status:</h3>
+                <p>window.LiveKit: ${hasLiveKit ? '✅ Available' : '❌ Not available'}</p>
+                <p>window.LivekitClient: ${hasLivekitClient ? '✅ Available' : '❌ Not available'}</p>
+                <p>Type of LiveKit: ${typeof window.LiveKit}</p>
+                <p>Type of LivekitClient: ${typeof window.LivekitClient}</p>
+            `;
+            
+            if (hasLivekitClient && !hasLiveKit) {
+                window.LiveKit = window.LivekitClient;
+                statusDiv.innerHTML += '<p>✅ Fixed: window.LiveKit = window.LivekitClient</p>';
+            }
+            
+            if (typeof window.LiveKit !== 'undefined') {
+                statusDiv.innerHTML += `
+                    <h3>LiveKit Details:</h3>
+                    <p>Version: ${window.LiveKit.version || 'Unknown'}</p>
+                    <p>Available classes: ${Object.keys(window.LiveKit).slice(0, 10).join(', ')}...</p>
+                `;
+            }
+        });
+    </script>
+</body>
+</html> 
