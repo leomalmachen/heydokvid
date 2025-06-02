@@ -126,20 +126,33 @@ async function connectToRoom(meetingData) {
             .on(LiveKit.RoomEvent.Disconnected, handleDisconnect)
             .on(LiveKit.RoomEvent.LocalTrackPublished, handleLocalTrackPublished)
             .on(LiveKit.RoomEvent.ConnectionStateChanged, (state) => {
-                console.log('Connection state changed:', state);
+                console.log('🔄 Connection state changed:', state);
                 if (state === LiveKit.ConnectionState.Failed) {
+                    console.error('❌ Connection failed!');
                     showError('Verbindung fehlgeschlagen. Bitte überprüfen Sie Ihre Internetverbindung.');
+                } else if (state === LiveKit.ConnectionState.Disconnected) {
+                    console.log('🔌 Connection disconnected');
+                } else if (state === LiveKit.ConnectionState.Connecting) {
+                    console.log('🔄 Connecting...');
+                } else if (state === LiveKit.ConnectionState.Connected) {
+                    console.log('✅ Connected successfully!');
                 }
             })
             .on(LiveKit.RoomEvent.RoomMetadataChanged, (metadata) => {
-                console.log('Room metadata changed:', metadata);
+                console.log('📝 Room metadata changed:', metadata);
             })
             .on(LiveKit.RoomEvent.ConnectionQualityChanged, (quality, participant) => {
-                console.log('Connection quality changed:', quality, participant?.identity);
+                console.log('📶 Connection quality changed:', quality, participant?.identity);
             })
             .on(LiveKit.RoomEvent.MediaDevicesError, (error) => {
-                console.error('Media devices error:', error);
+                console.error('🎥 Media devices error:', error);
                 showError('Fehler beim Zugriff auf Kamera/Mikrofon: ' + error.message);
+            })
+            .on(LiveKit.RoomEvent.SignalConnected, () => {
+                console.log('📡 Signal connection established');
+            })
+            .on(LiveKit.RoomEvent.SignalDisconnected, () => {
+                console.log('📡 Signal connection lost');
             });
 
         // Add connection timeout
@@ -150,10 +163,15 @@ async function connectToRoom(meetingData) {
 
         try {
             // Connect to room
-            console.log('Connecting to:', meetingData.livekit_url);
+            console.log('🔗 Connecting to:', meetingData.livekit_url);
+            console.log('🎫 Token preview:', meetingData.token ? meetingData.token.substring(0, 50) + '...' : 'No token');
+            console.log('🏠 Room name:', meetingData.room_name || 'Not specified');
+            
             await room.connect(meetingData.livekit_url, meetingData.token);
             clearTimeout(connectionTimeout);
-            console.log('Connected to room successfully');
+            console.log('✅ Connected to room successfully');
+            console.log('🏠 Room SID:', room.sid);
+            console.log('👤 Local participant SID:', room.localParticipant.sid);
         } catch (connectError) {
             clearTimeout(connectionTimeout);
             console.error('Connection error details:', connectError);
@@ -305,12 +323,22 @@ function handleParticipantDisconnected(participant) {
     updateParticipantCount();
 }
 
-function handleDisconnect() {
-    console.log('Disconnected from room');
-    showError('Verbindung zum Meeting wurde getrennt');
+function handleDisconnect(reason) {
+    console.log('❌ Disconnected from room, reason:', reason);
+    console.log('❌ Connection state:', room?.state);
+    console.log('❌ Last error:', room?.lastError);
+    
+    // Don't immediately redirect, give user more information
+    showError(`Verbindung zum Meeting wurde getrennt. Grund: ${reason || 'Unbekannt'}`);
+    
+    // Wait longer before redirect and give user option to retry
     setTimeout(() => {
-        window.location.href = '/';
-    }, 3000);
+        if (confirm('Möchten Sie zur Startseite zurückkehren oder das Meeting erneut versuchen?')) {
+            window.location.href = '/';
+        } else {
+            location.reload();
+        }
+    }, 5000);
 }
 
 function handleLocalTrackPublished(publication, participant) {
