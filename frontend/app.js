@@ -454,6 +454,40 @@ async function initializeMeeting() {
             }
         }
 
+        // CRITICAL FIX: Ensure meetingData is always parsed as object before connecting
+        if (typeof meetingData === 'string') {
+            console.log('🔧 Parsing meetingData string to object...');
+            try {
+                meetingData = JSON.parse(meetingData);
+                console.log('✅ meetingData successfully parsed:', meetingData);
+            } catch (parseError) {
+                console.error('❌ Failed to parse meetingData:', parseError);
+                console.error('❌ Raw meetingData:', meetingData);
+                throw new Error('Meeting data is corrupted and cannot be parsed');
+            }
+        }
+        
+        // VALIDATION: Ensure meetingData has required fields
+        if (!meetingData || typeof meetingData !== 'object') {
+            throw new Error('Meeting data is not a valid object');
+        }
+        
+        if (!meetingData.livekit_url) {
+            console.error('❌ Missing livekit_url in meetingData:', meetingData);
+            throw new Error('LiveKit URL is missing from meeting data');
+        }
+        
+        if (!meetingData.token) {
+            console.error('❌ Missing token in meetingData:', meetingData);
+            throw new Error('LiveKit token is missing from meeting data');
+        }
+        
+        console.log('✅ meetingData validation passed:', {
+            has_livekit_url: !!meetingData.livekit_url,
+            has_token: !!meetingData.token,
+            meeting_id: meetingData.meeting_id
+        });
+
         // Connect to room - ULTRA-SIMPLE
         await connectToRoom(meetingData);
         
