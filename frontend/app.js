@@ -276,11 +276,8 @@ async function initializeMeeting() {
         console.log('🚀 Starting ULTRA-SIMPLE meeting initialization...');
         showStatus('Verbindung wird aufgebaut...', 'info');
         
-        // Extract meeting ID from URL
-        const pathParts = window.location.pathname.split('/');
-        meetingId = pathParts[pathParts.indexOf('meeting') + 1];
-        
-        if (!meetingId) {
+        // Validate meeting ID from global variable
+        if (!meetingId || meetingId === 'meeting') {
             throw new Error('Meeting-ID nicht gefunden in URL');
         }
         
