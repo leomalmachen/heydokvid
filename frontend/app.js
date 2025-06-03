@@ -460,8 +460,45 @@ async function initializeMeeting() {
         isInitialized = true;
         console.log('🎉 ULTRA-SIMPLE initialization completed!');
         
+        // DEBUG: Show success information if debug parameter is present
+        const showDebug = new URLSearchParams(window.location.search).get('debug');
+        if (showDebug === 'true') {
+            const debugInfo = {
+                success: true,
+                meetingId: meetingId,
+                currentURL: window.location.href,
+                userRole: new URLSearchParams(window.location.search).get('role'),
+                directJoin: new URLSearchParams(window.location.search).get('direct'),
+                meetingData: meetingData,
+                roomState: room ? room.state : 'null',
+                participantCount: room ? (1 + room.remoteParticipants.size) : 0,
+                timestamp: new Date().toISOString()
+            };
+            
+            setTimeout(() => showDebugOverlay(debugInfo), 2000);
+        }
+        
     } catch (error) {
         console.error('❌ Initialization failed:', error);
+        
+        // EMERGENCY DEBUG: Show detailed error information
+        const debugInfo = {
+            error: error.message,
+            stack: error.stack,
+            meetingId: meetingId,
+            currentURL: window.location.href,
+            userRole: new URLSearchParams(window.location.search).get('role'),
+            directJoin: new URLSearchParams(window.location.search).get('direct'),
+            sessionStorageData: {
+                meetingData: sessionStorage.getItem('meetingData'),
+                doctorMeetingData: sessionStorage.getItem('doctorMeetingData'),
+                participantName: sessionStorage.getItem('participantName')
+            },
+            roomState: room ? room.state : 'null',
+            timestamp: new Date().toISOString()
+        };
+        
+        showDebugOverlay(debugInfo);
         showError('Fehler beim Verbinden: ' + error.message);
     } finally {
         isInitializing = false;
@@ -779,6 +816,50 @@ function showStatus(message, type = 'info') {
             }
         }, 3000);
     }
+}
+
+// EMERGENCY DEBUG: Show debug overlay
+function showDebugOverlay(debugInfo) {
+    const overlay = document.createElement('div');
+    overlay.id = 'debug-overlay';
+    overlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: rgba(0, 0, 0, 0.9);
+        color: white;
+        font-family: monospace;
+        font-size: 12px;
+        padding: 20px;
+        overflow-y: auto;
+        z-index: 9999;
+        white-space: pre-wrap;
+    `;
+    
+    overlay.innerHTML = `
+        <h2 style="color: #ff6b6b; margin-bottom: 20px;">🚨 DEBUG INFORMATION</h2>
+        <button onclick="document.getElementById('debug-overlay').remove()" style="position: absolute; top: 10px; right: 10px; background: #ff6b6b; color: white; border: none; padding: 5px 10px; border-radius: 3px;">Close</button>
+        
+        <h3 style="color: #4ecdc4;">📊 Current State:</h3>
+        ${JSON.stringify(debugInfo, null, 2)}
+        
+        <h3 style="color: #ffe66d;">🔍 Troubleshooting:</h3>
+        1. Check if you're accessing with role=doctor parameter
+        2. Verify meeting data is stored correctly
+        3. Check LiveKit token and URL
+        4. Verify camera permissions
+        
+        <h3 style="color: #ff9f43;">🛠️ Next Steps:</h3>
+        - Open browser console (F12) for detailed logs
+        - Check if meeting was created correctly
+        - Verify network connectivity
+        
+        <button onclick="location.reload()" style="margin-top: 20px; background: #4ecdc4; color: white; border: none; padding: 10px 20px; border-radius: 5px;">🔄 Reload Page</button>
+    `;
+    
+    document.body.appendChild(overlay);
 }
 
 // PERSISTENT control handlers with state saving
