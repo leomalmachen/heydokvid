@@ -572,6 +572,24 @@ async def meeting_room(meeting_id: str, role: Optional[str] = None):
     # Determine user role (default to doctor if not specified)
     user_role = role or "doctor"
     
+    # For patients, check if they have completed setup
+    if user_role == "patient":
+        patient_setup_completed = meeting_data.get("patient_setup_completed", False)
+        media_test_completed = meeting_data.get("media_test_completed", False)
+        
+        if not patient_setup_completed or not media_test_completed:
+            # Redirect patient to setup page
+            setup_url = f"{get_base_url()}/patient-setup?meeting={meeting_id}"
+            return HTMLResponse(
+                content=f"""
+                <h1>Setup erforderlich</h1>
+                <p>Sie müssen zuerst das Patient-Setup abschließen bevor Sie dem Meeting beitreten können.</p>
+                <p><a href="{setup_url}">Zum Patient-Setup</a></p>
+                """,
+                status_code=302,
+                headers={"Location": setup_url}
+            )
+    
     try:
         # Choose appropriate template based on role
         if user_role == "doctor":
@@ -588,11 +606,11 @@ async def meeting_room(meeting_id: str, role: Optional[str] = None):
             with open("frontend/meeting.html", "r", encoding='utf-8') as f:
                 html_content = f.read()
         
-        # Replace placeholders with actual values
-        html_content = html_content.replace("{{MEETING_ID}}", meeting_id)
-        html_content = html_content.replace("{{USER_ROLE}}", user_role)
-        html_content = html_content.replace("{{DOCTOR_NAME}}", meeting_data.get("doctor_name", "Doctor"))
-        html_content = html_content.replace("{{PATIENT_NAME}}", meeting_data.get("patient_name", ""))
+        # Replace placeholders with actual values - ensure all values are strings
+        html_content = html_content.replace("{{MEETING_ID}}", str(meeting_id))
+        html_content = html_content.replace("{{USER_ROLE}}", str(user_role))
+        html_content = html_content.replace("{{DOCTOR_NAME}}", str(meeting_data.get("doctor_name") or "Doctor"))
+        html_content = html_content.replace("{{PATIENT_NAME}}", str(meeting_data.get("patient_name") or ""))
         
         return HTMLResponse(content=html_content)
         
@@ -611,11 +629,239 @@ async def patient_setup():
             html_content = f.read()
             return HTMLResponse(content=html_content)
     except FileNotFoundError:
-        logger.error("patient_setup.html not found")
-        return HTMLResponse(
-            content="<h1>Error</h1><p>Patient setup page not found. Please check your installation.</p>",
-            status_code=500
-        )
+        logger.error("patient_setup.html not found, returning built-in setup page")
+        # Return a built-in patient setup page
+        return HTMLResponse(content="""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Patient Setup - HeyDok Video</title>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <style>
+                body { font-family: Arial, sans-serif; margin: 20px; background: #f8f9fa; }
+                .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+                .step { margin: 20px 0; padding: 20px; border: 1px solid #ddd; border-radius: 5px; }
+                .step.completed { background: #d4edda; border-color: #28a745; }
+                .step.active { background: #fff3cd; border-color: #ffc107; }
+                .step.disabled { background: #f8f9fa; color: #6c757d; }
+                button { background: #007bff; color: white; padding: 12px 24px; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; margin: 10px 0; }
+                button:hover { background: #0056b3; }
+                button:disabled { background: #6c757d; cursor: not-allowed; }
+                input[type="file"] { margin: 10px 0; }
+                input[type="text"] { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; margin: 10px 0; }
+                .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+                .status.success { background: #d4edda; color: #155724; }
+                .status.error { background: #f8d7da; color: #721c24; }
+                .video-container { margin: 20px 0; }
+                video { width: 100%; max-width: 400px; border: 1px solid #ddd; border-radius: 5px; }
+                .hidden { display: none; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1>🏥 Patient Setup - HeyDok Video</h1>
+                <p>Bitte durchlaufen Sie diese Schritte bevor Sie dem Meeting beitreten:</p>
+                
+                <!-- Step 1: Patient Info -->
+                <div class="step active" id="step1">
+                    <h3>Schritt 1: Ihre Daten</h3>
+                    <label for="patientName">Ihr vollständiger Name:</label>
+                    <input type="text" id="patientName" placeholder="Max Mustermann" required>
+                    <button onclick="completeStep1()">Weiter</button>
+                </div>
+                
+                <!-- Step 2: Document Upload -->
+                <div class="step disabled" id="step2">
+                    <h3>Schritt 2: Dokument hochladen</h3>
+                    <p>Bitte laden Sie Ihren Krankenkassenschein oder ein anderes Dokument hoch:</p>
+                    <input type="file" id="documentFile" accept=".pdf,.jpg,.jpeg,.png,.tiff,.doc,.docx">
+                    <button onclick="uploadDocument()" disabled id="uploadBtn">Dokument hochladen</button>
+                    <div id="uploadStatus"></div>
+                </div>
+                
+                <!-- Step 3: Media Test -->
+                <div class="step disabled" id="step3">
+                    <h3>Schritt 3: Kamera und Mikrofon testen</h3>
+                    <button onclick="startMediaTest()" id="startTestBtn">Test starten</button>
+                    <div class="video-container hidden" id="videoContainer">
+                        <video id="testVideo" autoplay muted></video>
+                        <p>Können Sie sich in der Kamera sehen und Ihr Mikrofon funktioniert?</p>
+                        <button onclick="confirmMediaTest(true)">✅ Ja, alles funktioniert</button>
+                        <button onclick="confirmMediaTest(false)">❌ Nein, es gibt Probleme</button>
+                    </div>
+                    <div id="mediaStatus"></div>
+                </div>
+                
+                <!-- Step 4: Join Meeting -->
+                <div class="step disabled" id="step4">
+                    <h3>Schritt 4: Meeting beitreten</h3>
+                    <p>✅ Alle Schritte abgeschlossen! Sie können jetzt dem Meeting beitreten.</p>
+                    <button onclick="joinMeeting()" id="joinBtn">Meeting beitreten</button>
+                </div>
+            </div>
+            
+            <script>
+                let meetingId = new URLSearchParams(window.location.search).get('meeting');
+                let patientName = '';
+                let documentId = null;
+                let mediaTestId = null;
+                let stream = null;
+                
+                if (!meetingId) {
+                    alert('Fehler: Keine Meeting-ID gefunden');
+                }
+                
+                // Step 1: Patient Info
+                function completeStep1() {
+                    patientName = document.getElementById('patientName').value.trim();
+                    if (!patientName) {
+                        alert('Bitte geben Sie Ihren Namen ein');
+                        return;
+                    }
+                    
+                    document.getElementById('step1').classList.remove('active');
+                    document.getElementById('step1').classList.add('completed');
+                    document.getElementById('step2').classList.remove('disabled');
+                    document.getElementById('step2').classList.add('active');
+                    
+                    // Enable file upload
+                    document.getElementById('documentFile').addEventListener('change', function() {
+                        document.getElementById('uploadBtn').disabled = !this.files[0];
+                    });
+                }
+                
+                // Step 2: Document Upload
+                async function uploadDocument() {
+                    const fileInput = document.getElementById('documentFile');
+                    const file = fileInput.files[0];
+                    
+                    if (!file) {
+                        alert('Bitte wählen Sie eine Datei aus');
+                        return;
+                    }
+                    
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    formData.append('patient_name', patientName);
+                    
+                    try {
+                        document.getElementById('uploadStatus').innerHTML = '<div class="status">Lade Dokument hoch...</div>';
+                        
+                        const response = await fetch(`/api/meetings/${meetingId}/upload-document`, {
+                            method: 'POST',
+                            body: formData
+                        });
+                        
+                        if (response.ok) {
+                            const data = await response.json();
+                            documentId = data.document_id;
+                            
+                            document.getElementById('uploadStatus').innerHTML = '<div class="status success">✅ Dokument erfolgreich hochgeladen</div>';
+                            
+                            // Complete step 2
+                            document.getElementById('step2').classList.remove('active');
+                            document.getElementById('step2').classList.add('completed');
+                            document.getElementById('step3').classList.remove('disabled');
+                            document.getElementById('step3').classList.add('active');
+                        } else {
+                            const error = await response.json();
+                            document.getElementById('uploadStatus').innerHTML = `<div class="status error">❌ Fehler: ${error.detail}</div>`;
+                        }
+                    } catch (error) {
+                        document.getElementById('uploadStatus').innerHTML = '<div class="status error">❌ Fehler beim Hochladen</div>';
+                    }
+                }
+                
+                // Step 3: Media Test
+                async function startMediaTest() {
+                    try {
+                        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                        const video = document.getElementById('testVideo');
+                        video.srcObject = stream;
+                        
+                        document.getElementById('videoContainer').classList.remove('hidden');
+                        document.getElementById('startTestBtn').style.display = 'none';
+                    } catch (error) {
+                        document.getElementById('mediaStatus').innerHTML = '<div class="status error">❌ Fehler beim Zugriff auf Kamera/Mikrofon. Bitte prüfen Sie Ihre Berechtigung.</div>';
+                    }
+                }
+                
+                async function confirmMediaTest(working) {
+                    // Stop video stream
+                    if (stream) {
+                        stream.getTracks().forEach(track => track.stop());
+                    }
+                    
+                    const mediaData = {
+                        meeting_id: meetingId,
+                        has_camera: true,
+                        has_microphone: true,
+                        camera_working: working,
+                        microphone_working: working,
+                        patient_confirmed: working
+                    };
+                    
+                    try {
+                        const response = await fetch(`/api/meetings/${meetingId}/media-test`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(mediaData)
+                        });
+                        
+                        if (response.ok) {
+                            const data = await response.json();
+                            mediaTestId = data.test_id;
+                            
+                            if (data.allowed_to_join) {
+                                document.getElementById('mediaStatus').innerHTML = '<div class="status success">✅ Media-Test erfolgreich</div>';
+                                
+                                // Complete step 3
+                                document.getElementById('step3').classList.remove('active');
+                                document.getElementById('step3').classList.add('completed');
+                                document.getElementById('step4').classList.remove('disabled');
+                                document.getElementById('step4').classList.add('active');
+                            } else {
+                                document.getElementById('mediaStatus').innerHTML = '<div class="status error">❌ Media-Test fehlgeschlagen. Bitte stellen Sie sicher, dass Kamera und Mikrofon funktionieren.</div>';
+                                // Reset test
+                                document.getElementById('videoContainer').classList.add('hidden');
+                                document.getElementById('startTestBtn').style.display = 'block';
+                            }
+                        }
+                    } catch (error) {
+                        document.getElementById('mediaStatus').innerHTML = '<div class="status error">❌ Fehler beim Media-Test</div>';
+                    }
+                }
+                
+                // Step 4: Join Meeting
+                async function joinMeeting() {
+                    try {
+                        const response = await fetch(`/api/meetings/${meetingId}/join-patient`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                patient_name: patientName,
+                                document_id: documentId,
+                                media_test_id: mediaTestId
+                            })
+                        });
+                        
+                        if (response.ok) {
+                            const data = await response.json();
+                            // Redirect to meeting room
+                            window.location.href = `/meeting/${meetingId}?role=patient`;
+                        } else {
+                            const error = await response.json();
+                            alert(`Fehler beim Beitritt: ${error.detail}`);
+                        }
+                    } catch (error) {
+                        alert('Fehler beim Beitritt zum Meeting');
+                    }
+                }
+            </script>
+        </body>
+        </html>
+        """, status_code=200)
 
 @app.get("/frontend/app.js")
 async def serve_app_js():
@@ -923,45 +1169,67 @@ async def patient_join_meeting(
     
     # Validate meeting exists
     if meeting_id not in meetings:
-        raise HTTPException(status_code=404, detail="Meeting not found")
+        # Create meeting if not exists (handle Heroku memory loss)
+        logger.info(f"Meeting {meeting_id} not found, recreating for patient join")
+        meetings[meeting_id] = {
+            "id": meeting_id,
+            "room_name": f"meeting-{meeting_id}",
+            "created_at": datetime.now().isoformat(),
+            "doctor_name": "Doctor",
+            "doctor_role": "doctor",
+            "doctor_joined": False,
+            "patient_name": None,
+            "patient_joined": False,
+            "patient_setup_completed": False,
+            "document_uploaded": False,
+            "media_test_completed": False,
+            "meeting_active": True,
+            "participants": [],
+            "max_participants": 2
+        }
+        active_participants[meeting_id] = set()
     
     meeting_data = meetings[meeting_id]
     
     # Check if patient already joined
     if meeting_data.get("patient_joined", False):
-        raise HTTPException(status_code=409, detail="Patient already joined this meeting")
+        raise HTTPException(status_code=409, detail="Patient bereits dem Meeting beigetreten")
     
     # Validate document upload (optional but recommended)
     document_uploaded = False
     if request.document_id:
         if request.document_id not in patient_documents:
-            raise HTTPException(status_code=400, detail="Document not found")
+            raise HTTPException(status_code=400, detail="Dokument nicht gefunden")
         document = patient_documents[request.document_id]
-        if not document.get("processed", False):
-            raise HTTPException(status_code=400, detail="Document not yet processed")
+        if document["meeting_id"] != meeting_id:
+            raise HTTPException(status_code=400, detail="Dokument gehört nicht zu diesem Meeting")
         document_uploaded = True
+        logger.info(f"Patient {request.patient_name} hat Dokument hochgeladen: {document['filename']}")
     
     # Validate media test (required)
     if not request.media_test_id:
-        raise HTTPException(status_code=400, detail="Media test required before joining")
+        raise HTTPException(status_code=400, detail="Media-Test erforderlich vor Meeting-Beitritt")
     
     if request.media_test_id not in media_tests:
-        raise HTTPException(status_code=400, detail="Media test not found")
+        raise HTTPException(status_code=400, detail="Media-Test nicht gefunden")
     
     media_test = media_tests[request.media_test_id]
+    if media_test["meeting_id"] != meeting_id:
+        raise HTTPException(status_code=400, detail="Media-Test gehört nicht zu diesem Meeting")
+    
     if not media_test["allowed_to_join"]:
         raise HTTPException(
             status_code=400, 
-            detail="Media test failed. Please ensure your camera and microphone are working properly."
+            detail="Media-Test fehlgeschlagen. Bitte stellen Sie sicher, dass Kamera und Mikrofon funktionieren."
         )
     
     # Check for duplicate participants
     if meeting_id not in active_participants:
         active_participants[meeting_id] = set()
     
-    participant_key = f"patient_{request.patient_name.lower()}"
+    participant_key = f"patient_{request.patient_name.lower().replace(' ', '_')}"
     if participant_key in active_participants[meeting_id]:
-        raise HTTPException(status_code=409, detail="Patient already in meeting")
+        raise HTTPException(status_code=409, detail="Patient bereits im Meeting")
     
     # Add patient to active participants
     active_participants[meeting_id].add(participant_key)
@@ -994,17 +1262,17 @@ async def patient_join_meeting(
         
         participants_count = len(meeting_data["participants"])
         
-        logger.info(f"Patient {request.patient_name} joined meeting {meeting_id}")
+        logger.info(f"Patient {request.patient_name} erfolgreich dem Meeting {meeting_id} beigetreten")
         
         return MeetingResponse(
             meeting_id=meeting_id,
-            meeting_url=f"{get_base_url()}/meeting/{meeting_id}",
-            livekit_url=livekit_client.livekit_url,
+            meeting_url=f"{get_base_url()}/meeting/{meeting_id}?role=patient",
+            livekit_url=livekit_client.url,
             token=token,
             participants_count=participants_count,
             user_role="patient",
             meeting_status={
-                "doctor_name": meeting_data["doctor_name"],
+                "doctor_name": meeting_data.get("doctor_name", "Doctor"),
                 "patient_setup_completed": True,
                 "document_uploaded": document_uploaded,
                 "media_test_completed": True
@@ -1014,8 +1282,8 @@ async def patient_join_meeting(
     except Exception as e:
         # Remove from active participants if token generation fails
         active_participants[meeting_id].discard(participant_key)
-        logger.error(f"Failed to generate token for patient {request.patient_name}: {e}")
-        raise HTTPException(status_code=500, detail="Failed to join meeting")
+        logger.error(f"Fehler beim Token-Generieren für Patient {request.patient_name}: {e}")
+        raise HTTPException(status_code=500, detail="Fehler beim Meeting-Beitritt")
 
 @app.get("/api/meetings/{meeting_id}/status", response_model=MeetingStatusResponse)
 async def get_meeting_status(meeting_id: str):
@@ -1059,7 +1327,7 @@ async def get_meeting_status(meeting_id: str):
     
     return MeetingStatusResponse(
         meeting_id=meeting_id,
-        doctor_name=meeting.get("doctor_name", "Doctor"),
+        doctor_name=str(meeting.get("doctor_name") or "Doctor"),
         doctor_joined=meeting.get("doctor_joined", False),
         patient_name=meeting.get("patient_name"),
         patient_joined=meeting.get("patient_joined", False),
