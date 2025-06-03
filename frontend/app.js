@@ -126,14 +126,23 @@ function loadMediaState() {
 // PERSISTENT: Get participant name with nice modal
 function getParticipantName() {
     return new Promise((resolve, reject) => {
-        // Check if we already have a stored name
+        // Check if patient setup was completed (patient came from setup page)
+        const patientSetupCompleted = sessionStorage.getItem('patientSetupCompleted');
         const storedName = sessionStorage.getItem('participantName');
-        if (storedName) {
+        
+        if (patientSetupCompleted === 'true' && storedName) {
+            console.log('✅ Patient setup completed, using stored name:', storedName);
+            resolve(storedName);
+            return;
+        }
+        
+        // Check if we already have a stored name for other participants
+        if (storedName && !patientSetupCompleted) {
             resolve(storedName);
             return;
         }
 
-        // Show name input modal
+        // Show name input modal for guests or doctors without stored names
         const nameModal = document.getElementById('nameModal');
         const nameInput = document.getElementById('participantNameInput');
         const confirmBtn = document.getElementById('confirmJoin');
@@ -264,19 +273,82 @@ async function initializeMeeting() {
             // Continue anyway, but user will be prompted later
         }
         
-        // Get meeting data - SIMPLE approach
-        meetingData = sessionStorage.getItem('meetingData');
+        console.log('🚀 Starting ULTRA-SIMPLE meeting initialization...');
+        showStatus('Verbindung wird aufgebaut...', 'info');
+        
+        // Extract meeting ID from URL
+        const pathParts = window.location.pathname.split('/');
+        meetingId = pathParts[pathParts.indexOf('meeting') + 1];
+        
+        if (!meetingId) {
+            throw new Error('Meeting-ID nicht gefunden in URL');
+        }
+        
+        console.log('Meeting ID:', meetingId);
+        
+        // Check if we have stored meeting data from patient setup
+        let meetingData = sessionStorage.getItem('meetingData');
+        const patientSetupCompleted = sessionStorage.getItem('patientSetupCompleted');
+        
+        if (patientSetupCompleted === 'true' && meetingData) {
+            console.log('✅ Using stored meeting data from patient setup');
+            try {
+                meetingData = JSON.parse(meetingData);
+                
+                // Verify the meeting data is for the correct meeting
+                if (meetingData.meeting_id === meetingId) {
+                    console.log('✅ Meeting data matches current meeting ID');
+                    
+                    // Connect directly to room
+                    await connectToRoom(meetingData);
+                    isInitialized = true;
+                    console.log('🎉 Patient initialization completed using stored data!');
+                    return;
+                } else {
+                    console.warn('⚠️ Stored meeting data is for different meeting, clearing...');
+                    sessionStorage.removeItem('meetingData');
+                    sessionStorage.removeItem('patientSetupCompleted');
+                    meetingData = null;
+                }
+            } catch (error) {
+                console.error('❌ Error parsing stored meeting data:', error);
+                sessionStorage.removeItem('meetingData');
+                sessionStorage.removeItem('patientSetupCompleted');
+                meetingData = null;
+            }
+        }
         
         if (!meetingData) {
+            // Check user role from URL parameters
+            const urlParams = new URLSearchParams(window.location.search);
+            const userRole = urlParams.get('role');
+            
             // IMPROVED: Use nice modal for name input
             try {
                 const participantName = await getParticipantName();
                 
-                console.log('🔗 Joining meeting...');
-                const response = await fetch(`/api/meetings/${meetingId}/join`, {
+                // Use role-specific endpoints
+                let joinEndpoint, joinData;
+                
+                if (userRole === 'doctor') {
+                    console.log('🩺 Doctor joining meeting...');
+                    joinEndpoint = `/api/meetings/${meetingId}/join-doctor`;
+                    joinData = {
+                        participant_name: participantName,
+                        participant_role: 'doctor'
+                    };
+                } else {
+                    console.log('👤 Participant joining meeting...');
+                    joinEndpoint = `/api/meetings/${meetingId}/join`;
+                    joinData = {
+                        participant_name: participantName
+                    };
+                }
+                
+                const response = await fetch(joinEndpoint, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ participant_name: participantName })
+                    body: JSON.stringify(joinData)
                 });
 
                 if (!response.ok) {
@@ -295,8 +367,6 @@ async function initializeMeeting() {
                 }
                 throw nameError;
             }
-        } else {
-            meetingData = JSON.parse(meetingData);
         }
 
         // Connect to room - ULTRA-SIMPLE

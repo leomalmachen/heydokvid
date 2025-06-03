@@ -708,6 +708,11 @@
                 console.log('Join response:', result);
                 console.log('Redirecting to:', result.meeting_url);
                 
+                // Store patient data for the meeting room
+                sessionStorage.setItem('participantName', patientName);
+                sessionStorage.setItem('meetingData', JSON.stringify(result));
+                sessionStorage.setItem('patientSetupCompleted', 'true');
+                
                 // Show user what's happening
                 showStatus('success', `Weiterleitung zu: ${result.meeting_url}`);
                 
