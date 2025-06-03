@@ -1006,9 +1006,30 @@ if (document.readyState === 'loading') {
 
 // ULTRA-ADVANCED: Connect to LiveKit room
 async function connectToRoom(data) {
-    console.log('🔗 Connecting to LiveKit room...', data.livekit_url);
+    console.log('🔗 DETAILED CONNECTION ATTEMPT:', {
+        livekit_url: data.livekit_url,
+        token_length: data.token ? data.token.length : 0,
+        token_preview: data.token ? data.token.substring(0, 50) + '...' : 'none',
+        meeting_id: data.meeting_id
+    });
+    
+    // VALIDATE URL FORMAT
+    if (!data.livekit_url) {
+        throw new Error('LiveKit URL is missing from meeting data');
+    }
+    
+    if (!data.livekit_url.startsWith('wss://') && !data.livekit_url.startsWith('ws://')) {
+        throw new Error(`Invalid LiveKit URL format: ${data.livekit_url} (must start with wss:// or ws://)`);
+    }
+    
+    // VALIDATE TOKEN
+    if (!data.token) {
+        throw new Error('LiveKit token is missing from meeting data');
+    }
     
     try {
+        console.log('🏗️ Creating LiveKit Room instance...');
+        
         // Initialize room with ENHANCED AUDIO SETTINGS
         room = new LiveKit.Room({
             adaptiveStream: true,
@@ -1029,6 +1050,27 @@ async function connectToRoom(data) {
                 stopMicTrackOnMute: false, // Keep track alive when muted
                 audioPreset: LiveKit.AudioPresets.speech, // Optimized for speech
             },
+        });
+        
+        console.log('✅ LiveKit Room instance created successfully');
+        
+        // ENHANCED ERROR HANDLING for connection
+        room.on(LiveKit.RoomEvent.ConnectionError, (error) => {
+            console.error('🚨 CONNECTION ERROR:', error);
+            showDebugOverlay({
+                error: 'LiveKit Connection Error',
+                details: error.message,
+                livekit_url: data.livekit_url,
+                timestamp: new Date().toISOString()
+            });
+        });
+        
+        room.on(LiveKit.RoomEvent.Disconnected, (reason) => {
+            console.log('❌ Room disconnected:', reason);
+            if (reason !== LiveKit.DisconnectReason.CLIENT_INITIATED) {
+                console.log('🔄 Attempting reconnection due to unexpected disconnect...');
+                attemptReconnection();
+            }
         });
         
         // BULLETPROOF: Event handlers setup
@@ -1069,14 +1111,6 @@ async function connectToRoom(data) {
         room.on(LiveKit.RoomEvent.TrackMuted, handleTrackMuted);
         room.on(LiveKit.RoomEvent.TrackUnmuted, handleTrackUnmuted);
         
-        // Enhanced error handling
-        room.on(LiveKit.RoomEvent.Disconnected, (reason) => {
-            console.log('❌ Room disconnected:', reason);
-            if (reason !== LiveKit.DisconnectReason.CLIENT_INITIATED) {
-                attemptReconnection();
-            }
-        });
-        
         room.on(LiveKit.RoomEvent.Reconnecting, () => {
             console.log('🔄 Room reconnecting...');
             showStatus('Verbindung wird wiederhergestellt...', 'warning');
@@ -1087,12 +1121,43 @@ async function connectToRoom(data) {
             showStatus('Verbindung wiederhergestellt!', 'success');
         });
         
-        // Connect to room
+        // CRITICAL: Attempt connection with detailed logging
+        console.log('🚀 Attempting to connect to LiveKit...');
+        console.log('📍 URL:', data.livekit_url);
+        console.log('🎫 Token preview:', data.token.substring(0, 100) + '...');
+        
         await room.connect(data.livekit_url, data.token);
         console.log('✅ Connected to room successfully!');
         
     } catch (error) {
-        console.error('❌ Failed to connect to room:', error);
+        console.error('❌ DETAILED CONNECTION FAILURE:', {
+            error: error.message,
+            stack: error.stack,
+            name: error.name,
+            url: data.livekit_url,
+            token_valid: !!data.token,
+            token_length: data.token ? data.token.length : 0
+        });
+        
+        // Show detailed error in debug overlay
+        showDebugOverlay({
+            error: 'LiveKit Connection Failed',
+            error_message: error.message,
+            error_stack: error.stack,
+            error_name: error.name,
+            livekit_url: data.livekit_url,
+            token_present: !!data.token,
+            token_length: data.token ? data.token.length : 0,
+            timestamp: new Date().toISOString(),
+            possible_causes: [
+                'Invalid LiveKit URL format',
+                'Network connectivity issues', 
+                'Invalid or expired token',
+                'CORS/firewall blocking WebSocket connection',
+                'LiveKit server unreachable'
+            ]
+        });
+        
         throw error;
     }
 }
