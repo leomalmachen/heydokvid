@@ -594,48 +594,59 @@ async def meeting_room(meeting_id: str, role: Optional[str] = None):
         patient_setup_completed = meeting_data.get("patient_setup_completed", False)
         media_test_completed = meeting_data.get("media_test_completed", False)
         
+        # If role=patient parameter is present, assume they completed setup via patient-join endpoint
+        # This handles the case where meeting data was lost due to Heroku restarts
         if not patient_setup_completed or not media_test_completed:
-            # Redirect patient to setup page
-            setup_url = f"{get_base_url()}/patient-setup?meeting={meeting_id}"
-            return HTMLResponse(
-                content=f"""
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <title>Setup erforderlich - HeyDok Video</title>
-                    <meta charset="utf-8">
-                    <meta name="viewport" content="width=device-width, initial-scale=1">
-                    <style>
-                        body {{ font-family: Arial, sans-serif; margin: 20px; background: #f8f9fa; text-align: center; }}
-                        .container {{ max-width: 600px; margin: 50px auto; background: white; padding: 40px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
-                        h1 {{ color: #007bff; }}
-                        .button {{ background: #007bff; color: white; padding: 15px 30px; border: none; border-radius: 5px; font-size: 18px; text-decoration: none; display: inline-block; margin: 20px 0; }}
-                        .button:hover {{ background: #0056b3; }}
-                    </style>
-                    <script>
-                        // Auto-redirect after 3 seconds
-                        setTimeout(function() {{
-                            window.location.href = '{setup_url}';
-                        }}, 3000);
-                    </script>
-                </head>
-                <body>
-                    <div class="container">
-                        <h1>🏥 Patient Setup erforderlich</h1>
-                        <p>Bevor Sie dem Meeting beitreten können, müssen Sie die folgenden Schritte abschließen:</p>
-                        <ul style="text-align: left; display: inline-block;">
-                            <li>✍️ Namenseingabe</li>
-                            <li>📄 Dokument hochladen (z.B. Krankenkassenschein)</li>
-                            <li>🎥 Kamera und Mikrofon testen</li>
-                        </ul>
-                        <p>Sie werden automatisch weitergeleitet...</p>
-                        <a href="{setup_url}" class="button">Jetzt Setup starten</a>
-                    </div>
-                </body>
-                </html>
-                """,
-                status_code=200
-            )
+            # Only redirect to setup if they don't have the role parameter 
+            # (meaning they're accessing the link without having gone through patient setup)
+            if role is None:
+                # Redirect patient to setup page
+                setup_url = f"{get_base_url()}/patient-setup?meeting={meeting_id}"
+                return HTMLResponse(
+                    content=f"""
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <title>Setup erforderlich - HeyDok Video</title>
+                        <meta charset="utf-8">
+                        <meta name="viewport" content="width=device-width, initial-scale=1">
+                        <style>
+                            body {{ font-family: Arial, sans-serif; margin: 20px; background: #f8f9fa; text-align: center; }}
+                            .container {{ max-width: 600px; margin: 50px auto; background: white; padding: 40px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
+                            h1 {{ color: #007bff; }}
+                            .button {{ background: #007bff; color: white; padding: 15px 30px; border: none; border-radius: 5px; font-size: 18px; text-decoration: none; display: inline-block; margin: 20px 0; }}
+                            .button:hover {{ background: #0056b3; }}
+                        </style>
+                        <script>
+                            // Auto-redirect after 3 seconds
+                            setTimeout(function() {{
+                                window.location.href = '{setup_url}';
+                            }}, 3000);
+                        </script>
+                    </head>
+                    <body>
+                        <div class="container">
+                            <h1>🏥 Patient Setup erforderlich</h1>
+                            <p>Bevor Sie dem Meeting beitreten können, müssen Sie die folgenden Schritte abschließen:</p>
+                            <ul style="text-align: left; display: inline-block;">
+                                <li>✍️ Namenseingabe</li>
+                                <li>📄 Dokument hochladen (z.B. Krankenkassenschein)</li>
+                                <li>🎥 Kamera und Mikrofon testen</li>
+                            </ul>
+                            <p>Sie werden automatisch weitergeleitet...</p>
+                            <a href="{setup_url}" class="button">Jetzt Setup starten</a>
+                        </div>
+                    </body>
+                    </html>
+                    """,
+                    status_code=200
+                )
+            else:
+                # Patient has role=patient parameter, so they completed setup
+                # Update meeting data to reflect this (in case data was lost)
+                meeting_data["patient_setup_completed"] = True
+                meeting_data["media_test_completed"] = True
+                logger.info(f"Updated meeting {meeting_id} patient setup status after memory loss")
     
     try:
         # Choose appropriate template based on role
