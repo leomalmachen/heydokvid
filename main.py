@@ -544,12 +544,28 @@ async def join_meeting(
 @app.get("/meeting/{meeting_id}", response_class=HTMLResponse)
 async def meeting_room(meeting_id: str, role: Optional[str] = None):
     """Serve the meeting room page with role-based interface"""
-    # Validate meeting exists
+    # Check if meeting exists, create if not (handles Heroku memory loss)
     if meeting_id not in meetings:
-        return HTMLResponse(
-            content="<h1>Meeting not found</h1><p>The meeting you're looking for doesn't exist or has expired.</p>",
-            status_code=404
-        )
+        logger.info(f"Meeting {meeting_id} not found in memory, recreating entry for meeting room access")
+        # Recreate meeting entry for this meeting ID (similar to get_meeting_info)
+        meetings[meeting_id] = {
+            "id": meeting_id,
+            "room_name": f"meeting-{meeting_id}",
+            "created_at": datetime.now().isoformat(),
+            "doctor_name": "Doctor",  # Default doctor name
+            "doctor_role": "doctor",
+            "doctor_joined": False,
+            "patient_name": None,
+            "patient_joined": False,
+            "patient_setup_completed": False,
+            "document_uploaded": False,
+            "media_test_completed": False,
+            "meeting_active": True,
+            "participants": [],
+            "max_participants": 2
+        }
+        # Initialize participant tracking
+        active_participants[meeting_id] = set()
     
     meeting_data = meetings[meeting_id]
     
@@ -575,7 +591,7 @@ async def meeting_room(meeting_id: str, role: Optional[str] = None):
         # Replace placeholders with actual values
         html_content = html_content.replace("{{MEETING_ID}}", meeting_id)
         html_content = html_content.replace("{{USER_ROLE}}", user_role)
-        html_content = html_content.replace("{{DOCTOR_NAME}}", meeting_data["doctor_name"])
+        html_content = html_content.replace("{{DOCTOR_NAME}}", meeting_data.get("doctor_name", "Doctor"))
         html_content = html_content.replace("{{PATIENT_NAME}}", meeting_data.get("patient_name", ""))
         
         return HTMLResponse(content=html_content)
@@ -1004,8 +1020,28 @@ async def patient_join_meeting(
 @app.get("/api/meetings/{meeting_id}/status", response_model=MeetingStatusResponse)
 async def get_meeting_status(meeting_id: str):
     """Get detailed meeting status for role-based UI updates"""
+    # Check if meeting exists, create if not (handles Heroku memory loss)
     if meeting_id not in meetings:
-        raise HTTPException(status_code=404, detail="Meeting not found")
+        logger.info(f"Meeting {meeting_id} not found in memory, recreating entry for status request")
+        # Recreate meeting entry for this meeting ID
+        meetings[meeting_id] = {
+            "id": meeting_id,
+            "room_name": f"meeting-{meeting_id}",
+            "created_at": datetime.now().isoformat(),
+            "doctor_name": "Doctor",  # Default doctor name
+            "doctor_role": "doctor",
+            "doctor_joined": False,
+            "patient_name": None,
+            "patient_joined": False,
+            "patient_setup_completed": False,
+            "document_uploaded": False,
+            "media_test_completed": False,
+            "meeting_active": True,
+            "participants": [],
+            "max_participants": 2
+        }
+        # Initialize participant tracking
+        active_participants[meeting_id] = set()
     
     meeting = meetings[meeting_id]
     
@@ -1023,7 +1059,7 @@ async def get_meeting_status(meeting_id: str):
     
     return MeetingStatusResponse(
         meeting_id=meeting_id,
-        doctor_name=meeting["doctor_name"],
+        doctor_name=meeting.get("doctor_name", "Doctor"),
         doctor_joined=meeting.get("doctor_joined", False),
         patient_name=meeting.get("patient_name"),
         patient_joined=meeting.get("patient_joined", False),
@@ -1114,12 +1150,28 @@ async def doctor_join_meeting(
 @app.get("/doctor-dashboard/{meeting_id}", response_class=HTMLResponse)
 async def doctor_dashboard(meeting_id: str):
     """Serve the doctor dashboard to monitor patient setup and meeting status"""
-    # Validate meeting exists
+    # Check if meeting exists, create if not (handles Heroku memory loss)
     if meeting_id not in meetings:
-        return HTMLResponse(
-            content="<h1>Meeting not found</h1><p>The meeting you're looking for doesn't exist or has expired.</p>",
-            status_code=404
-        )
+        logger.info(f"Meeting {meeting_id} not found in memory, recreating entry for doctor dashboard")
+        # Recreate meeting entry for this meeting ID
+        meetings[meeting_id] = {
+            "id": meeting_id,
+            "room_name": f"meeting-{meeting_id}",
+            "created_at": datetime.now().isoformat(),
+            "doctor_name": "Doctor",  # Default doctor name
+            "doctor_role": "doctor",
+            "doctor_joined": False,
+            "patient_name": None,
+            "patient_joined": False,
+            "patient_setup_completed": False,
+            "document_uploaded": False,
+            "media_test_completed": False,
+            "meeting_active": True,
+            "participants": [],
+            "max_participants": 2
+        }
+        # Initialize participant tracking
+        active_participants[meeting_id] = set()
     
     try:
         with open("frontend/doctor_dashboard.html", "r", encoding='utf-8') as f:
