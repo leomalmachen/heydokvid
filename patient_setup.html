@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Patient Setup - HeyDok Video</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+        }
+
+        .container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            max-width: 800px;
+            width: 100%;
+            overflow: hidden;
+        }
+
+        .header {
+            background: #4a90e2;
+            color: white;
+            padding: 2rem;
+            text-align: center;
+        }
+
+        .header h1 {
+            margin-bottom: 0.5rem;
+            font-size: 2rem;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 1.1rem;
+        }
+
+        .content {
+            padding: 2rem;
+        }
+
+        .step {
+            margin-bottom: 2rem;
+            padding: 1.5rem;
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            transition: all 0.3s ease;
+        }
+
+        .step.active {
+            border-color: #4a90e2;
+            background: #f8f9ff;
+        }
+
+        .step.completed {
+            border-color: #4caf50;
+            background: #f1f8e9;
+        }
+
+        .step-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .step-number {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: #e0e0e0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 1rem;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+
+        .step.active .step-number {
+            background: #4a90e2;
+            color: white;
+        }
+
+        .step.completed .step-number {
+            background: #4caf50;
+            color: white;
+        }
+
+        .step-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            color: #333;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 0.75rem;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #4a90e2;
+        }
+
+        .file-upload {
+            border: 2px dashed #e0e0e0;
+            border-radius: 8px;
+            padding: 2rem;
+            text-align: center;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .file-upload:hover {
+            border-color: #4a90e2;
+            background: #f8f9ff;
+        }
+
+        .file-upload.drag-over {
+            border-color: #4a90e2;
+            background: #f0f8ff;
+        }
+
+        .file-upload input {
+            display: none;
+        }
+
+        .file-upload-text {
+            margin-top: 1rem;
+            color: #666;
+        }
+
+        .media-test {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .media-preview {
+            flex: 1;
+            background: #f5f5f5;
+            border-radius: 8px;
+            padding: 1rem;
+            text-align: center;
+            min-height: 200px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .media-preview video {
+            width: 100%;
+            max-width: 300px;
+            height: auto;
+            border-radius: 8px;
+        }
+
+        .audio-level {
+            width: 100%;
+            height: 8px;
+            background: #e0e0e0;
+            border-radius: 4px;
+            margin-top: 1rem;
+            overflow: hidden;
+        }
+
+        .audio-level-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #4caf50, #ffc107, #f44336);
+            width: 0%;
+            transition: width 0.1s ease;
+        }
+
+        .checkbox-group {
+            margin: 1rem 0;
+        }
+
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .checkbox-item input[type="checkbox"] {
+            width: auto;
+            margin-right: 0.5rem;
+        }
+
+        .btn {
+            background: #4a90e2;
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn:hover {
+            background: #357abd;
+            transform: translateY(-2px);
+        }
+
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-success {
+            background: #4caf50;
+        }
+
+        .btn-success:hover {
+            background: #45a049;
+        }
+
+        .status-message {
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+        }
+
+        .status-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .status-warning {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #4a90e2;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 0.5rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .final-step {
+            text-align: center;
+            padding: 2rem;
+        }
+
+        .final-step .btn {
+            font-size: 1.2rem;
+            padding: 1rem 2rem;
+        }
+
+        @media (max-width: 768px) {
+            .media-test {
+                flex-direction: column;
+            }
+            
+            .container {
+                margin: 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🩺 Patient Setup</h1>
+            <p>Vorbereitung für Ihre Sprechstunde</p>
+        </div>
+
+        <div class="content">
+            <!-- Step 1: Patient Information -->
+            <div class="step active" id="step1">
+                <div class="step-header">
+                    <div class="step-number">1</div>
+                    <div class="step-title">Patienteninformationen</div>
+                </div>
+                <div class="form-group">
+                    <label for="patientName">Ihr Name:</label>
+                    <input type="text" id="patientName" placeholder="Max Mustermann" required>
+                </div>
+                <button class="btn" onclick="nextStep(1)">Weiter</button>
+            </div>
+
+            <!-- Step 2: Document Upload -->
+            <div class="step" id="step2">
+                <div class="step-header">
+                    <div class="step-number">2</div>
+                    <div class="step-title">Krankenkassenschein hochladen</div>
+                </div>
+                <p style="margin-bottom: 1rem; color: #666;">
+                    Bitte laden Sie Ihren Krankenkassenschein oder ein anderes relevantes Dokument hoch.
+                </p>
+                <div class="file-upload" onclick="document.getElementById('documentFile').click()">
+                    <div style="font-size: 3rem;">📄</div>
+                    <div class="file-upload-text">
+                        <strong>Klicken Sie hier oder ziehen Sie eine Datei hinein</strong><br>
+                        PDF, JPG, PNG, DOC, DOCX (max. 10MB)
+                    </div>
+                    <input type="file" id="documentFile" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" onchange="handleFileSelect(event)">
+                </div>
+                <div id="uploadStatus"></div>
+                <button class="btn" id="step2Next" onclick="nextStep(2)" disabled>Weiter</button>
+            </div>
+
+            <!-- Step 3: Media Test -->
+            <div class="step" id="step3">
+                <div class="step-header">
+                    <div class="step-number">3</div>
+                    <div class="step-title">Kamera & Mikrofon testen</div>
+                </div>
+                <p style="margin-bottom: 1rem; color: #666;">
+                    Testen Sie Ihre Kamera und Ihr Mikrofon, um sicherzustellen, dass alles funktioniert.
+                </p>
+                
+                <div class="media-test">
+                    <div class="media-preview">
+                        <h4>Kamera Test</h4>
+                        <video id="cameraPreview" autoplay muted playsinline></video>
+                        <div id="cameraStatus">Kamera wird geladen...</div>
+                    </div>
+                    <div class="media-preview">
+                        <h4>Mikrofon Test</h4>
+                        <div style="font-size: 3rem; margin-bottom: 1rem;">🎤</div>
+                        <div id="microphoneStatus">Mikrofon wird geladen...</div>
+                        <div class="audio-level">
+                            <div class="audio-level-bar" id="audioLevelBar"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="checkbox-group">
+                    <div class="checkbox-item">
+                        <input type="checkbox" id="cameraWorking">
+                        <label for="cameraWorking">Ich kann mich selbst in der Kamera sehen</label>
+                    </div>
+                    <div class="checkbox-item">
+                        <input type="checkbox" id="microphoneWorking">
+                        <label for="microphoneWorking">Mein Mikrofon zeigt Aktivität bei Sprache</label>
+                    </div>
+                    <div class="checkbox-item">
+                        <input type="checkbox" id="confirmWorking">
+                        <label for="confirmWorking"><strong>Meine Kamera und Mikrofon funktionieren</strong></label>
+                    </div>
+                </div>
+
+                <button class="btn" onclick="startMediaTest()">Test starten</button>
+                <button class="btn" id="step3Next" onclick="nextStep(3)" disabled>Weiter</button>
+            </div>
+
+            <!-- Step 4: Final Confirmation -->
+            <div class="step" id="step4">
+                <div class="step-header">
+                    <div class="step-number">4</div>
+                    <div class="step-title">Bereit für die Sprechstunde</div>
+                </div>
+                <div class="final-step">
+                    <div style="font-size: 4rem; margin-bottom: 1rem;">✅</div>
+                    <h3>Alles bereit!</h3>
+                    <p style="margin: 1rem 0; color: #666;">
+                        Sie haben alle Schritte erfolgreich abgeschlossen und können nun der Sprechstunde beitreten.
+                    </p>
+                    <button class="btn btn-success" id="joinMeetingBtn" onclick="joinMeeting()">
+                        Der Sprechstunde beitreten
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let currentStep = 1;
+        let patientName = '';
+        let documentId = null;
+        let mediaTestId = null;
+        let meetingId = null;
+        let stream = null;
+        let audioContext = null;
+        let analyser = null;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            // Get meeting ID from URL
+            const urlParams = new URLSearchParams(window.location.search);
+            meetingId = urlParams.get('meeting');
+            
+            if (!meetingId) {
+                showStatus('error', 'Keine Meeting-ID gefunden. Bitte verwenden Sie einen gültigen Link.');
+                return;
+            }
+
+            // Set up file drag and drop
+            setupFileUpload();
+        });
+
+        function nextStep(step) {
+            if (step === 1) {
+                patientName = document.getElementById('patientName').value.trim();
+                if (!patientName) {
+                    showStatus('error', 'Bitte geben Sie Ihren Namen ein.');
+                    return;
+                }
+                document.getElementById('step1').classList.remove('active');
+                document.getElementById('step1').classList.add('completed');
+                document.getElementById('step2').classList.add('active');
+                currentStep = 2;
+            } else if (step === 2) {
+                if (!documentId) {
+                    showStatus('error', 'Bitte laden Sie zuerst ein Dokument hoch.');
+                    return;
+                }
+                document.getElementById('step2').classList.remove('active');
+                document.getElementById('step2').classList.add('completed');
+                document.getElementById('step3').classList.add('active');
+                currentStep = 3;
+            } else if (step === 3) {
+                if (!validateMediaTest()) {
+                    showStatus('error', 'Bitte bestätigen Sie, dass Kamera und Mikrofon funktionieren.');
+                    return;
+                }
+                submitMediaTest();
+            }
+        }
+
+        function setupFileUpload() {
+            const fileUpload = document.querySelector('.file-upload');
+            const fileInput = document.getElementById('documentFile');
+
+            fileUpload.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                fileUpload.classList.add('drag-over');
+            });
+
+            fileUpload.addEventListener('dragleave', () => {
+                fileUpload.classList.remove('drag-over');
+            });
+
+            fileUpload.addEventListener('drop', (e) => {
+                e.preventDefault();
+                fileUpload.classList.remove('drag-over');
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    handleFileSelect({ target: { files: files } });
+                }
+            });
+        }
+
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            // Validate file size (10MB max)
+            if (file.size > 10 * 1024 * 1024) {
+                showStatus('error', 'Datei zu groß. Maximum 10MB erlaubt.');
+                return;
+            }
+
+            uploadDocument(file);
+        }
+
+        async function uploadDocument(file) {
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('patient_name', patientName);
+
+            try {
+                showStatus('info', 'Dokument wird hochgeladen...', 'uploadStatus');
+                
+                const response = await fetch(`/api/meetings/${meetingId}/upload-document`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Upload fehlgeschlagen');
+                }
+
+                const result = await response.json();
+                documentId = result.document_id;
+                
+                showStatus('success', `Dokument "${result.filename}" erfolgreich hochgeladen.`, 'uploadStatus');
+                
+                // Process document
+                await processDocument();
+                
+                document.getElementById('step2Next').disabled = false;
+
+            } catch (error) {
+                console.error('Upload error:', error);
+                showStatus('error', `Upload fehlgeschlagen: ${error.message}`, 'uploadStatus');
+            }
+        }
+
+        async function processDocument() {
+            try {
+                const formData = new FormData();
+                formData.append('document_id', documentId);
+
+                const response = await fetch(`/api/meetings/${meetingId}/process-document`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error('Dokumentenverarbeitung fehlgeschlagen');
+                }
+
+                const result = await response.json();
+                showStatus('success', 'Dokument erfolgreich verarbeitet.', 'uploadStatus');
+
+            } catch (error) {
+                console.error('Processing error:', error);
+                showStatus('warning', 'Dokument hochgeladen, aber Verarbeitung noch ausstehend.', 'uploadStatus');
+            }
+        }
+
+        async function startMediaTest() {
+            try {
+                // Request camera and microphone access
+                stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: true, 
+                    audio: true 
+                });
+
+                // Display camera feed
+                const video = document.getElementById('cameraPreview');
+                video.srcObject = stream;
+                document.getElementById('cameraStatus').textContent = 'Kamera aktiv ✅';
+
+                // Set up audio analysis
+                setupAudioAnalysis();
+                document.getElementById('microphoneStatus').textContent = 'Mikrofon aktiv ✅';
+
+            } catch (error) {
+                console.error('Media access error:', error);
+                document.getElementById('cameraStatus').textContent = 'Kamera-Zugriff fehlgeschlagen ❌';
+                document.getElementById('microphoneStatus').textContent = 'Mikrofon-Zugriff fehlgeschlagen ❌';
+                showStatus('error', 'Zugriff auf Kamera/Mikrofon fehlgeschlagen. Bitte Berechtigungen prüfen.');
+            }
+        }
+
+        function setupAudioAnalysis() {
+            try {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                analyser = audioContext.createAnalyser();
+                const source = audioContext.createMediaStreamSource(stream);
+                source.connect(analyser);
+
+                analyser.fftSize = 256;
+                const bufferLength = analyser.frequencyBinCount;
+                const dataArray = new Uint8Array(bufferLength);
+
+                function updateAudioLevel() {
+                    analyser.getByteFrequencyData(dataArray);
+                    const average = dataArray.reduce((a, b) => a + b) / bufferLength;
+                    const percentage = (average / 255) * 100;
+                    document.getElementById('audioLevelBar').style.width = percentage + '%';
+                    requestAnimationFrame(updateAudioLevel);
+                }
+                updateAudioLevel();
+
+            } catch (error) {
+                console.error('Audio analysis error:', error);
+            }
+        }
+
+        function validateMediaTest() {
+            const cameraWorking = document.getElementById('cameraWorking').checked;
+            const microphoneWorking = document.getElementById('microphoneWorking').checked;
+            const confirmWorking = document.getElementById('confirmWorking').checked;
+
+            return cameraWorking && microphoneWorking && confirmWorking;
+        }
+
+        async function submitMediaTest() {
+            try {
+                const testData = {
+                    meeting_id: meetingId,
+                    has_camera: !!stream && stream.getVideoTracks().length > 0,
+                    has_microphone: !!stream && stream.getAudioTracks().length > 0,
+                    camera_working: document.getElementById('cameraWorking').checked,
+                    microphone_working: document.getElementById('microphoneWorking').checked,
+                    patient_confirmed: document.getElementById('confirmWorking').checked
+                };
+
+                const response = await fetch(`/api/meetings/${meetingId}/media-test`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(testData)
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Media-Test fehlgeschlagen');
+                }
+
+                const result = await response.json();
+                mediaTestId = result.test_id;
+
+                if (result.allowed_to_join) {
+                    document.getElementById('step3').classList.remove('active');
+                    document.getElementById('step3').classList.add('completed');
+                    document.getElementById('step4').classList.add('active');
+                    currentStep = 4;
+
+                    // Stop media streams
+                    if (stream) {
+                        stream.getTracks().forEach(track => track.stop());
+                    }
+                } else {
+                    showStatus('error', 'Media-Test nicht bestanden. Bitte stellen Sie sicher, dass Kamera und Mikrofon funktionieren.');
+                }
+
+            } catch (error) {
+                console.error('Media test error:', error);
+                showStatus('error', `Media-Test fehlgeschlagen: ${error.message}`);
+            }
+        }
+
+        async function joinMeeting() {
+            try {
+                document.getElementById('joinMeetingBtn').innerHTML = '<span class="loading"></span>Beitritt läuft...';
+                document.getElementById('joinMeetingBtn').disabled = true;
+
+                const joinData = {
+                    patient_name: patientName,
+                    document_id: documentId,
+                    media_test_id: mediaTestId
+                };
+
+                const response = await fetch(`/api/meetings/${meetingId}/join-patient`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(joinData)
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Beitritt fehlgeschlagen');
+                }
+
+                const result = await response.json();
+                
+                // Redirect to meeting room
+                window.location.href = result.meeting_url;
+
+            } catch (error) {
+                console.error('Join error:', error);
+                showStatus('error', `Beitritt fehlgeschlagen: ${error.message}`);
+                document.getElementById('joinMeetingBtn').innerHTML = 'Der Sprechstunde beitreten';
+                document.getElementById('joinMeetingBtn').disabled = false;
+            }
+        }
+
+        function showStatus(type, message, containerId = null) {
+            const statusDiv = document.createElement('div');
+            statusDiv.className = `status-message status-${type}`;
+            statusDiv.textContent = message;
+
+            const container = containerId ? 
+                document.getElementById(containerId) : 
+                document.querySelector('.step.active');
+            
+            // Remove existing status messages
+            container.querySelectorAll('.status-message').forEach(msg => msg.remove());
+            
+            // Add new status message
+            container.appendChild(statusDiv);
+
+            // Auto-remove success messages after 5 seconds
+            if (type === 'success') {
+                setTimeout(() => {
+                    statusDiv.remove();
+                }, 5000);
+            }
+        }
+    </script>
+</body>
+</html> 

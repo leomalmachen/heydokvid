@@ -4,8 +4,10 @@ import string
 import logging
 from datetime import datetime, timedelta
 from typing import Dict, Optional
+import uuid
+import mimetypes
 
-from fastapi import FastAPI, HTTPException, Depends, Request
+from fastapi import FastAPI, HTTPException, Depends, Request, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -102,9 +104,13 @@ meetings: Dict[str, dict] = {}
 # Track active participants to prevent duplicates
 active_participants: Dict[str, set] = {}
 
+# Storage for patient documents and media tests
+patient_documents: Dict[str, dict] = {}
+media_tests: Dict[str, dict] = {}
+
 # Cleanup old meetings periodically (simple in-memory cleanup)
 def cleanup_old_meetings():
-    """Remove meetings older than 24 hours"""
+    """Remove meetings older than 24 hours and related documents/tests"""
     now = datetime.now()
     expired_meetings = []
     
@@ -115,9 +121,26 @@ def cleanup_old_meetings():
     
     for meeting_id in expired_meetings:
         del meetings[meeting_id]
-        logger.info(f"Cleaned up expired meeting: {meeting_id}")
+        
+        # Clean up related documents
+        expired_docs = [doc_id for doc_id, doc_data in patient_documents.items() 
+                       if doc_data["meeting_id"] == meeting_id]
+        for doc_id in expired_docs:
+            del patient_documents[doc_id]
+        
+        # Clean up related media tests
+        expired_tests = [test_id for test_id, test_data in media_tests.items() 
+                        if test_data["meeting_id"] == meeting_id]
+        for test_id in expired_tests:
+            del media_tests[test_id]
+        
+        # Clean up active participants
+        if meeting_id in active_participants:
+            del active_participants[meeting_id]
+        
+        logger.info(f"Cleaned up expired meeting: {meeting_id} (with {len(expired_docs)} docs and {len(expired_tests)} tests)")
     
-    logger.info(f"Active meetings: {len(meetings)}")
+    logger.info(f"Active meetings: {len(meetings)}, Documents: {len(patient_documents)}, Media tests: {len(media_tests)}")
 
 # Request/Response models
 class CreateMeetingRequest(BaseModel):
@@ -139,6 +162,33 @@ class HealthResponse(BaseModel):
     meetings_count: int
     livekit_connected: bool
     timestamp: str
+
+# New models for patient pre-meeting validation
+class DocumentUploadResponse(BaseModel):
+    document_id: str
+    filename: str
+    upload_timestamp: str
+    status: str
+
+class MediaTestRequest(BaseModel):
+    meeting_id: str
+    has_camera: bool
+    has_microphone: bool
+    camera_working: bool
+    microphone_working: bool
+    patient_confirmed: bool
+
+class MediaTestResponse(BaseModel):
+    test_id: str
+    meeting_id: str
+    status: str
+    timestamp: str
+    allowed_to_join: bool
+
+class PatientJoinRequest(BaseModel):
+    patient_name: str = Field(min_length=1, max_length=50)
+    document_id: Optional[str] = None
+    media_test_id: Optional[str] = None
 
 def generate_meeting_id() -> str:
     """Generate a readable meeting ID format: xxx-yyyy-zzz"""
@@ -346,36 +396,39 @@ async def join_meeting(
 @app.get("/meeting/{meeting_id}", response_class=HTMLResponse)
 async def meeting_room(meeting_id: str):
     """Serve the meeting room page"""
-    try:
-        # Check if meeting exists, create if not (handles Heroku memory loss)
-        if meeting_id not in meetings:
-            logger.info(f"Meeting {meeting_id} not found in memory, recreating entry for meeting room access")
-            # Recreate meeting entry for this meeting ID
-            meetings[meeting_id] = {
-                "id": meeting_id,
-                "room_name": f"meeting-{meeting_id}",
-                "created_at": datetime.now().isoformat(),
-                "host_name": "Host",
-                "participants": [],
-                "is_active": True
-            }
-        
-        with open("frontend/meeting.html", "r", encoding="utf-8") as f:
-            html_content = f.read()
-            # Inject meeting ID and base URL
-            html_content = html_content.replace("{{MEETING_ID}}", meeting_id)
-            html_content = html_content.replace("{{BASE_URL}}", get_base_url())
-            return html_content
-            
-    except FileNotFoundError:
-        logger.error("Meeting room file not found: frontend/meeting.html")
+    # Validate meeting exists
+    if meeting_id not in meetings:
         return HTMLResponse(
-            content="<h1>Meeting room not found</h1><p>Please create frontend/meeting.html</p>",
+            content="<h1>Meeting not found</h1><p>The meeting you're looking for doesn't exist or has expired.</p>",
             status_code=404
         )
-    except Exception as e:
-        logger.error(f"Error serving meeting room {meeting_id}: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+    
+    try:
+        with open("frontend/meeting.html", "r", encoding='utf-8') as f:
+            html_content = f.read()
+            # Replace placeholder with actual meeting ID if needed
+            html_content = html_content.replace("{{MEETING_ID}}", meeting_id)
+            return HTMLResponse(content=html_content)
+    except FileNotFoundError:
+        logger.error("meeting.html not found")
+        return HTMLResponse(
+            content="<h1>Error</h1><p>Meeting page not found. Please check your installation.</p>",
+            status_code=500
+        )
+
+@app.get("/patient-setup", response_class=HTMLResponse)
+async def patient_setup():
+    """Serve the patient setup page for pre-meeting validation"""
+    try:
+        with open("patient_setup.html", "r", encoding='utf-8') as f:
+            html_content = f.read()
+            return HTMLResponse(content=html_content)
+    except FileNotFoundError:
+        logger.error("patient_setup.html not found")
+        return HTMLResponse(
+            content="<h1>Error</h1><p>Patient setup page not found. Please check your installation.</p>",
+            status_code=500
+        )
 
 @app.get("/frontend/app.js")
 async def serve_app_js():
@@ -524,6 +577,224 @@ async def leave_meeting(meeting_id: str, participant_name: str):
             logger.info(f"Cleaned up empty meeting: {meeting_id}")
     
     return {"status": "left"}
+
+@app.post("/api/meetings/{meeting_id}/upload-document", response_model=DocumentUploadResponse)
+async def upload_patient_document(
+    meeting_id: str,
+    file: UploadFile = File(...),
+    patient_name: str = Form(...)
+):
+    """Upload patient document (Krankenkassenschein etc.) before joining meeting"""
+    
+    # Validate meeting exists
+    if meeting_id not in meetings:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    
+    # Validate file type (only allow common document formats)
+    allowed_types = {
+        'application/pdf': '.pdf',
+        'image/jpeg': '.jpg',
+        'image/png': '.png',
+        'image/tiff': '.tiff',
+        'application/msword': '.doc',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx'
+    }
+    
+    if file.content_type not in allowed_types:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Unsupported file type. Allowed: {', '.join(allowed_types.values())}"
+        )
+    
+    # Generate unique document ID
+    document_id = str(uuid.uuid4())
+    
+    # Read file content (in production, save to disk or cloud storage)
+    file_content = await file.read()
+    
+    # Store document metadata
+    patient_documents[document_id] = {
+        "document_id": document_id,
+        "meeting_id": meeting_id,
+        "patient_name": patient_name,
+        "filename": file.filename,
+        "content_type": file.content_type,
+        "file_size": len(file_content),
+        "upload_timestamp": datetime.now().isoformat(),
+        "content": file_content,  # In production: store file path instead
+        "processed": False
+    }
+    
+    logger.info(f"Document uploaded for meeting {meeting_id}: {file.filename} ({len(file_content)} bytes)")
+    
+    return DocumentUploadResponse(
+        document_id=document_id,
+        filename=file.filename,
+        upload_timestamp=datetime.now().isoformat(),
+        status="uploaded"
+    )
+
+@app.post("/api/meetings/{meeting_id}/process-document")
+async def process_patient_document(meeting_id: str, document_id: str = Form(...)):
+    """Process uploaded patient document (placeholder for actual processing logic)"""
+    
+    if document_id not in patient_documents:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    document = patient_documents[document_id]
+    
+    if document["meeting_id"] != meeting_id:
+        raise HTTPException(status_code=400, detail="Document does not belong to this meeting")
+    
+    # Placeholder for actual document processing
+    # In production: OCR, validation, data extraction, etc.
+    document["processed"] = True
+    document["processing_timestamp"] = datetime.now().isoformat()
+    document["processing_result"] = {
+        "status": "success",
+        "extracted_data": {
+            "patient_name": document["patient_name"],
+            "document_type": "insurance_card",  # Example
+            "validation_status": "valid"
+        }
+    }
+    
+    logger.info(f"Document processed for meeting {meeting_id}: {document_id}")
+    
+    return {
+        "document_id": document_id,
+        "status": "processed",
+        "processing_timestamp": datetime.now().isoformat(),
+        "result": document["processing_result"]
+    }
+
+@app.post("/api/meetings/{meeting_id}/media-test", response_model=MediaTestResponse)
+async def submit_media_test(meeting_id: str, request: MediaTestRequest):
+    """Submit patient media test results"""
+    
+    # Validate meeting exists
+    if meeting_id not in meetings:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    
+    if request.meeting_id != meeting_id:
+        raise HTTPException(status_code=400, detail="Meeting ID mismatch")
+    
+    # Generate test ID
+    test_id = str(uuid.uuid4())
+    
+    # Determine if patient is allowed to join
+    allowed_to_join = (
+        request.has_camera and 
+        request.has_microphone and 
+        request.camera_working and 
+        request.microphone_working and 
+        request.patient_confirmed
+    )
+    
+    # Store test results
+    media_tests[test_id] = {
+        "test_id": test_id,
+        "meeting_id": meeting_id,
+        "has_camera": request.has_camera,
+        "has_microphone": request.has_microphone,
+        "camera_working": request.camera_working,
+        "microphone_working": request.microphone_working,
+        "patient_confirmed": request.patient_confirmed,
+        "allowed_to_join": allowed_to_join,
+        "timestamp": datetime.now().isoformat()
+    }
+    
+    logger.info(f"Media test completed for meeting {meeting_id}: allowed={allowed_to_join}")
+    
+    return MediaTestResponse(
+        test_id=test_id,
+        meeting_id=meeting_id,
+        status="completed",
+        timestamp=datetime.now().isoformat(),
+        allowed_to_join=allowed_to_join
+    )
+
+@app.post("/api/meetings/{meeting_id}/join-patient", response_model=MeetingResponse)
+async def patient_join_meeting(
+    meeting_id: str,
+    request: PatientJoinRequest,
+    livekit_client: LiveKitClient = Depends(get_livekit_client)
+):
+    """Patient join meeting with document and media test validation"""
+    
+    # Validate meeting exists
+    if meeting_id not in meetings:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    
+    meeting_data = meetings[meeting_id]
+    
+    # Validate document upload (optional but recommended)
+    if request.document_id:
+        if request.document_id not in patient_documents:
+            raise HTTPException(status_code=400, detail="Document not found")
+        document = patient_documents[request.document_id]
+        if not document.get("processed", False):
+            raise HTTPException(status_code=400, detail="Document not yet processed")
+    
+    # Validate media test (required)
+    if not request.media_test_id:
+        raise HTTPException(status_code=400, detail="Media test required before joining")
+    
+    if request.media_test_id not in media_tests:
+        raise HTTPException(status_code=400, detail="Media test not found")
+    
+    media_test = media_tests[request.media_test_id]
+    if not media_test["allowed_to_join"]:
+        raise HTTPException(
+            status_code=400, 
+            detail="Media test failed. Please ensure your camera and microphone are working properly."
+        )
+    
+    # Check for duplicate participants (patients should be unique per meeting)
+    if meeting_id not in active_participants:
+        active_participants[meeting_id] = set()
+    
+    participant_key = f"patient_{request.patient_name.lower()}"
+    if participant_key in active_participants[meeting_id]:
+        raise HTTPException(status_code=409, detail="Patient already in meeting")
+    
+    # Add patient to active participants
+    active_participants[meeting_id].add(participant_key)
+    
+    try:
+        # Generate token for patient (participant role)
+        token = livekit_client.generate_token(
+            room_name=meeting_id,
+            participant_name=f"Patient: {request.patient_name}",
+            role="participant"  # Limited permissions for patients
+        )
+        
+        # Update meeting data
+        meeting_data["participants"].append({
+            "name": request.patient_name,
+            "role": "patient",
+            "joined_at": datetime.now().isoformat(),
+            "document_id": request.document_id,
+            "media_test_id": request.media_test_id
+        })
+        
+        participants_count = len(meeting_data["participants"])
+        
+        logger.info(f"Patient {request.patient_name} joined meeting {meeting_id}")
+        
+        return MeetingResponse(
+            meeting_id=meeting_id,
+            meeting_url=f"{get_base_url()}/meeting/{meeting_id}",
+            livekit_url=livekit_client.livekit_url,
+            token=token,
+            participants_count=participants_count
+        )
+        
+    except Exception as e:
+        # Remove from active participants if token generation fails
+        active_participants[meeting_id].discard(participant_key)
+        logger.error(f"Failed to generate token for patient {request.patient_name}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to join meeting")
 
 # Error handlers
 @app.exception_handler(404)
