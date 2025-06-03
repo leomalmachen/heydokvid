@@ -720,10 +720,11 @@ async def patient_setup():
                 
                 <!-- Step 2: Document Upload -->
                 <div class="step disabled" id="step2">
-                    <h3>Schritt 2: Dokument hochladen</h3>
-                    <p>Bitte laden Sie Ihren Krankenkassenschein oder ein anderes Dokument hoch:</p>
+                    <h3>Schritt 2: Dokument hochladen (optional)</h3>
+                    <p>Falls vorhanden, können Sie Ihren Krankenkassenschein oder ein anderes Dokument hochladen:</p>
                     <input type="file" id="documentFile" accept=".pdf,.jpg,.jpeg,.png,.tiff,.doc,.docx">
                     <button onclick="uploadDocument()" disabled id="uploadBtn">Dokument hochladen</button>
+                    <button onclick="skipDocument()" id="skipBtn" style="background: #6c757d; margin-left: 10px;">Überspringen (kein Dokument)</button>
                     <div id="uploadStatus"></div>
                 </div>
                 
@@ -742,9 +743,9 @@ async def patient_setup():
                 
                 <!-- Step 4: Join Meeting -->
                 <div class="step disabled" id="step4">
-                    <h3>Schritt 4: Meeting beitreten</h3>
-                    <p>✅ Alle Schritte abgeschlossen! Sie können jetzt dem Meeting beitreten.</p>
-                    <button onclick="joinMeeting()" id="joinBtn">Meeting beitreten</button>
+                    <h3>🎉 Bereit für die Sprechstunde!</h3>
+                    <p>✅ Alle Schritte abgeschlossen! Sie können nun der Sprechstunde beitreten.</p>
+                    <button onclick="joinMeeting()" id="joinBtn" style="background: #28a745; font-size: 18px; padding: 15px 30px;">Bereit für die Sprechstunde</button>
                 </div>
             </div>
             
@@ -807,10 +808,7 @@ async def patient_setup():
                             document.getElementById('uploadStatus').innerHTML = '<div class="status success">✅ Dokument erfolgreich hochgeladen</div>';
                             
                             // Complete step 2
-                            document.getElementById('step2').classList.remove('active');
-                            document.getElementById('step2').classList.add('completed');
-                            document.getElementById('step3').classList.remove('disabled');
-                            document.getElementById('step3').classList.add('active');
+                            completeStep2();
                         } else {
                             const error = await response.json();
                             document.getElementById('uploadStatus').innerHTML = `<div class="status error">❌ Fehler: ${error.detail}</div>`;
@@ -818,6 +816,21 @@ async def patient_setup():
                     } catch (error) {
                         document.getElementById('uploadStatus').innerHTML = '<div class="status error">❌ Fehler beim Hochladen</div>';
                     }
+                }
+                
+                // Skip document upload
+                function skipDocument() {
+                    document.getElementById('uploadStatus').innerHTML = '<div class="status">ℹ️ Dokument-Upload übersprungen</div>';
+                    documentId = null;
+                    completeStep2();
+                }
+                
+                // Complete step 2 (shared by upload and skip)
+                function completeStep2() {
+                    document.getElementById('step2').classList.remove('active');
+                    document.getElementById('step2').classList.add('completed');
+                    document.getElementById('step3').classList.remove('disabled');
+                    document.getElementById('step3').classList.add('active');
                 }
                 
                 // Step 3: Media Test
@@ -860,16 +873,19 @@ async def patient_setup():
                             const data = await response.json();
                             mediaTestId = data.test_id;
                             
-                            if (data.allowed_to_join) {
-                                document.getElementById('mediaStatus').innerHTML = '<div class="status success">✅ Media-Test erfolgreich</div>';
+                            if (data.allowed_to_join && working) {
+                                document.getElementById('mediaStatus').innerHTML = '<div class="status success">✅ Perfekt! Kamera und Mikrofon funktionieren</div>';
                                 
                                 // Complete step 3
                                 document.getElementById('step3').classList.remove('active');
                                 document.getElementById('step3').classList.add('completed');
                                 document.getElementById('step4').classList.remove('disabled');
                                 document.getElementById('step4').classList.add('active');
+                                
+                                // Scroll to final step
+                                document.getElementById('step4').scrollIntoView({ behavior: 'smooth' });
                             } else {
-                                document.getElementById('mediaStatus').innerHTML = '<div class="status error">❌ Media-Test fehlgeschlagen. Bitte stellen Sie sicher, dass Kamera und Mikrofon funktionieren.</div>';
+                                document.getElementById('mediaStatus').innerHTML = '<div class="status error">❌ Bitte stellen Sie sicher, dass Kamera und Mikrofon funktionieren, bevor Sie fortfahren.</div>';
                                 // Reset test
                                 document.getElementById('videoContainer').classList.add('hidden');
                                 document.getElementById('startTestBtn').style.display = 'block';
