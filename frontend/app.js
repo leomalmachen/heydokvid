@@ -677,25 +677,25 @@ function updateConsistentGrid() {
         videoGrid.style.placeItems = 'center';
         videoGrid.style.gap = '2rem';
         
-        // Perfect sizing for 2 participants
+        // LARGER sizing for 2 participants - better visibility
         containers.forEach((container, index) => {
-            container.style.width = 'min(45vw, 500px)';
-            container.style.height = 'min(60vh, 375px)';
-            container.style.maxWidth = '500px';
-            container.style.maxHeight = '375px';
-            console.log(`📋 Container ${index + 1} sized for 2-person layout`);
+            container.style.width = 'min(55vw, 650px)';
+            container.style.height = 'min(70vh, 485px)';
+            container.style.maxWidth = '650px';
+            container.style.maxHeight = '485px';
+            console.log(`📋 Container ${index + 1} sized for 2-person layout (LARGER)`);
         });
         
     } else if (count <= 4) {
-        // 3-4 participants - 2x2 grid
+        // 3-4 participants - 2x2 grid (also slightly larger)
         console.log('📋 3-4 participants - 2x2 grid');
         videoGrid.style.gridTemplateColumns = 'repeat(2, 1fr)';
         videoGrid.style.gridTemplateRows = 'repeat(2, 1fr)';
         videoGrid.style.gap = '1rem';
         
         containers.forEach(container => {
-            container.style.width = 'min(40vw, 400px)';
-            container.style.height = 'min(30vh, 300px)';
+            container.style.width = 'min(45vw, 450px)';
+            container.style.height = 'min(35vh, 340px)';
         });
         
     } else {
