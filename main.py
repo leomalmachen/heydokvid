@@ -569,8 +569,8 @@ async def meeting_room(meeting_id: str, role: Optional[str] = None):
     
     meeting_data = meetings[meeting_id]
     
-    # Determine user role (default to doctor if not specified)
-    user_role = role or "doctor"
+    # Determine user role (default to patient if not specified - doctors must explicitly specify role=doctor)
+    user_role = role or "patient"
     
     # For patients, check if they have completed setup
     if user_role == "patient":
@@ -582,12 +582,42 @@ async def meeting_room(meeting_id: str, role: Optional[str] = None):
             setup_url = f"{get_base_url()}/patient-setup?meeting={meeting_id}"
             return HTMLResponse(
                 content=f"""
-                <h1>Setup erforderlich</h1>
-                <p>Sie müssen zuerst das Patient-Setup abschließen bevor Sie dem Meeting beitreten können.</p>
-                <p><a href="{setup_url}">Zum Patient-Setup</a></p>
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>Setup erforderlich - HeyDok Video</title>
+                    <meta charset="utf-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1">
+                    <style>
+                        body {{ font-family: Arial, sans-serif; margin: 20px; background: #f8f9fa; text-align: center; }}
+                        .container {{ max-width: 600px; margin: 50px auto; background: white; padding: 40px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
+                        h1 {{ color: #007bff; }}
+                        .button {{ background: #007bff; color: white; padding: 15px 30px; border: none; border-radius: 5px; font-size: 18px; text-decoration: none; display: inline-block; margin: 20px 0; }}
+                        .button:hover {{ background: #0056b3; }}
+                    </style>
+                    <script>
+                        // Auto-redirect after 3 seconds
+                        setTimeout(function() {{
+                            window.location.href = '{setup_url}';
+                        }}, 3000);
+                    </script>
+                </head>
+                <body>
+                    <div class="container">
+                        <h1>🏥 Patient Setup erforderlich</h1>
+                        <p>Bevor Sie dem Meeting beitreten können, müssen Sie die folgenden Schritte abschließen:</p>
+                        <ul style="text-align: left; display: inline-block;">
+                            <li>✍️ Namenseingabe</li>
+                            <li>📄 Dokument hochladen (z.B. Krankenkassenschein)</li>
+                            <li>🎥 Kamera und Mikrofon testen</li>
+                        </ul>
+                        <p>Sie werden automatisch weitergeleitet...</p>
+                        <a href="{setup_url}" class="button">Jetzt Setup starten</a>
+                    </div>
+                </body>
+                </html>
                 """,
-                status_code=302,
-                headers={"Location": setup_url}
+                status_code=200
             )
     
     try:
