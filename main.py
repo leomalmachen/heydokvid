@@ -145,11 +145,11 @@ def cleanup_old_meetings():
 # Request/Response models
 class CreateMeetingRequest(BaseModel):
     host_name: str = Field(default="Host", min_length=1, max_length=50)
-    host_role: str = Field(default="doctor", regex="^(doctor|patient)$")  # New: explicit role
+    host_role: str = Field(default="doctor", pattern="^(doctor|patient)$")  # Fixed: regex -> pattern
 
 class JoinMeetingRequest(BaseModel):
     participant_name: str = Field(min_length=1, max_length=50)
-    participant_role: str = Field(default="patient", regex="^(doctor|patient)$")  # New: explicit role
+    participant_role: str = Field(default="patient", pattern="^(doctor|patient)$")  # Fixed: regex -> pattern
 
 class MeetingResponse(BaseModel):
     meeting_id: str
