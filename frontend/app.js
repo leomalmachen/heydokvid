@@ -514,67 +514,107 @@ function updateConsistentGrid() {
     const videoGrid = document.getElementById('videoGrid');
     const containers = document.querySelectorAll('.participant-container');
     
-    if (!videoGrid) return;
+    if (!videoGrid) {
+        console.error('❌ videoGrid element not found!');
+        return;
+    }
     
     const count = containers.length;
-    console.log('📐 Updating CONSISTENT grid for', count, 'participants');
+    console.log('📐 FIXING GRID for', count, 'participants');
     console.log('📋 Container IDs:', Array.from(containers).map(c => c.id));
     
-    // Remove all previous classes and styles
-    videoGrid.className = '';
+    // CRITICAL: Clear all existing styles and classes
+    videoGrid.className = 'video-grid';
+    videoGrid.style.cssText = '';
+    
+    // BULLETPROOF: Apply base grid styles
     videoGrid.style.display = 'grid';
     videoGrid.style.gap = '1rem';
     videoGrid.style.padding = '1rem';
-    videoGrid.style.height = '100%';
-    videoGrid.style.width = '100%';
-    videoGrid.style.flex = '1';
-    videoGrid.style.alignItems = 'stretch';
-    videoGrid.style.justifyItems = 'stretch';
+    videoGrid.style.height = '100vh';
+    videoGrid.style.width = '100vw';
+    videoGrid.style.boxSizing = 'border-box';
+    videoGrid.style.alignItems = 'center';
+    videoGrid.style.justifyItems = 'center';
+    videoGrid.style.background = '#202124';
     
-    // CONSISTENT: Google Meet style layout for ALL scenarios
+    // GOOGLE MEET STYLE: Perfect layout for ALL scenarios
     if (count === 0) {
-        // No participants yet - show loading
-        console.log('📋 No participants to display');
+        console.log('📋 No participants - showing loading');
         return;
     } else if (count === 1) {
-        // Single participant - centered
+        // Single participant - centered, large
+        console.log('📋 1 participant - centered layout');
         videoGrid.style.gridTemplateColumns = '1fr';
-        videoGrid.style.maxWidth = '600px';
-        videoGrid.style.margin = '0 auto';
-        videoGrid.style.gridAutoRows = 'minmax(300px, 1fr)';
+        videoGrid.style.gridTemplateRows = '1fr';
+        videoGrid.style.placeItems = 'center';
+        
+        // Make single container large but not full screen
+        containers[0].style.width = 'min(80vw, 600px)';
+        containers[0].style.height = 'min(60vh, 450px)';
+        
     } else if (count === 2) {
-        // Two participants - ALWAYS side by side (consistent for ALL users)
-        videoGrid.style.gridTemplateColumns = 'repeat(2, 1fr)';
-        videoGrid.style.maxWidth = 'none';
-        videoGrid.style.margin = '0';
-        videoGrid.style.gridAutoRows = 'minmax(250px, 1fr)';
+        // CRITICAL: Two participants - PERFECT Google Meet style side-by-side
+        console.log('📋 2 participants - Google Meet side-by-side layout');
+        videoGrid.style.gridTemplateColumns = '1fr 1fr';
+        videoGrid.style.gridTemplateRows = '1fr';
+        videoGrid.style.placeItems = 'center';
+        videoGrid.style.gap = '2rem';
+        
+        // Perfect sizing for 2 participants
+        containers.forEach((container, index) => {
+            container.style.width = 'min(45vw, 500px)';
+            container.style.height = 'min(60vh, 375px)';
+            container.style.maxWidth = '500px';
+            container.style.maxHeight = '375px';
+            console.log(`📋 Container ${index + 1} sized for 2-person layout`);
+        });
+        
     } else if (count <= 4) {
         // 3-4 participants - 2x2 grid
+        console.log('📋 3-4 participants - 2x2 grid');
         videoGrid.style.gridTemplateColumns = 'repeat(2, 1fr)';
-        videoGrid.style.maxWidth = 'none';
-        videoGrid.style.margin = '0';
-        videoGrid.style.gridAutoRows = 'minmax(200px, 1fr)';
+        videoGrid.style.gridTemplateRows = 'repeat(2, 1fr)';
+        videoGrid.style.gap = '1rem';
+        
+        containers.forEach(container => {
+            container.style.width = 'min(40vw, 400px)';
+            container.style.height = 'min(30vh, 300px)';
+        });
+        
     } else {
         // Many participants - responsive grid
-        videoGrid.style.gridTemplateColumns = 'repeat(auto-fit, minmax(250px, 1fr))';
-        videoGrid.style.maxWidth = 'none';
-        videoGrid.style.margin = '0';
-        videoGrid.style.gridAutoRows = 'minmax(180px, 1fr)';
+        console.log('📋 5+ participants - responsive grid');
+        const cols = Math.ceil(Math.sqrt(count));
+        videoGrid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
         videoGrid.style.gap = '0.5rem';
+        
+        containers.forEach(container => {
+            container.style.width = 'min(30vw, 250px)';
+            container.style.height = 'min(25vh, 200px)';
+        });
     }
     
-    console.log('✅ CONSISTENT grid applied:', {
+    console.log('✅ PERFECT GRID applied:', {
         participants: count,
         columns: videoGrid.style.gridTemplateColumns,
-        layout: 'Google Meet style'
+        layout: count === 2 ? 'Google Meet Side-by-Side' : 'Grid'
     });
     
-    // DEBUGGING: Log all current containers
-    console.log('🔍 Current participants in DOM:');
+    // ENHANCED DEBUGGING: Log all current containers with video status
+    console.log('🔍 DETAILED participant status:');
     containers.forEach((container, index) => {
         const nameLabel = container.querySelector('.participant-name');
-        const hasVideo = container.querySelector('video');
-        console.log(`  ${index + 1}. ${container.id} - ${nameLabel?.textContent} - Video: ${hasVideo ? 'Yes' : 'No'}`);
+        const video = container.querySelector('video');
+        const hasVideoSrc = video && (video.srcObject || video.src);
+        const videoDisplay = video ? video.style.display : 'none';
+        
+        console.log(`  ${index + 1}. ID: ${container.id}`);
+        console.log(`     Name: ${nameLabel?.textContent || 'No name'}`);
+        console.log(`     Video element: ${video ? 'Yes' : 'No'}`);
+        console.log(`     Video source: ${hasVideoSrc ? 'Yes' : 'No'}`);
+        console.log(`     Video display: ${videoDisplay}`);
+        console.log(`     Container size: ${container.style.width} x ${container.style.height}`);
     });
 }
 
@@ -621,35 +661,6 @@ function updateParticipantCount() {
     
     // Update page title
     document.title = `HeyDok Video (${totalParticipants} Teilnehmer)`;
-}
-
-// GOOGLE MEET STYLE: Update video grid layout
-function updateVideoGridLayout() {
-    const videoGrid = document.getElementById('videoGrid');
-    if (!videoGrid) return;
-    
-    const containers = videoGrid.querySelectorAll('.participant-container');
-    const participantCount = containers.length;
-    
-    console.log(`🎨 Updating grid layout for ${participantCount} participants`);
-    
-    // Remove existing grid classes
-    videoGrid.className = 'video-grid';
-    
-    // Apply grid layout based on participant count
-    if (participantCount === 1) {
-        videoGrid.classList.add('grid-1');
-    } else if (participantCount === 2) {
-        videoGrid.classList.add('grid-2');
-    } else if (participantCount <= 4) {
-        videoGrid.classList.add('grid-4');
-    } else if (participantCount <= 6) {
-        videoGrid.classList.add('grid-6');
-    } else {
-        videoGrid.classList.add('grid-many');
-    }
-    
-    console.log(`✅ Grid updated with class: grid-${participantCount <= 4 ? participantCount : participantCount <= 6 ? '6' : 'many'}`);
 }
 
 function showError(message) {
@@ -1012,13 +1023,27 @@ function handleParticipantDisconnected(participant) {
 // ULTRA-ROBUST: Handle track subscription (when video/audio arrives)
 function handleTrackSubscribed(track, publication, participant) {
     console.log(`🎵 TRACK SUBSCRIBED: ${track.kind} from ${participant.identity}`);
+    console.log(`🎵 Track details:`, {
+        kind: track.kind,
+        sid: track.sid,
+        participant: participant.identity,
+        participantSid: participant.sid
+    });
     
     // Get participant container - use CONSISTENT ID scheme
     const container = document.getElementById(`participant-${participant.sid}`);
     if (!container) {
         console.warn('⚠️ No container found for participant:', participant.identity);
+        console.warn('⚠️ Creating missing container...');
         // Try to create it
-        createConsistentContainer(participant, false);
+        const newContainer = createConsistentContainer(participant, false);
+        if (!newContainer) {
+            console.error('❌ Failed to create container for participant:', participant.identity);
+            return;
+        }
+        console.log('✅ Container created for participant:', participant.identity);
+        // Give the container a moment to be added to DOM
+        setTimeout(() => handleTrackSubscribed(track, publication, participant), 100);
         return;
     }
     
@@ -1029,13 +1054,35 @@ function handleTrackSubscribed(track, publication, participant) {
         const video = container.querySelector('video');
         if (!video) {
             console.error('❌ No video element found in container for:', participant.identity);
+            console.error('❌ Container HTML:', container.innerHTML);
             return;
         }
         
-        track.attach(video);
+        console.log('📹 Video element found, attaching track...');
         
-        // Show video, hide avatar
-        video.style.display = 'block';
+        // CRITICAL: Attach track properly
+        try {
+            track.attach(video);
+            
+            // IMPORTANT: Ensure video is visible and playing
+            video.style.display = 'block';
+            video.style.visibility = 'visible';
+            video.style.opacity = '1';
+            
+            // Try to play the video
+            video.play().then(() => {
+                console.log('✅ Video playing successfully for:', participant.identity);
+            }).catch(e => {
+                console.warn('⚠️ Video autoplay prevented for:', participant.identity, e);
+                // This is usually okay, user interaction will start playback
+            });
+            
+            console.log('✅ Video track attached and made visible for:', participant.identity);
+            
+        } catch (error) {
+            console.error('❌ Failed to attach video track for:', participant.identity, error);
+            return;
+        }
         
         // Handle video track events
         track.on(LiveKit.TrackEvent.Muted, () => {
@@ -1048,7 +1095,8 @@ function handleTrackSubscribed(track, publication, participant) {
             video.style.display = 'block';
         });
         
-        console.log('✅ Video track attached successfully for:', participant.identity);
+        // CRITICAL: Update grid layout after video is attached
+        updateConsistentGrid();
         
     } else if (track.kind === 'audio') {
         console.log('🔊 Attaching AUDIO track for:', participant.identity);
@@ -1058,12 +1106,19 @@ function handleTrackSubscribed(track, publication, participant) {
         audio.autoplay = true;
         audio.muted = false; // Remote audio should NOT be muted
         audio.volume = 1.0;
+        audio.style.display = 'none'; // Audio elements don't need to be visible
         
-        track.attach(audio);
-        container.appendChild(audio);
-        
-        console.log('✅ Audio track attached successfully for:', participant.identity);
+        try {
+            track.attach(audio);
+            container.appendChild(audio);
+            
+            console.log('✅ Audio track attached successfully for:', participant.identity);
+        } catch (error) {
+            console.error('❌ Failed to attach audio track for:', participant.identity, error);
+        }
     }
+    
+    console.log('🎵 Track subscription completed for:', participant.identity, track.kind);
 }
 
 // Handle track unsubscription
