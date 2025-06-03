@@ -1187,13 +1187,14 @@ async def submit_media_test(meeting_id: str, request: MediaTestRequest):
     test_id = str(uuid.uuid4())
     
     # Determine if patient is allowed to join
-    allowed_to_join = (
-        request.has_camera and 
-        request.has_microphone and 
-        request.camera_working and 
-        request.microphone_working and 
-        request.patient_confirmed
-    )
+    # Simplified logic: If patient confirms everything works, allow them to join
+    # This is more user-friendly than requiring all technical checks
+    allowed_to_join = request.patient_confirmed
+    
+    # Log the details for debugging but don't block based on technical checks
+    logger.info(f"Media test for meeting {meeting_id}: confirmed={request.patient_confirmed}, "
+                f"has_camera={request.has_camera}, has_microphone={request.has_microphone}, "
+                f"camera_working={request.camera_working}, microphone_working={request.microphone_working}")
     
     # Store test results
     media_tests[test_id] = {
