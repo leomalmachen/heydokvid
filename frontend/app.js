@@ -659,15 +659,19 @@ function updateConsistentGrid() {
         console.log('📋 No participants - showing loading');
         return;
     } else if (count === 1) {
-        // Single participant - centered, large
-        console.log('📋 1 participant - centered layout');
+        // Single participant - MUCH LARGER centered layout
+        console.log('📋 1 participant - MUCH LARGER centered layout');
         videoGrid.style.gridTemplateColumns = '1fr';
         videoGrid.style.gridTemplateRows = '1fr';
         videoGrid.style.placeItems = 'center';
         
-        // Make single container large but not full screen
-        containers[0].style.width = 'min(80vw, 600px)';
-        containers[0].style.height = 'min(60vh, 450px)';
+        // HUGE container for single participant - almost fullscreen
+        containers[0].style.width = 'min(90vw, 1000px)';
+        containers[0].style.height = 'min(85vh, 750px)';
+        containers[0].style.maxWidth = '1000px';
+        containers[0].style.maxHeight = '750px';
+        
+        console.log('📋 Single container sized HUGE for solo view');
         
     } else if (count === 2) {
         // CRITICAL: Two participants - MUCH LARGER Google Meet style side-by-side

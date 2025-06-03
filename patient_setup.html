@@ -423,6 +423,7 @@
 
         // PREVENT MULTIPLE CLICKS
         let isJoining = false;
+        let joinTimeout = null;
 
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
@@ -440,7 +441,32 @@
             
             // BULLETPROOF: Setup join button with proper event handling
             setupJoinButton();
+            
+            // ULTRA-PROTECTION: Reset isJoining flag every 30 seconds as failsafe
+            setInterval(() => {
+                if (isJoining && joinTimeout) {
+                    const timeElapsed = Date.now() - joinTimeout;
+                    if (timeElapsed > 30000) { // 30 seconds
+                        console.warn('🔄 Force-resetting isJoining flag after 30s timeout');
+                        resetJoinButton();
+                    }
+                }
+            }, 5000);
         });
+        
+        // RESET FUNCTION
+        function resetJoinButton() {
+            isJoining = false;
+            joinTimeout = null;
+            const joinBtn = document.getElementById('joinMeetingBtn');
+            if (joinBtn) {
+                joinBtn.style.pointerEvents = '';
+                joinBtn.style.opacity = '';
+                joinBtn.innerHTML = 'Der Sprechstunde beitreten';
+                joinBtn.disabled = false;
+            }
+            console.log('🔄 Join button reset');
+        }
         
         // BULLETPROOF JOIN BUTTON SETUP
         function setupJoinButton() {
@@ -451,7 +477,7 @@
             const newBtn = joinBtn.cloneNode(true);
             joinBtn.parentNode.replaceChild(newBtn, joinBtn);
             
-            // Add single, controlled event listener
+            // Add single, controlled event listener with maximum protection
             newBtn.addEventListener('click', function(event) {
                 event.preventDefault();
                 event.stopPropagation();
@@ -459,28 +485,39 @@
                 
                 console.log('🔘 Join button clicked, isJoining:', isJoining);
                 
-                if (!isJoining) {
+                // TRIPLE CHECK
+                if (!isJoining && !joinTimeout) {
+                    joinTimeout = Date.now();
                     joinMeeting();
                 } else {
-                    console.log('⚠️ Already joining, click ignored');
+                    console.log('⚠️ Click ignored - already joining or timeout active');
                 }
             }, { once: false, passive: false });
             
-            console.log('✅ Join button setup completed');
+            // ADDITIONAL PROTECTION: Disable button on any interaction
+            newBtn.addEventListener('mousedown', function(event) {
+                if (isJoining) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    event.stopImmediatePropagation();
+                }
+            }, { passive: false });
+            
+            console.log('✅ Join button setup completed with ultra-protection');
         }
 
         async function joinMeeting() {
             console.log('🚀 joinMeeting() called, current isJoining:', isJoining);
             
             // ULTRA-BULLETPROOF: Multiple layers of protection
-            if (isJoining) {
-                console.log('❌ Already joining, aborting');
+            if (isJoining || joinTimeout === null) {
+                console.log('❌ Already joining or no timeout set, aborting');
                 return;
             }
             
             // Set flag immediately
             isJoining = true;
-            console.log('🔒 isJoining set to true');
+            console.log('🔒 isJoining set to true at', new Date().toISOString());
             
             try {
                 const joinBtn = document.getElementById('joinMeetingBtn');
@@ -491,7 +528,7 @@
                 
                 // Disable button immediately with visual feedback
                 joinBtn.style.pointerEvents = 'none';
-                joinBtn.style.opacity = '0.6';
+                joinBtn.style.opacity = '0.5';
                 joinBtn.innerHTML = '<span class="loading"></span>Beitritt läuft...';
                 joinBtn.disabled = true;
                 
@@ -537,15 +574,7 @@
                 showStatus('error', `Beitritt fehlgeschlagen: ${error.message}`);
                 
                 // Reset everything on error
-                const joinBtn = document.getElementById('joinMeetingBtn');
-                if (joinBtn) {
-                    joinBtn.style.pointerEvents = '';
-                    joinBtn.style.opacity = '';
-                    joinBtn.innerHTML = 'Der Sprechstunde beitreten';
-                    joinBtn.disabled = false;
-                }
-                isJoining = false;
-                console.log('🔓 Reset isJoining to false after error');
+                resetJoinButton();
             }
         }
 
