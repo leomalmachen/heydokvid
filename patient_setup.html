@@ -333,10 +333,10 @@
             <div class="step" id="step2">
                 <div class="step-header">
                     <div class="step-number">2</div>
-                    <div class="step-title">Krankenkassenschein hochladen</div>
+                    <div class="step-title">Krankenkassenschein hochladen (optional)</div>
                 </div>
                 <p style="margin-bottom: 1rem; color: #666;">
-                    Bitte laden Sie Ihren Krankenkassenschein oder ein anderes relevantes Dokument hoch.
+                    Falls vorhanden, können Sie Ihren Krankenkassenschein oder ein anderes relevantes Dokument hochladen.
                 </p>
                 <div class="file-upload" onclick="document.getElementById('documentFile').click()">
                     <div style="font-size: 3rem;">📄</div>
@@ -347,7 +347,10 @@
                     <input type="file" id="documentFile" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" onchange="handleFileSelect(event)">
                 </div>
                 <div id="uploadStatus"></div>
-                <button class="btn" id="step2Next" onclick="nextStep(2)" disabled>Weiter</button>
+                <div style="margin-top: 1rem;">
+                    <button class="btn" id="step2Next" onclick="nextStep(2)" disabled>Weiter</button>
+                    <button class="btn" id="skipDocumentBtn" onclick="skipDocument()" style="background: #6c757d; margin-left: 10px;">Überspringen (kein Dokument)</button>
+                </div>
             </div>
 
             <!-- Step 3: Media Test -->
@@ -378,15 +381,15 @@
 
                 <div class="checkbox-group">
                     <div class="checkbox-item">
-                        <input type="checkbox" id="cameraWorking">
+                        <input type="checkbox" id="cameraWorking" onchange="checkMediaTestCompletion()">
                         <label for="cameraWorking">Ich kann mich selbst in der Kamera sehen</label>
                     </div>
                     <div class="checkbox-item">
-                        <input type="checkbox" id="microphoneWorking">
+                        <input type="checkbox" id="microphoneWorking" onchange="checkMediaTestCompletion()">
                         <label for="microphoneWorking">Mein Mikrofon zeigt Aktivität bei Sprache</label>
                     </div>
                     <div class="checkbox-item">
-                        <input type="checkbox" id="confirmWorking">
+                        <input type="checkbox" id="confirmWorking" onchange="checkMediaTestCompletion()">
                         <label for="confirmWorking"><strong>Meine Kamera und Mikrofon funktionieren</strong></label>
                     </div>
                 </div>
@@ -453,10 +456,7 @@
                 document.getElementById('step2').classList.add('active');
                 currentStep = 2;
             } else if (step === 2) {
-                if (!documentId) {
-                    showStatus('error', 'Bitte laden Sie zuerst ein Dokument hoch.');
-                    return;
-                }
+                // Document upload is optional, so we can proceed even without a document
                 document.getElementById('step2').classList.remove('active');
                 document.getElementById('step2').classList.add('completed');
                 document.getElementById('step3').classList.add('active');
@@ -468,6 +468,12 @@
                 }
                 submitMediaTest();
             }
+        }
+
+        function skipDocument() {
+            documentId = null; // No document uploaded
+            showStatus('success', 'Dokument-Upload übersprungen. Sie können trotzdem fortfahren.', 'uploadStatus');
+            document.getElementById('step2Next').disabled = false;
         }
 
         function setupFileUpload() {
@@ -619,6 +625,19 @@
             const confirmWorking = document.getElementById('confirmWorking').checked;
 
             return cameraWorking && microphoneWorking && confirmWorking;
+        }
+
+        function checkMediaTestCompletion() {
+            const cameraWorking = document.getElementById('cameraWorking').checked;
+            const microphoneWorking = document.getElementById('microphoneWorking').checked;
+            const confirmWorking = document.getElementById('confirmWorking').checked;
+
+            if (cameraWorking && microphoneWorking && confirmWorking) {
+                document.getElementById('step3Next').disabled = false;
+                showStatus('success', 'Perfekt! Alle Tests bestätigt. Sie können nun fortfahren.');
+            } else {
+                document.getElementById('step3Next').disabled = true;
+            }
         }
 
         async function submitMediaTest() {
