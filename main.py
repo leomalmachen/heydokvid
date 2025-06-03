@@ -426,8 +426,7 @@ async def create_meeting(
     token = livekit_client.generate_token(
         room_name=room_name,
         participant_name=f"Dr. {request.host_name}",
-        is_host=True,
-        metadata={"role": "doctor", "permissions": ["admin", "record", "moderate"]}
+        is_host=True
     )
     
     # Store meeting with role-based structure
@@ -956,8 +955,7 @@ async def patient_join_meeting(
         token = livekit_client.generate_token(
             room_name=meeting_data["room_name"],
             participant_name=f"Patient: {request.patient_name}",
-            is_host=False,
-            metadata={"role": "patient", "permissions": ["participant"]}
+            is_host=False
         )
         
         # Update meeting data with patient information
@@ -1073,8 +1071,7 @@ async def doctor_join_meeting(
         token = livekit_client.generate_token(
             room_name=meeting_data["room_name"],
             participant_name=f"Dr. {request.participant_name}",
-            is_host=True,
-            metadata={"role": "doctor", "permissions": ["admin", "record", "moderate"]}
+            is_host=True
         )
         
         # Update meeting status
