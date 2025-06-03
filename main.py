@@ -395,10 +395,12 @@ async def homepage():
                             document.getElementById('patientLink').value = data.meeting_status.patient_setup_url;
                             document.getElementById('meetingResult').style.display = 'block';
                             
-                            // Add doctor meeting link
+                            // Add doctor meeting link WITH TOKEN
                             const doctorLinkContainer = document.getElementById('doctorLinkContainer');
                             if (doctorLinkContainer) {{
-                                document.getElementById('doctorMeetingLink').href = `/meeting/${{data.meeting_id}}?role=doctor`;
+                                // Store meeting data in sessionStorage so doctor can use it directly
+                                sessionStorage.setItem('doctorMeetingData', JSON.stringify(data));
+                                document.getElementById('doctorMeetingLink').href = `/meeting/${{data.meeting_id}}?role=doctor&direct=true`;
                                 doctorLinkContainer.style.display = 'block';
                             }}
                             
@@ -440,9 +442,10 @@ async def create_meeting(
     room_name = livekit_client.get_room_name(meeting_id)
     
     # Generate doctor token with admin permissions
+    doctor_display_name = f"Dr. {request.host_name}"
     token = livekit_client.generate_token(
         room_name=room_name,
-        participant_name=f"Dr. {request.host_name}",
+        participant_name=doctor_display_name,
         is_host=True
     )
     
@@ -452,6 +455,7 @@ async def create_meeting(
         "room_name": room_name,
         "created_at": datetime.now().isoformat(),
         "doctor_name": request.host_name,
+        "doctor_display_name": doctor_display_name,  # Store the LiveKit display name too
         "doctor_role": request.host_role,
         "doctor_joined": False,
         "patient_name": None,
@@ -464,7 +468,8 @@ async def create_meeting(
             "name": request.host_name, 
             "role": "doctor", 
             "joined_at": datetime.now().isoformat(),
-            "token_generated": True
+            "token_generated": True,
+            "display_name": doctor_display_name
         }],
         "max_participants": 2  # Doctor + Patient only
     }

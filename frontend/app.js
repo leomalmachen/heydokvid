@@ -319,9 +319,42 @@ async function initializeMeeting() {
             // Check user role from URL parameters
             const urlParams = new URLSearchParams(window.location.search);
             const userRole = urlParams.get('role');
+            const directJoin = urlParams.get('direct'); // New: Check if this is a direct join from meeting creation
             
             console.log('🔍 URL Role parameter:', userRole);
+            console.log('🔍 Direct join parameter:', directJoin);
             console.log('🔍 Current URL:', window.location.href);
+            
+            // Check if doctor has stored meeting data from meeting creation
+            if (userRole === 'doctor' && directJoin === 'true') {
+                const storedDoctorData = sessionStorage.getItem('doctorMeetingData');
+                if (storedDoctorData) {
+                    try {
+                        const doctorMeetingData = JSON.parse(storedDoctorData);
+                        if (doctorMeetingData.meeting_id === meetingId) {
+                            console.log('🩺 Using stored doctor meeting data from creation');
+                            console.log('🩺 Stored data:', doctorMeetingData);
+                            meetingData = doctorMeetingData;
+                            sessionStorage.setItem('meetingData', JSON.stringify(meetingData));
+                            
+                            // Clear the stored doctor data so it's only used once
+                            sessionStorage.removeItem('doctorMeetingData');
+                            
+                            // Connect directly to room using stored token
+                            await connectToRoom(meetingData);
+                            isInitialized = true;
+                            console.log('🎉 Doctor initialization completed using stored token!');
+                            return;
+                        } else {
+                            console.warn('⚠️ Stored doctor data is for different meeting, clearing...');
+                            sessionStorage.removeItem('doctorMeetingData');
+                        }
+                    } catch (error) {
+                        console.error('❌ Error parsing stored doctor data:', error);
+                        sessionStorage.removeItem('doctorMeetingData');
+                    }
+                }
+            }
             
             // IMPROVED: Use nice modal for name input
             try {
