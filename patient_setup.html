@@ -381,14 +381,6 @@
 
                 <div class="checkbox-group">
                     <div class="checkbox-item">
-                        <input type="checkbox" id="cameraWorking" onchange="checkMediaTestCompletion()">
-                        <label for="cameraWorking">Ich kann mich selbst in der Kamera sehen</label>
-                    </div>
-                    <div class="checkbox-item">
-                        <input type="checkbox" id="microphoneWorking" onchange="checkMediaTestCompletion()">
-                        <label for="microphoneWorking">Mein Mikrofon zeigt Aktivität bei Sprache</label>
-                    </div>
-                    <div class="checkbox-item">
                         <input type="checkbox" id="confirmWorking" onchange="checkMediaTestCompletion()">
                         <label for="confirmWorking"><strong>Meine Kamera und Mikrofon funktionieren</strong></label>
                     </div>
@@ -620,19 +612,15 @@
         }
 
         function validateMediaTest() {
-            const cameraWorking = document.getElementById('cameraWorking').checked;
-            const microphoneWorking = document.getElementById('microphoneWorking').checked;
             const confirmWorking = document.getElementById('confirmWorking').checked;
 
-            return cameraWorking && microphoneWorking && confirmWorking;
+            return confirmWorking;
         }
 
         function checkMediaTestCompletion() {
-            const cameraWorking = document.getElementById('cameraWorking').checked;
-            const microphoneWorking = document.getElementById('microphoneWorking').checked;
             const confirmWorking = document.getElementById('confirmWorking').checked;
 
-            if (cameraWorking && microphoneWorking && confirmWorking) {
+            if (confirmWorking) {
                 document.getElementById('step3Next').disabled = false;
                 showStatus('success', 'Perfekt! Alle Tests bestätigt. Sie können nun fortfahren.');
             } else {
@@ -642,13 +630,15 @@
 
         async function submitMediaTest() {
             try {
+                const confirmWorking = document.getElementById('confirmWorking').checked;
+                
                 const testData = {
                     meeting_id: meetingId,
                     has_camera: !!stream && stream.getVideoTracks().length > 0,
                     has_microphone: !!stream && stream.getAudioTracks().length > 0,
-                    camera_working: document.getElementById('cameraWorking').checked,
-                    microphone_working: document.getElementById('microphoneWorking').checked,
-                    patient_confirmed: document.getElementById('confirmWorking').checked
+                    camera_working: confirmWorking,
+                    microphone_working: confirmWorking,
+                    patient_confirmed: confirmWorking
                 };
 
                 const response = await fetch(`/api/meetings/${meetingId}/media-test`, {
