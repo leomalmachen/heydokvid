@@ -45,12 +45,22 @@
         <div id="shareModal" class="modal">
             <div class="modal-content">
                 <h2>Meeting erstellt! 🎉</h2>
-                <p>Teile diesen Link mit anderen:</p>
-                <div class="share-link">
-                    <input type="text" id="shareLink" readonly>
-                    <button id="copyLink" class="btn btn-small">📋 Kopieren</button>
+                
+                <!-- Doctor Link -->
+                <div style="margin-bottom: 20px; padding: 15px; background: #e8f5e8; border-radius: 5px;">
+                    <h3 style="margin: 0 0 10px 0; color: #155724;">🩺 Als Arzt ins Meeting</h3>
+                    <button id="goToMeeting" class="btn btn-primary">Direkt ins Meeting</button>
                 </div>
-                <button id="goToMeeting" class="btn btn-primary">Zum Meeting →</button>
+                
+                <!-- Patient Link -->
+                <div style="padding: 15px; background: #e3f2fd; border-radius: 5px;">
+                    <h3 style="margin: 0 0 10px 0; color: #1565c0;">👤 Link für Patienten teilen</h3>
+                    <p style="margin: 0 0 10px 0; font-size: 14px;">Patienten müssen Setup durchlaufen (Name, Dokument, Media-Test)</p>
+                    <div class="share-link">
+                        <input type="text" id="shareLink" readonly>
+                        <button id="copyLink" class="btn btn-small">📋 Kopieren</button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -88,7 +98,7 @@
                 
                 // Go to meeting button
                 document.getElementById('goToMeeting').onclick = () => {
-                    window.location.href = `/meeting/${data.meeting_id}`;
+                    window.location.href = `/meeting/${data.meeting_id}?role=doctor`;
                 };
             } catch (error) {
                 alert('Fehler beim Erstellen des Meetings: ' + error.message);
