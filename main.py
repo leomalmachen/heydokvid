@@ -349,9 +349,19 @@ async def homepage():
                     <h4>✅ Meeting erstellt!</h4>
                     <p><strong>Meeting ID:</strong> <span id="meetingId"></span></p>
                     <p><strong>Arzt-Dashboard:</strong> <a id="dashboardLink" href="#" target="_blank">Dashboard öffnen</a></p>
-                    <p><strong>Patient-Link:</strong></p>
+                    
+                    <div id="doctorLinkContainer" style="display: none;">
+                        <p><strong>Ihr direkter Meeting-Link (als Arzt):</strong></p>
+                        <p><a id="doctorMeetingLink" href="#" target="_blank" style="background: #28a745; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">🩺 Direkt ins Meeting</a></p>
+                    </div>
+                    
+                    <p><strong>Patient-Link zum Teilen:</strong></p>
                     <input type="text" id="patientLink" readonly onclick="this.select()">
                     <button onclick="copyPatientLink()">Link kopieren</button>
+                    
+                    <div style="margin-top: 15px; padding: 10px; background: #e9ecef; border-radius: 5px; font-size: 14px;">
+                        <strong>Hinweis:</strong> Der Patient-Link führt automatisch zum Setup-Prozess (Name, Dokument, Media-Test) bevor der Patient dem Meeting beitreten kann.
+                    </div>
                 </div>
                 
                 <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #ddd; text-align: center; color: #666;">
@@ -384,6 +394,13 @@ async def homepage():
                             document.getElementById('dashboardLink').href = `/doctor-dashboard/${{data.meeting_id}}`;
                             document.getElementById('patientLink').value = data.meeting_status.patient_setup_url;
                             document.getElementById('meetingResult').style.display = 'block';
+                            
+                            // Add doctor meeting link
+                            const doctorLinkContainer = document.getElementById('doctorLinkContainer');
+                            if (doctorLinkContainer) {{
+                                document.getElementById('doctorMeetingLink').href = `/meeting/${{data.meeting_id}}?role=doctor`;
+                                doctorLinkContainer.style.display = 'block';
+                            }}
                             
                             // Scroll to result
                             document.getElementById('meetingResult').scrollIntoView({{ behavior: 'smooth' }});
