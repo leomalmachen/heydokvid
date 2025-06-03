@@ -670,20 +670,20 @@ function updateConsistentGrid() {
         containers[0].style.height = 'min(60vh, 450px)';
         
     } else if (count === 2) {
-        // CRITICAL: Two participants - PERFECT Google Meet style side-by-side
-        console.log('📋 2 participants - Google Meet side-by-side layout');
+        // CRITICAL: Two participants - MUCH LARGER Google Meet style side-by-side
+        console.log('📋 2 participants - MUCH LARGER Google Meet side-by-side layout');
         videoGrid.style.gridTemplateColumns = '1fr 1fr';
         videoGrid.style.gridTemplateRows = '1fr';
         videoGrid.style.placeItems = 'center';
-        videoGrid.style.gap = '2rem';
+        videoGrid.style.gap = '1.5rem';
         
-        // LARGER sizing for 2 participants - better visibility
+        // MUCH LARGER sizing for 2 participants - better visibility
         containers.forEach((container, index) => {
-            container.style.width = 'min(55vw, 650px)';
-            container.style.height = 'min(70vh, 485px)';
-            container.style.maxWidth = '650px';
-            container.style.maxHeight = '485px';
-            console.log(`📋 Container ${index + 1} sized for 2-person layout (LARGER)`);
+            container.style.width = 'min(70vw, 800px)';
+            container.style.height = 'min(80vh, 600px)';
+            container.style.maxWidth = '800px';
+            container.style.maxHeight = '600px';
+            console.log(`📋 Container ${index + 1} sized MUCH LARGER for 2-person layout`);
         });
         
     } else if (count <= 4) {
