@@ -1426,22 +1426,29 @@ async def doctor_join_meeting(
 ):
     """Doctor join meeting - bypasses patient validation requirements"""
     
+    logger.info(f"🩺 DOCTOR JOIN REQUEST: meeting_id={meeting_id}, participant_name={request.participant_name}, role={request.participant_role}")
+    
     # Validate meeting exists
     if meeting_id not in meetings:
+        logger.error(f"❌ Meeting {meeting_id} not found for doctor join")
         raise HTTPException(status_code=404, detail="Meeting not found")
     
     meeting_data = meetings[meeting_id]
+    logger.info(f"🩺 Meeting data found: doctor_name={meeting_data.get('doctor_name')}, doctor_display_name={meeting_data.get('doctor_display_name')}")
     
     # Validate this is actually a doctor joining
     if request.participant_role != "doctor":
+        logger.error(f"❌ Invalid role for doctor endpoint: {request.participant_role}")
         raise HTTPException(status_code=400, detail="This endpoint is for doctors only")
     
     # Check if this is the original doctor or another doctor
     is_original_doctor = request.participant_name == meeting_data["doctor_name"]
+    logger.info(f"🩺 Is original doctor: {is_original_doctor} (request={request.participant_name}, stored={meeting_data['doctor_name']})")
     
     if not is_original_doctor:
         # For now, only allow the original doctor
         # Later you could extend this for multiple doctors
+        logger.warning(f"⚠️ Non-original doctor trying to join: {request.participant_name}")
         raise HTTPException(status_code=403, detail="Only the original doctor can join this meeting")
     
     # Check for duplicate participants
@@ -1449,11 +1456,13 @@ async def doctor_join_meeting(
         active_participants[meeting_id] = set()
     
     participant_key = f"doctor_{request.participant_name.lower()}"
+    logger.info(f"🩺 Participant key: {participant_key}")
+    logger.info(f"🩺 Active participants before join: {active_participants[meeting_id]}")
     
     try:
         # Generate token for doctor with admin permissions
         doctor_display_name = f"Dr. {request.participant_name}"
-        logger.info(f"Generating token for doctor: {doctor_display_name} in room: {meeting_data['room_name']}")
+        logger.info(f"🩺 Generating token for doctor: {doctor_display_name} in room: {meeting_data['room_name']}")
         
         token = livekit_client.generate_token(
             room_name=meeting_data["room_name"],
@@ -1461,7 +1470,8 @@ async def doctor_join_meeting(
             is_host=True
         )
         
-        logger.info(f"Token generated successfully for doctor: {doctor_display_name}")
+        logger.info(f"✅ Token generated successfully for doctor: {doctor_display_name}")
+        logger.info(f"🔗 LiveKit URL: {livekit_client.url}")
         
         # Update meeting status
         meeting_data["doctor_joined"] = True
@@ -1470,20 +1480,31 @@ async def doctor_join_meeting(
         active_participants[meeting_id].add(participant_key)
         
         # Update participant in the list if needed
+        participant_updated = False
         for participant in meeting_data["participants"]:
             if participant["name"] == request.participant_name and participant["role"] == "doctor":
                 participant["joined_at"] = datetime.now().isoformat()
                 participant["token_generated"] = True
-                logger.info(f"Updated existing participant record for doctor: {request.participant_name}")
+                participant_updated = True
+                logger.info(f"✅ Updated existing participant record for doctor: {request.participant_name}")
                 break
+        
+        if not participant_updated:
+            logger.info(f"🆕 Adding new participant record for doctor: {request.participant_name}")
+            meeting_data["participants"].append({
+                "name": request.participant_name,
+                "role": "doctor",
+                "joined_at": datetime.now().isoformat(),
+                "token_generated": True,
+                "display_name": doctor_display_name
+            })
         
         participants_count = len(meeting_data["participants"])
         
-        logger.info(f"Doctor {request.participant_name} joined meeting {meeting_id} successfully")
-        logger.info(f"Doctor display name in LiveKit: {doctor_display_name}")
-        logger.info(f"Meeting participants count: {participants_count}")
+        logger.info(f"✅ Doctor {request.participant_name} joined meeting {meeting_id} successfully")
+        logger.info(f"📊 Final meeting state: participants_count={participants_count}, doctor_joined={meeting_data['doctor_joined']}")
         
-        return MeetingResponse(
+        response_data = MeetingResponse(
             meeting_id=meeting_id,
             meeting_url=f"{get_base_url()}/meeting/{meeting_id}",
             livekit_url=livekit_client.url,
@@ -1499,8 +1520,14 @@ async def doctor_join_meeting(
             }
         )
         
+        logger.info(f"📤 Returning doctor join response with token length: {len(token)}")
+        return response_data
+        
     except Exception as e:
-        logger.error(f"Failed to generate token for doctor {request.participant_name}: {e}")
+        logger.error(f"❌ Failed to generate token for doctor {request.participant_name}: {e}")
+        logger.error(f"❌ Exception type: {type(e).__name__}")
+        import traceback
+        logger.error(f"❌ Full traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail="Failed to join meeting")
 
 @app.get("/doctor-dashboard/{meeting_id}", response_class=HTMLResponse)

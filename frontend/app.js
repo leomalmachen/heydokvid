@@ -356,9 +356,54 @@ async function initializeMeeting() {
                 }
             }
             
+            // FALLBACK: Check if doctor has stored data even without direct=true (for refreshes/direct URLs)
+            if (userRole === 'doctor') {
+                const storedDoctorData = sessionStorage.getItem('doctorMeetingData');
+                if (storedDoctorData) {
+                    try {
+                        const doctorMeetingData = JSON.parse(storedDoctorData);
+                        if (doctorMeetingData.meeting_id === meetingId) {
+                            console.log('🩺 FALLBACK: Using stored doctor data for direct URL access');
+                            meetingData = doctorMeetingData;
+                            sessionStorage.setItem('meetingData', JSON.stringify(meetingData));
+                            
+                            // Connect directly to room using stored token
+                            await connectToRoom(meetingData);
+                            isInitialized = true;
+                            console.log('🎉 Doctor fallback initialization completed!');
+                            return;
+                        }
+                    } catch (error) {
+                        console.warn('⚠️ Stored doctor data parsing failed for fallback:', error);
+                    }
+                }
+            }
+            
             // IMPROVED: Use nice modal for name input
             try {
-                const participantName = await getParticipantName();
+                let participantName;
+                
+                // SPECIAL: For doctors, try to use stored meeting data first
+                if (userRole === 'doctor') {
+                    // Try to get doctor name from meeting data that might be lost due to Heroku restart
+                    try {
+                        const response = await fetch(`/api/meetings/${meetingId}/status`);
+                        if (response.ok) {
+                            const statusData = await response.json();
+                            if (statusData.doctor_name) {
+                                participantName = statusData.doctor_name;
+                                console.log('🩺 Using doctor name from meeting status:', participantName);
+                            }
+                        }
+                    } catch (error) {
+                        console.warn('⚠️ Could not fetch meeting status for doctor name:', error);
+                    }
+                }
+                
+                // If no automatic name found, ask user
+                if (!participantName) {
+                    participantName = await getParticipantName();
+                }
                 
                 // Use role-specific endpoints
                 let joinEndpoint, joinData;
