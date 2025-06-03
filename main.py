@@ -1447,11 +1447,16 @@ async def doctor_join_meeting(
     
     try:
         # Generate token for doctor with admin permissions
+        doctor_display_name = f"Dr. {request.participant_name}"
+        logger.info(f"Generating token for doctor: {doctor_display_name} in room: {meeting_data['room_name']}")
+        
         token = livekit_client.generate_token(
             room_name=meeting_data["room_name"],
-            participant_name=f"Dr. {request.participant_name}",
+            participant_name=doctor_display_name,
             is_host=True
         )
+        
+        logger.info(f"Token generated successfully for doctor: {doctor_display_name}")
         
         # Update meeting status
         meeting_data["doctor_joined"] = True
@@ -1464,11 +1469,14 @@ async def doctor_join_meeting(
             if participant["name"] == request.participant_name and participant["role"] == "doctor":
                 participant["joined_at"] = datetime.now().isoformat()
                 participant["token_generated"] = True
+                logger.info(f"Updated existing participant record for doctor: {request.participant_name}")
                 break
         
         participants_count = len(meeting_data["participants"])
         
-        logger.info(f"Doctor {request.participant_name} joined meeting {meeting_id}")
+        logger.info(f"Doctor {request.participant_name} joined meeting {meeting_id} successfully")
+        logger.info(f"Doctor display name in LiveKit: {doctor_display_name}")
+        logger.info(f"Meeting participants count: {participants_count}")
         
         return MeetingResponse(
             meeting_id=meeting_id,

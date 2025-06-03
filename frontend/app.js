@@ -320,6 +320,9 @@ async function initializeMeeting() {
             const urlParams = new URLSearchParams(window.location.search);
             const userRole = urlParams.get('role');
             
+            console.log('🔍 URL Role parameter:', userRole);
+            console.log('🔍 Current URL:', window.location.href);
+            
             // IMPROVED: Use nice modal for name input
             try {
                 const participantName = await getParticipantName();
@@ -329,6 +332,7 @@ async function initializeMeeting() {
                 
                 if (userRole === 'doctor') {
                     console.log('🩺 Doctor joining meeting...');
+                    console.log('🩺 Using doctor endpoint for:', participantName);
                     joinEndpoint = `/api/meetings/${meetingId}/join-doctor`;
                     joinData = {
                         participant_name: participantName,
@@ -336,11 +340,15 @@ async function initializeMeeting() {
                     };
                 } else {
                     console.log('👤 Participant joining meeting...');
+                    console.log('👤 Using patient endpoint for:', participantName);
                     joinEndpoint = `/api/meetings/${meetingId}/join`;
                     joinData = {
                         participant_name: participantName
                     };
                 }
+                
+                console.log('📞 Making API call to:', joinEndpoint);
+                console.log('📞 With data:', joinData);
                 
                 const response = await fetch(joinEndpoint, {
                     method: 'POST',
@@ -350,10 +358,12 @@ async function initializeMeeting() {
 
                 if (!response.ok) {
                     const errorData = await response.json();
+                    console.error('❌ API Error:', errorData);
                     throw new Error(errorData.detail || 'Could not join meeting');
                 }
 
                 meetingData = await response.json();
+                console.log('✅ Meeting data received:', meetingData);
                 sessionStorage.setItem('meetingData', JSON.stringify(meetingData));
                 
             } catch (nameError) {
@@ -854,10 +864,13 @@ async function connectToRoom(data) {
         // BULLETPROOF: Event handlers setup
         room.on(LiveKit.RoomEvent.Connected, () => {
             console.log('🎉 Room connected successfully!');
+            console.log('🎉 Local participant identity:', room.localParticipant.identity);
+            console.log('🎉 Local participant SID:', room.localParticipant.sid);
             
             // CRITICAL: Process local participant first - use CONSISTENT function
             console.log('👤 Processing LOCAL participant:', room.localParticipant.identity);
             const localContainer = createConsistentContainer(room.localParticipant, true);
+            console.log('👤 Local container created:', localContainer ? 'SUCCESS' : 'FAILED');
             
             // MEGA-IMPORTANT: Process ALL existing remote participants
             console.log(`👥 Processing ${room.remoteParticipants.size} existing REMOTE participants`);
@@ -875,6 +888,7 @@ async function connectToRoom(data) {
             });
             
             // Enable local camera and microphone with stored state
+            console.log('🎥 About to enable local media...');
             enableLocalMedia();
         });
         
@@ -1042,51 +1056,85 @@ function handleTrackUnmuted(publication, participant) {
 async function enableLocalMedia() {
     if (!room || !room.localParticipant) {
         console.error('❌ No room or local participant available');
+        console.error('❌ Room:', room);
+        console.error('❌ Local participant:', room ? room.localParticipant : 'Room is null');
         return;
     }
     
     try {
         console.log('🎥 Enabling local media with saved state...');
+        console.log('🎥 Video enabled state:', videoEnabled);
+        console.log('🎥 Audio enabled state:', audioEnabled);
+        console.log('🎥 Local participant identity:', room.localParticipant.identity);
+        console.log('🎥 Local participant SID:', room.localParticipant.sid);
         
         // Enable camera and microphone based on saved state
+        console.log('🎥 Setting camera enabled to:', videoEnabled);
         await room.localParticipant.setCameraEnabled(videoEnabled);
+        console.log('🎥 Setting microphone enabled to:', audioEnabled);
         await room.localParticipant.setMicrophoneEnabled(audioEnabled);
+        
+        console.log('🎥 Camera and microphone set successfully');
         
         // Update UI buttons
         updateMediaButtons();
         
         // CRITICAL: Handle local tracks properly to prevent echo - use CONSISTENT ID scheme
-        const localContainer = document.getElementById(`participant-${room.localParticipant.sid}`);
+        const localContainerId = `participant-${room.localParticipant.sid}`;
+        console.log('🎥 Looking for local container with ID:', localContainerId);
+        const localContainer = document.getElementById(localContainerId);
+        
         if (!localContainer) {
             console.log('🔧 Creating missing local container...');
-            createConsistentContainer(room.localParticipant, true);
+            console.log('🔧 Local participant for container creation:', room.localParticipant);
+            const newContainer = createConsistentContainer(room.localParticipant, true);
+            console.log('🔧 New container created:', newContainer ? 'SUCCESS' : 'FAILED');
+            if (newContainer) {
+                console.log('🔧 New container ID:', newContainer.id);
+            }
             return; // Wait for container to be created
         }
         
+        console.log('✅ Local container found:', localContainer);
+        
         const localVideo = localContainer.querySelector('video');
         if (!localVideo) {
-            console.error('❌ Local video element not found');
+            console.error('❌ Local video element not found in container');
+            console.error('❌ Container contents:', localContainer.innerHTML);
             return;
         }
+        
+        console.log('✅ Local video element found:', localVideo);
         
         // ECHO PREVENTION: Ensure local video is ALWAYS muted
         localVideo.muted = true;
         localVideo.volume = 0;
         
+        console.log('🎥 Processing video track publications...');
+        console.log('🎥 Video track publications count:', room.localParticipant.videoTrackPublications.size);
+        
         // Attach video tracks to local video element
-        room.localParticipant.videoTrackPublications.forEach((publication) => {
+        room.localParticipant.videoTrackPublications.forEach((publication, index) => {
             if (publication.track) {
-                console.log('📹 Attaching LOCAL video track');
+                console.log(`📹 Attaching LOCAL video track ${index}:`, publication.track);
                 publication.track.attach(localVideo);
                 localVideo.style.display = videoEnabled ? 'block' : 'none';
+                console.log(`📹 Video track ${index} attached successfully, display:`, localVideo.style.display);
+            } else {
+                console.log(`📹 Video track publication ${index} has no track`);
             }
         });
         
+        console.log('🎥 Processing audio track publications...');
+        console.log('🎥 Audio track publications count:', room.localParticipant.audioTrackPublications.size);
+        
         // CRITICAL: NEVER attach local audio tracks to prevent echo
-        room.localParticipant.audioTrackPublications.forEach((publication) => {
+        room.localParticipant.audioTrackPublications.forEach((publication, index) => {
             if (publication.track) {
-                console.log('🔇 LOCAL audio track found - NOT attaching to prevent echo');
+                console.log(`🔇 LOCAL audio track ${index} found - NOT attaching to prevent echo`);
                 // Do NOT attach local audio track - this prevents echo!
+            } else {
+                console.log(`🔇 Audio track publication ${index} has no track`);
             }
         });
         
@@ -1096,6 +1144,7 @@ async function enableLocalMedia() {
         const loadingElement = document.getElementById('loadingState');
         if (loadingElement) {
             loadingElement.style.display = 'none';
+            console.log('✅ Loading state hidden');
         }
         
         // Update participant count and layout
@@ -1111,6 +1160,7 @@ async function enableLocalMedia() {
         
     } catch (error) {
         console.error('❌ Failed to enable local media:', error);
+        console.error('❌ Error stack:', error.stack);
         showError('Fehler beim Aktivieren von Kamera/Mikrofon: ' + error.message);
     }
 } 
