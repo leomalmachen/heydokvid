@@ -380,438 +380,6 @@ async function initializeMeeting() {
     }
 }
 
-// GOOGLE MEET STYLE: Create participant video container
-function createParticipantContainer(participant, isLocal = false) {
-    console.log(`📹 Creating ${isLocal ? 'LOCAL' : 'REMOTE'} container for:`, participant.name || participant.identity);
-    
-    // BULLETPROOF: Prevent duplicates
-    const existingContainer = document.getElementById(`participant-${participant.identity}`);
-    if (existingContainer) {
-        console.log('⚠️ Container already exists for:', participant.identity);
-        return existingContainer;
-    }
-    
-    const container = document.createElement('div');
-    container.className = 'participant-container';
-    container.id = `participant-${participant.identity}`;
-    container.setAttribute('data-participant', participant.identity);
-    
-    // Create video element with ECHO PREVENTION
-    const video = document.createElement('video');
-    video.autoplay = true;
-    video.playsInline = true;
-    video.id = `video-${participant.identity}`;
-    
-    // CRITICAL: Echo prevention for local participant
-    if (isLocal) {
-        video.muted = true; // LOCAL video MUST be muted
-        video.volume = 0;   // Extra safety
-        console.log('🔇 LOCAL video created - MUTED to prevent echo');
-    } else {
-        video.muted = false; // REMOTE video should NOT be muted
-        video.volume = 1.0;
-        console.log('🔊 REMOTE video created - NOT muted');
-    }
-    
-    // Create overlay for participant name and controls
-    const overlay = document.createElement('div');
-    overlay.className = 'participant-overlay';
-    
-    const nameLabel = document.createElement('div');
-    nameLabel.className = 'participant-name';
-    nameLabel.textContent = participant.name || participant.identity;
-    if (isLocal) nameLabel.textContent += ' (Du)';
-    
-    // Audio indicator (only for remote participants)
-    const audioIndicator = document.createElement('div');
-    audioIndicator.className = 'audio-indicator';
-    audioIndicator.innerHTML = '🎤';
-    audioIndicator.style.display = 'none';
-    
-    overlay.appendChild(nameLabel);
-    if (!isLocal) { // Only show audio indicator for remote participants
-        overlay.appendChild(audioIndicator);
-    }
-    
-    container.appendChild(video);
-    container.appendChild(overlay);
-    
-    // Add to grid
-    const videoGrid = document.getElementById('videoGrid');
-    if (videoGrid) {
-        videoGrid.appendChild(container);
-        console.log(`✅ ${isLocal ? 'LOCAL (MUTED)' : 'REMOTE'} container added to grid:`, participant.identity);
-        
-        // MEGA-IMPORTANT: Trigger layout recalculation
-        updateVideoGridLayout();
-    } else {
-        console.error('❌ Video grid not found!');
-    }
-    
-    return container;
-}
-
-// ULTRA-ADVANCED: Connect to LiveKit room
-async function connectToRoom(data) {
-    console.log('🔗 Connecting to LiveKit room...', data.livekit_url);
-    
-    try {
-        // Initialize room with ENHANCED AUDIO SETTINGS
-        room = new LiveKit.Room({
-            adaptiveStream: true,
-            dynacast: true,
-            // CRITICAL: Enhanced audio settings to prevent echo
-            audioCaptureDefaults: {
-                echoCancellation: true,
-                noiseSuppression: true,
-                autoGainControl: true,
-                sampleRate: 48000,
-                channelCount: 1, // Mono to reduce processing
-            },
-            videoCaptureDefaults: {
-                resolution: LiveKit.VideoPresets.h720.resolution,
-            },
-            // IMPORTANT: Prevent audio feedback
-            publishDefaults: {
-                stopMicTrackOnMute: false, // Keep track alive when muted
-                audioPreset: LiveKit.AudioPresets.speech, // Optimized for speech
-            },
-        });
-        
-        // BULLETPROOF: Event handlers setup
-        room.on(LiveKit.RoomEvent.Connected, () => {
-            console.log('🎉 Room connected successfully!');
-            
-            // CRITICAL: Process local participant first
-            console.log('👤 Processing LOCAL participant:', room.localParticipant.identity);
-            const localContainer = createParticipantContainer(room.localParticipant, true);
-            
-            // MEGA-IMPORTANT: Process ALL existing remote participants
-            console.log(`👥 Processing ${room.remoteParticipants.size} existing REMOTE participants`);
-            room.remoteParticipants.forEach((participant) => {
-                console.log('👤 Processing existing REMOTE participant:', participant.identity);
-                handleParticipantConnected(participant);
-                
-                // CRITICAL: Subscribe to their existing tracks
-                participant.trackPublications.forEach((publication) => {
-                    if (publication.isSubscribed && publication.track) {
-                        console.log('🎵 Attaching existing track:', publication.kind, 'from', participant.identity);
-                        handleTrackSubscribed(publication.track, publication, participant);
-                    }
-                });
-            });
-            
-            // Enable local camera and microphone with stored state
-            enableLocalMedia();
-        });
-        
-        room.on(LiveKit.RoomEvent.ParticipantConnected, handleParticipantConnected);
-        room.on(LiveKit.RoomEvent.ParticipantDisconnected, handleParticipantDisconnected);
-        room.on(LiveKit.RoomEvent.TrackSubscribed, handleTrackSubscribed);
-        room.on(LiveKit.RoomEvent.TrackUnsubscribed, handleTrackUnsubscribed);
-        room.on(LiveKit.RoomEvent.TrackMuted, handleTrackMuted);
-        room.on(LiveKit.RoomEvent.TrackUnmuted, handleTrackUnmuted);
-        
-        // Enhanced error handling
-        room.on(LiveKit.RoomEvent.Disconnected, (reason) => {
-            console.log('❌ Room disconnected:', reason);
-            if (reason !== LiveKit.DisconnectReason.CLIENT_INITIATED) {
-                attemptReconnection();
-            }
-        });
-        
-        room.on(LiveKit.RoomEvent.Reconnecting, () => {
-            console.log('🔄 Room reconnecting...');
-            showStatus('Verbindung wird wiederhergestellt...', 'warning');
-        });
-        
-        room.on(LiveKit.RoomEvent.Reconnected, () => {
-            console.log('✅ Room reconnected!');
-            showStatus('Verbindung wiederhergestellt!', 'success');
-        });
-        
-        // Connect to room
-        await room.connect(data.livekit_url, data.token);
-        console.log('✅ Connected to room successfully!');
-        
-    } catch (error) {
-        console.error('❌ Failed to connect to room:', error);
-        throw error;
-    }
-}
-
-// NEW: Handle room connected event
-function handleRoomConnected() {
-    console.log('🎉 Room connected successfully!');
-    
-    // Ensure local participant container exists
-    if (localParticipant) {
-        let localContainer = document.getElementById(`participant-${localParticipant.sid}`);
-        if (!localContainer) {
-            console.log('🔧 Creating missing local container...');
-            createConsistentContainer(localParticipant, true);
-        }
-    }
-    
-    // Process any existing participants
-    if (room && room.participants) {
-        room.participants.forEach((participant) => {
-            if (!participants.has(participant.sid)) {
-                console.log('🔧 Adding missing participant:', participant.identity);
-                handleParticipantConnected(participant);
-            }
-        });
-    }
-    
-    updateConsistentGrid();
-}
-
-// MEGA-IMPROVED: Handle new participant joining
-function handleParticipantConnected(participant) {
-    console.log('👤 NEW PARTICIPANT CONNECTED:', participant.identity);
-    
-    // BULLETPROOF: Create container for new participant
-    const container = createParticipantContainer(participant, false);
-    
-    // IMPORTANT: Subscribe to their tracks immediately
-    participant.trackPublications.forEach((publication) => {
-        if (publication.isSubscribed && publication.track) {
-            console.log('🎵 Subscribing to existing track:', publication.kind, 'from', participant.identity);
-            handleTrackSubscribed(publication.track, publication, participant);
-        }
-    });
-    
-    // CRITICAL: Listen for future track events
-    participant.on(LiveKit.ParticipantEvent.TrackSubscribed, (track, publication) => {
-        console.log('🎵 Track subscribed event for:', participant.identity, track.kind);
-        handleTrackSubscribed(track, publication, participant);
-    });
-    
-    participant.on(LiveKit.ParticipantEvent.TrackUnsubscribed, (track, publication) => {
-        console.log('🔇 Track unsubscribed for:', participant.identity, track.kind);
-        handleTrackUnsubscribed(track, publication, participant);
-    });
-    
-    // Update UI
-    updateParticipantCount();
-    updateVideoGridLayout();
-    
-    console.log('✅ Participant setup completed for:', participant.identity);
-}
-
-// BULLETPROOF: Handle participant leaving
-function handleParticipantDisconnected(participant) {
-    console.log('👋 PARTICIPANT DISCONNECTED:', participant.identity);
-    
-    // Remove their container
-    const container = document.getElementById(`participant-${participant.identity}`);
-    if (container) {
-        container.remove();
-        console.log('🗑️ Removed container for:', participant.identity);
-    }
-    
-    // Update UI
-    updateParticipantCount();
-    updateVideoGridLayout();
-}
-
-// ULTRA-ROBUST: Handle track subscription (when video/audio arrives)
-function handleTrackSubscribed(track, publication, participant) {
-    console.log(`🎵 TRACK SUBSCRIBED: ${track.kind} from ${participant.identity}`);
-    
-    // Get participant container
-    const container = document.getElementById(`participant-${participant.identity}`);
-    if (!container) {
-        console.warn('⚠️ No container found for participant:', participant.identity);
-        // Try to create it
-        createParticipantContainer(participant, false);
-        return;
-    }
-    
-    if (track.kind === 'video') {
-        console.log('📹 Attaching VIDEO track for:', participant.identity);
-        
-        // Get video element
-        const video = container.querySelector('video');
-        if (!video) {
-            console.error('❌ No video element found in container for:', participant.identity);
-            return;
-        }
-        
-        track.attach(video);
-        
-        // Show video, hide avatar
-        video.style.display = 'block';
-        
-        // Handle video track events
-        track.on(LiveKit.TrackEvent.Muted, () => {
-            console.log('📹❌ Video muted for:', participant.identity);
-            video.style.display = 'none';
-        });
-        
-        track.on(LiveKit.TrackEvent.Unmuted, () => {
-            console.log('📹✅ Video unmuted for:', participant.identity);
-            video.style.display = 'block';
-        });
-        
-    } else if (track.kind === 'audio') {
-        console.log('🔊 Attaching AUDIO track for:', participant.identity);
-        
-        // CRITICAL: Check if this is local participant
-        const isLocal = participant.identity === room.localParticipant.identity;
-        
-        if (isLocal) {
-            console.log('🔇 SKIPPING local audio attachment to prevent echo');
-            return; // NEVER attach local audio to prevent echo!
-        }
-        
-        // ECHO PREVENTION: Only attach remote participant audio
-        console.log('🔊 Attaching REMOTE audio for:', participant.identity);
-        
-        // Remove any existing audio elements for this participant
-        const existingAudio = container.querySelectorAll('audio');
-        existingAudio.forEach(audio => {
-            console.log('🗑️ Removing existing audio element');
-            audio.remove();
-        });
-        
-        // Create new dedicated audio element for remote participant
-        const audio = document.createElement('audio');
-        audio.autoplay = true;
-        audio.playsInline = true;
-        audio.muted = false; // Remote audio should NOT be muted
-        audio.volume = 1.0;
-        audio.id = `audio-${participant.identity}`;
-        
-        // IMPORTANT: Set audio context properties for better quality
-        audio.setAttribute('preload', 'none');
-        audio.setAttribute('controls', 'false');
-        
-        // Attach track to audio element
-        track.attach(audio);
-        
-        // Add audio element to container (hidden)
-        audio.style.display = 'none';
-        container.appendChild(audio);
-        
-        // Handle audio indicators
-        const audioIndicator = container.querySelector('.audio-indicator');
-        if (audioIndicator) {
-            track.on(LiveKit.TrackEvent.Muted, () => {
-                console.log('🔇 Audio muted for:', participant.identity);
-                audioIndicator.style.display = 'none';
-            });
-            
-            track.on(LiveKit.TrackEvent.Unmuted, () => {
-                console.log('🔊 Audio unmuted for:', participant.identity);
-                audioIndicator.style.display = 'block';
-            });
-            
-            // Set initial state
-            audioIndicator.style.display = track.isMuted ? 'none' : 'block';
-        }
-        
-        console.log('✅ Remote audio attached successfully for:', participant.identity);
-    }
-    
-    console.log(`✅ Track handled successfully: ${track.kind} for ${participant.identity}`);
-}
-
-// Handle track unsubscription
-function handleTrackUnsubscribed(track, publication, participant) {
-    console.log(`🔇 TRACK UNSUBSCRIBED: ${track.kind} from ${participant.identity}`);
-    
-    if (track) {
-        track.detach();
-    }
-}
-
-// Handle track muted
-function handleTrackMuted(publication, participant) {
-    console.log(`🔇 Track muted: ${publication.kind} from ${participant.identity}`);
-}
-
-// Handle track unmuted
-function handleTrackUnmuted(publication, participant) {
-    console.log(`🔊 Track unmuted: ${publication.kind} from ${participant.identity}`);
-}
-
-// PERSISTENT: Enable local media with saved state
-async function enableLocalMedia() {
-    if (!room || !room.localParticipant) {
-        console.error('❌ No room or local participant available');
-        return;
-    }
-    
-    try {
-        console.log('🎥 Enabling local media with saved state...');
-        
-        // Enable camera and microphone based on saved state
-        await room.localParticipant.setCameraEnabled(videoEnabled);
-        await room.localParticipant.setMicrophoneEnabled(audioEnabled);
-        
-        // Update UI buttons
-        updateMediaButtons();
-        
-        // CRITICAL: Handle local tracks properly to prevent echo
-        const localContainer = document.getElementById(`participant-${room.localParticipant.identity}`);
-        if (!localContainer) {
-            console.error('❌ Local container not found');
-            return;
-        }
-        
-        const localVideo = localContainer.querySelector('video');
-        if (!localVideo) {
-            console.error('❌ Local video element not found');
-            return;
-        }
-        
-        // ECHO PREVENTION: Ensure local video is ALWAYS muted
-        localVideo.muted = true;
-        localVideo.volume = 0;
-        
-        // Attach video tracks to local video element
-        room.localParticipant.videoTrackPublications.forEach((publication) => {
-            if (publication.track) {
-                console.log('📹 Attaching LOCAL video track');
-                publication.track.attach(localVideo);
-                localVideo.style.display = videoEnabled ? 'block' : 'none';
-            }
-        });
-        
-        // CRITICAL: NEVER attach local audio tracks to prevent echo
-        room.localParticipant.audioTrackPublications.forEach((publication) => {
-            if (publication.track) {
-                console.log('🔇 LOCAL audio track found - NOT attaching to prevent echo');
-                // Do NOT attach local audio track - this prevents echo!
-            }
-        });
-        
-        console.log('✅ Local media enabled successfully (echo-free)');
-        
-        // Hide loading and show controls
-        const loadingElement = document.getElementById('loadingState');
-        if (loadingElement) {
-            loadingElement.style.display = 'none';
-        }
-        
-        // Update participant count and layout
-        updateParticipantCount();
-        updateVideoGridLayout();
-        
-        // Set share link
-        const shareUrl = window.location.href;
-        const shareLinkInput = document.getElementById('shareLinkInput');
-        if (shareLinkInput) {
-            shareLinkInput.value = shareUrl;
-        }
-        
-    } catch (error) {
-        console.error('❌ Failed to enable local media:', error);
-        showError('Fehler beim Aktivieren von Kamera/Mikrofon: ' + error.message);
-    }
-}
-
 // CONSISTENT container creation for all users (Google Meet style)
 function createConsistentContainer(participant, isLocal = false) {
     console.log('🏗️ Creating CONSISTENT container for:', participant.identity);
@@ -1254,4 +822,295 @@ if (document.readyState === 'loading') {
 } else {
     setupEventListeners();
     initializeMeeting();
+}
+
+// ULTRA-ADVANCED: Connect to LiveKit room
+async function connectToRoom(data) {
+    console.log('🔗 Connecting to LiveKit room...', data.livekit_url);
+    
+    try {
+        // Initialize room with ENHANCED AUDIO SETTINGS
+        room = new LiveKit.Room({
+            adaptiveStream: true,
+            dynacast: true,
+            // CRITICAL: Enhanced audio settings to prevent echo
+            audioCaptureDefaults: {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true,
+                sampleRate: 48000,
+                channelCount: 1, // Mono to reduce processing
+            },
+            videoCaptureDefaults: {
+                resolution: LiveKit.VideoPresets.h720.resolution,
+            },
+            // IMPORTANT: Prevent audio feedback
+            publishDefaults: {
+                stopMicTrackOnMute: false, // Keep track alive when muted
+                audioPreset: LiveKit.AudioPresets.speech, // Optimized for speech
+            },
+        });
+        
+        // BULLETPROOF: Event handlers setup
+        room.on(LiveKit.RoomEvent.Connected, () => {
+            console.log('🎉 Room connected successfully!');
+            
+            // CRITICAL: Process local participant first - use CONSISTENT function
+            console.log('👤 Processing LOCAL participant:', room.localParticipant.identity);
+            const localContainer = createConsistentContainer(room.localParticipant, true);
+            
+            // MEGA-IMPORTANT: Process ALL existing remote participants
+            console.log(`👥 Processing ${room.remoteParticipants.size} existing REMOTE participants`);
+            room.remoteParticipants.forEach((participant) => {
+                console.log('👤 Processing existing REMOTE participant:', participant.identity);
+                handleParticipantConnected(participant);
+                
+                // CRITICAL: Subscribe to their existing tracks
+                participant.trackPublications.forEach((publication) => {
+                    if (publication.isSubscribed && publication.track) {
+                        console.log('🎵 Attaching existing track:', publication.kind, 'from', participant.identity);
+                        handleTrackSubscribed(publication.track, publication, participant);
+                    }
+                });
+            });
+            
+            // Enable local camera and microphone with stored state
+            enableLocalMedia();
+        });
+        
+        room.on(LiveKit.RoomEvent.ParticipantConnected, handleParticipantConnected);
+        room.on(LiveKit.RoomEvent.ParticipantDisconnected, handleParticipantDisconnected);
+        room.on(LiveKit.RoomEvent.TrackSubscribed, handleTrackSubscribed);
+        room.on(LiveKit.RoomEvent.TrackUnsubscribed, handleTrackUnsubscribed);
+        room.on(LiveKit.RoomEvent.TrackMuted, handleTrackMuted);
+        room.on(LiveKit.RoomEvent.TrackUnmuted, handleTrackUnmuted);
+        
+        // Enhanced error handling
+        room.on(LiveKit.RoomEvent.Disconnected, (reason) => {
+            console.log('❌ Room disconnected:', reason);
+            if (reason !== LiveKit.DisconnectReason.CLIENT_INITIATED) {
+                attemptReconnection();
+            }
+        });
+        
+        room.on(LiveKit.RoomEvent.Reconnecting, () => {
+            console.log('🔄 Room reconnecting...');
+            showStatus('Verbindung wird wiederhergestellt...', 'warning');
+        });
+        
+        room.on(LiveKit.RoomEvent.Reconnected, () => {
+            console.log('✅ Room reconnected!');
+            showStatus('Verbindung wiederhergestellt!', 'success');
+        });
+        
+        // Connect to room
+        await room.connect(data.livekit_url, data.token);
+        console.log('✅ Connected to room successfully!');
+        
+    } catch (error) {
+        console.error('❌ Failed to connect to room:', error);
+        throw error;
+    }
+}
+
+// MEGA-IMPROVED: Handle new participant joining
+function handleParticipantConnected(participant) {
+    console.log('👤 NEW PARTICIPANT CONNECTED:', participant.identity);
+    
+    // BULLETPROOF: Create container for new participant - use CONSISTENT function
+    const container = createConsistentContainer(participant, false);
+    
+    // IMPORTANT: Subscribe to their tracks immediately
+    participant.trackPublications.forEach((publication) => {
+        if (publication.isSubscribed && publication.track) {
+            console.log('🎵 Subscribing to existing track:', publication.kind, 'from', participant.identity);
+            handleTrackSubscribed(publication.track, publication, participant);
+        }
+    });
+    
+    // CRITICAL: Listen for future track events
+    participant.on(LiveKit.ParticipantEvent.TrackSubscribed, (track, publication) => {
+        console.log('🎵 Track subscribed event for:', participant.identity, track.kind);
+        handleTrackSubscribed(track, publication, participant);
+    });
+    
+    participant.on(LiveKit.ParticipantEvent.TrackUnsubscribed, (track, publication) => {
+        console.log('🔇 Track unsubscribed for:', participant.identity, track.kind);
+        handleTrackUnsubscribed(track, publication, participant);
+    });
+    
+    // Update UI
+    updateParticipantCount();
+    updateConsistentGrid();
+    
+    console.log('✅ Participant setup completed for:', participant.identity);
+}
+
+// BULLETPROOF: Handle participant leaving
+function handleParticipantDisconnected(participant) {
+    console.log('👋 PARTICIPANT DISCONNECTED:', participant.identity);
+    
+    // Remove their container - use CONSISTENT ID scheme
+    const container = document.getElementById(`participant-${participant.sid}`);
+    if (container) {
+        container.remove();
+        console.log('🗑️ Removed container for:', participant.identity);
+    }
+    
+    // Update UI
+    updateParticipantCount();
+    updateConsistentGrid();
+}
+
+// ULTRA-ROBUST: Handle track subscription (when video/audio arrives)
+function handleTrackSubscribed(track, publication, participant) {
+    console.log(`🎵 TRACK SUBSCRIBED: ${track.kind} from ${participant.identity}`);
+    
+    // Get participant container - use CONSISTENT ID scheme
+    const container = document.getElementById(`participant-${participant.sid}`);
+    if (!container) {
+        console.warn('⚠️ No container found for participant:', participant.identity);
+        // Try to create it
+        createConsistentContainer(participant, false);
+        return;
+    }
+    
+    if (track.kind === 'video') {
+        console.log('📹 Attaching VIDEO track for:', participant.identity);
+        
+        // Get video element
+        const video = container.querySelector('video');
+        if (!video) {
+            console.error('❌ No video element found in container for:', participant.identity);
+            return;
+        }
+        
+        track.attach(video);
+        
+        // Show video, hide avatar
+        video.style.display = 'block';
+        
+        // Handle video track events
+        track.on(LiveKit.TrackEvent.Muted, () => {
+            console.log('📹❌ Video muted for:', participant.identity);
+            video.style.display = 'none';
+        });
+        
+        track.on(LiveKit.TrackEvent.Unmuted, () => {
+            console.log('📹✅ Video unmuted for:', participant.identity);
+            video.style.display = 'block';
+        });
+        
+        console.log('✅ Video track attached successfully for:', participant.identity);
+        
+    } else if (track.kind === 'audio') {
+        console.log('🔊 Attaching AUDIO track for:', participant.identity);
+        
+        // Create audio element for remote audio
+        const audio = document.createElement('audio');
+        audio.autoplay = true;
+        audio.muted = false; // Remote audio should NOT be muted
+        audio.volume = 1.0;
+        
+        track.attach(audio);
+        container.appendChild(audio);
+        
+        console.log('✅ Audio track attached successfully for:', participant.identity);
+    }
+}
+
+// Handle track unsubscription
+function handleTrackUnsubscribed(track, publication, participant) {
+    console.log(`🔇 TRACK UNSUBSCRIBED: ${track.kind} from ${participant.identity}`);
+    
+    if (track) {
+        track.detach();
+    }
+}
+
+// Handle track muted
+function handleTrackMuted(publication, participant) {
+    console.log(`🔇 Track muted: ${publication.kind} from ${participant.identity}`);
+}
+
+// Handle track unmuted
+function handleTrackUnmuted(publication, participant) {
+    console.log(`🔊 Track unmuted: ${publication.kind} from ${participant.identity}`);
+}
+
+// PERSISTENT: Enable local media with saved state
+async function enableLocalMedia() {
+    if (!room || !room.localParticipant) {
+        console.error('❌ No room or local participant available');
+        return;
+    }
+    
+    try {
+        console.log('🎥 Enabling local media with saved state...');
+        
+        // Enable camera and microphone based on saved state
+        await room.localParticipant.setCameraEnabled(videoEnabled);
+        await room.localParticipant.setMicrophoneEnabled(audioEnabled);
+        
+        // Update UI buttons
+        updateMediaButtons();
+        
+        // CRITICAL: Handle local tracks properly to prevent echo - use CONSISTENT ID scheme
+        const localContainer = document.getElementById(`participant-${room.localParticipant.sid}`);
+        if (!localContainer) {
+            console.log('🔧 Creating missing local container...');
+            createConsistentContainer(room.localParticipant, true);
+            return; // Wait for container to be created
+        }
+        
+        const localVideo = localContainer.querySelector('video');
+        if (!localVideo) {
+            console.error('❌ Local video element not found');
+            return;
+        }
+        
+        // ECHO PREVENTION: Ensure local video is ALWAYS muted
+        localVideo.muted = true;
+        localVideo.volume = 0;
+        
+        // Attach video tracks to local video element
+        room.localParticipant.videoTrackPublications.forEach((publication) => {
+            if (publication.track) {
+                console.log('📹 Attaching LOCAL video track');
+                publication.track.attach(localVideo);
+                localVideo.style.display = videoEnabled ? 'block' : 'none';
+            }
+        });
+        
+        // CRITICAL: NEVER attach local audio tracks to prevent echo
+        room.localParticipant.audioTrackPublications.forEach((publication) => {
+            if (publication.track) {
+                console.log('🔇 LOCAL audio track found - NOT attaching to prevent echo');
+                // Do NOT attach local audio track - this prevents echo!
+            }
+        });
+        
+        console.log('✅ Local media enabled successfully (echo-free)');
+        
+        // Hide loading and show controls
+        const loadingElement = document.getElementById('loadingState');
+        if (loadingElement) {
+            loadingElement.style.display = 'none';
+        }
+        
+        // Update participant count and layout
+        updateParticipantCount();
+        updateConsistentGrid();
+        
+        // Set share link
+        const shareUrl = window.location.href;
+        const shareLinkInput = document.getElementById('shareLinkInput');
+        if (shareLinkInput) {
+            shareLinkInput.value = shareUrl;
+        }
+        
+    } catch (error) {
+        console.error('❌ Failed to enable local media:', error);
+        showError('Fehler beim Aktivieren von Kamera/Mikrofon: ' + error.message);
+    }
 } 
