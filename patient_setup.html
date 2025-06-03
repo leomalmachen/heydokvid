@@ -421,6 +421,9 @@
         let audioContext = null;
         let analyser = null;
 
+        // PREVENT MULTIPLE CLICKS
+        let isJoining = false;
+
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
             // Get meeting ID from URL
@@ -678,9 +681,18 @@
         }
 
         async function joinMeeting() {
+            // BULLETPROOF: Prevent multiple clicks
+            if (isJoining) {
+                console.log('⚠️ Join already in progress, ignoring additional clicks');
+                return;
+            }
+            
+            isJoining = true;
+            
             try {
-                document.getElementById('joinMeetingBtn').innerHTML = '<span class="loading"></span>Beitritt läuft...';
-                document.getElementById('joinMeetingBtn').disabled = true;
+                const joinBtn = document.getElementById('joinMeetingBtn');
+                joinBtn.innerHTML = '<span class="loading"></span>Beitritt läuft...';
+                joinBtn.disabled = true;
 
                 const joinData = {
                     patient_name: patientName,
@@ -688,8 +700,8 @@
                     media_test_id: mediaTestId
                 };
 
-                console.log('Patient join data:', joinData);
-                console.log('Meeting ID:', meetingId);
+                console.log('🚀 Patient join starting...', joinData);
+                console.log('📍 Meeting ID:', meetingId);
 
                 const response = await fetch(`/api/meetings/${meetingId}/join-patient`, {
                     method: 'POST',
@@ -701,32 +713,32 @@
 
                 if (!response.ok) {
                     const error = await response.json();
+                    console.error('❌ API Error:', error);
                     throw new Error(error.detail || 'Beitritt fehlgeschlagen');
                 }
 
                 const result = await response.json();
-                console.log('Join response:', result);
-                console.log('Redirecting to:', result.meeting_url);
+                console.log('✅ Join successful:', result);
+                console.log('🔄 Immediate redirect to:', result.meeting_url);
                 
                 // Store patient data for the meeting room
                 sessionStorage.setItem('participantName', patientName);
                 sessionStorage.setItem('meetingData', JSON.stringify(result));
                 sessionStorage.setItem('patientSetupCompleted', 'true');
                 
-                // Show user what's happening
-                showStatus('success', `Weiterleitung zu: ${result.meeting_url}`);
-                
-                // Add a small delay to let user see the message
-                setTimeout(() => {
-                    // Redirect to meeting room
-                    window.location.href = result.meeting_url;
-                }, 1000);
+                // IMMEDIATE redirect - no delay!
+                console.log('🚀 Redirecting NOW...');
+                window.location.href = result.meeting_url;
 
             } catch (error) {
-                console.error('Join error:', error);
+                console.error('❌ Join error:', error);
                 showStatus('error', `Beitritt fehlgeschlagen: ${error.message}`);
-                document.getElementById('joinMeetingBtn').innerHTML = 'Der Sprechstunde beitreten';
-                document.getElementById('joinMeetingBtn').disabled = false;
+                
+                // Reset button on error
+                const joinBtn = document.getElementById('joinMeetingBtn');
+                joinBtn.innerHTML = 'Der Sprechstunde beitreten';
+                joinBtn.disabled = false;
+                isJoining = false; // Reset flag
             }
         }
 
