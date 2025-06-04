@@ -28,9 +28,30 @@ logger = logging.getLogger(__name__)
 
 # Initialize FastAPI app
 app = FastAPI(
-    title="HeyDok Video - Simple Video Meetings",
-    description="A minimal video meeting platform powered by LiveKit",
-    version="1.0.0"
+    title="HeyDok Video - Video Meeting Platform",
+    description="""
+    A comprehensive video meeting platform powered by LiveKit.
+    
+    ## Features
+    - Direct video meetings for doctors and patients
+    - Patient setup flow with document upload and media testing
+    - External API for third-party integrations
+    
+    ## External API
+    The platform provides external API endpoints for integrating video meeting functionality:
+    - **Create Meeting Link**: Programmatically create meeting links
+    - **Patient Status Updates**: Track patient status during meetings
+    
+    See `/docs` for interactive API documentation.
+    """,
+    version="1.0.0",
+    contact={
+        "name": "HeyDok Video Support",
+        "email": "support@heydok.com",
+    },
+    license_info={
+        "name": "MIT",
+    },
 )
 
 # Configure CORS
@@ -198,7 +219,6 @@ class PatientJoinRequest(BaseModel):
 class MeetingStatusResponse(BaseModel):
     meeting_id: str
     doctor_name: str
-    doctor_joined: bool
     patient_name: Optional[str] = None
     patient_joined: bool
     patient_setup_completed: bool
@@ -206,6 +226,32 @@ class MeetingStatusResponse(BaseModel):
     media_test_completed: bool
     meeting_active: bool
     created_at: str
+
+# API Models for external meeting link creation and status updates
+class CreateMeetingLinkRequest(BaseModel):
+    doctor_name: str = Field(min_length=1, max_length=100, description="Name of the doctor creating the meeting")
+    external_id: Optional[str] = Field(None, max_length=50, description="Optional external identifier for the meeting")
+
+class CreateMeetingLinkResponse(BaseModel):
+    meeting_id: str = Field(description="Unique meeting identifier")
+    doctor_join_url: str = Field(description="Direct URL for doctor to join the meeting")
+    patient_join_url: str = Field(description="URL for patients to join (includes setup flow)")
+    external_id: Optional[str] = Field(None, description="External identifier if provided")
+    created_at: str = Field(description="Meeting creation timestamp")
+    expires_at: str = Field(description="Meeting expiration timestamp")
+
+class PatientStatusRequest(BaseModel):
+    meeting_id: str = Field(min_length=1, description="Meeting identifier")
+    patient_name: Optional[str] = Field(None, max_length=100, description="Patient name if known")
+    status: str = Field(pattern="^(joining|in_meeting|left|setup_incomplete)$", description="Patient status")
+    timestamp: Optional[str] = Field(None, description="Optional timestamp of status change")
+
+class PatientStatusResponse(BaseModel):
+    meeting_id: str
+    patient_name: Optional[str]
+    status: str
+    updated_at: str
+    success: bool = True
 
 def generate_meeting_id() -> str:
     """Generate a readable meeting ID format: xxx-yyyy-zzz"""
@@ -1408,7 +1454,6 @@ async def get_meeting_status(meeting_id: str):
     return MeetingStatusResponse(
         meeting_id=meeting_id,
         doctor_name=str(meeting.get("doctor_name") or "Doctor"),
-        doctor_joined=meeting.get("doctor_joined", False),
         patient_name=meeting.get("patient_name"),
         patient_joined=meeting.get("patient_joined", False),
         patient_setup_completed=patient_setup_completed,
@@ -1659,6 +1704,141 @@ async def doctor_dashboard(meeting_id: str):
         </html>
         """
         return HTMLResponse(content=simple_dashboard)
+
+# ===== EXTERNAL API ENDPOINTS =====
+
+@app.post("/api/external/create-meeting-link", 
+          response_model=CreateMeetingLinkResponse,
+          tags=["External API"],
+          summary="Create Meeting Link",
+          description="Creates a new meeting link for external systems. Returns URLs for both doctor and patient access.")
+async def create_meeting_link(request: CreateMeetingLinkRequest):
+    """
+    Create a new meeting link for external integrations.
+    
+    This endpoint allows external systems to programmatically create meeting links.
+    Returns separate URLs for doctor (direct access) and patient (includes setup flow).
+    
+    - **doctor_name**: Name of the doctor who will host the meeting
+    - **external_id**: Optional external identifier for tracking purposes
+    """
+    try:
+        # Generate meeting ID
+        meeting_id = generate_meeting_id()
+        
+        # Create timestamp
+        created_at = datetime.now()
+        expires_at = created_at + timedelta(hours=24)
+        
+        # Create meeting entry
+        meeting_data = {
+            "id": meeting_id,
+            "room_name": f"meeting-{meeting_id}",
+            "created_at": created_at.isoformat(),
+            "expires_at": expires_at.isoformat(),
+            "doctor_name": request.doctor_name,
+            "doctor_role": "doctor",
+            "doctor_joined": False,
+            "patient_name": None,
+            "patient_joined": False,
+            "patient_setup_completed": False,
+            "document_uploaded": False,
+            "media_test_completed": False,
+            "meeting_active": True,
+            "participants": [],
+            "max_participants": 2,
+            "external_id": request.external_id,
+            "created_via_api": True
+        }
+        
+        # Store meeting
+        meetings[meeting_id] = meeting_data
+        active_participants[meeting_id] = set()
+        
+        # Generate URLs
+        base_url = get_base_url()
+        doctor_join_url = f"{base_url}/meeting/{meeting_id}?role=doctor&direct=true"
+        patient_join_url = f"{base_url}/patient-setup?meeting={meeting_id}"
+        
+        logger.info(f"🔗 Created meeting link via API: {meeting_id} for Dr. {request.doctor_name}")
+        
+        return CreateMeetingLinkResponse(
+            meeting_id=meeting_id,
+            doctor_join_url=doctor_join_url,
+            patient_join_url=patient_join_url,
+            external_id=request.external_id,
+            created_at=created_at.isoformat(),
+            expires_at=expires_at.isoformat()
+        )
+        
+    except Exception as e:
+        logger.error(f"❌ Failed to create meeting link: {e}")
+        raise HTTPException(status_code=500, detail="Failed to create meeting link")
+
+@app.post("/api/external/patient-status",
+          response_model=PatientStatusResponse,
+          tags=["External API"],
+          summary="Update Patient Status",
+          description="Updates the patient status for a meeting. Used to track patient presence and setup completion.")
+async def update_patient_status(request: PatientStatusRequest):
+    """
+    Update patient status for a meeting.
+    
+    This endpoint allows external systems to report patient status changes.
+    Useful for tracking patient journey through the meeting setup and participation.
+    
+    - **meeting_id**: The meeting identifier
+    - **patient_name**: Name of the patient (optional)
+    - **status**: Current patient status (joining, in_meeting, left, setup_incomplete)
+    - **timestamp**: Optional timestamp of status change
+    """
+    try:
+        # Validate meeting exists
+        if request.meeting_id not in meetings:
+            raise HTTPException(status_code=404, detail="Meeting not found")
+        
+        meeting_data = meetings[request.meeting_id]
+        
+        # Update timestamp
+        updated_at = request.timestamp or datetime.now().isoformat()
+        
+        # Update meeting data based on status
+        if request.status == "joining":
+            meeting_data["patient_setup_completed"] = True
+            if request.patient_name:
+                meeting_data["patient_name"] = request.patient_name
+                
+        elif request.status == "in_meeting":
+            meeting_data["patient_joined"] = True
+            meeting_data["patient_setup_completed"] = True
+            if request.patient_name:
+                meeting_data["patient_name"] = request.patient_name
+                
+        elif request.status == "left":
+            meeting_data["patient_joined"] = False
+            
+        elif request.status == "setup_incomplete":
+            meeting_data["patient_setup_completed"] = False
+            meeting_data["patient_joined"] = False
+        
+        # Store status update timestamp
+        meeting_data["last_status_update"] = updated_at
+        
+        logger.info(f"📊 Updated patient status for meeting {request.meeting_id}: {request.status}")
+        
+        return PatientStatusResponse(
+            meeting_id=request.meeting_id,
+            patient_name=request.patient_name,
+            status=request.status,
+            updated_at=updated_at,
+            success=True
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Failed to update patient status: {e}")
+        raise HTTPException(status_code=500, detail="Failed to update patient status")
 
 # Error handlers
 @app.exception_handler(404)
