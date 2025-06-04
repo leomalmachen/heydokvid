@@ -25,22 +25,6 @@
                     Neues Meeting
                 </button>
             </div>
-
-            <!-- Toggle Link for Join Meeting -->
-            <div class="toggle-section">
-                <a href="#" id="showJoinSection" class="toggle-link">Bestehendem Meeting beitreten?</a>
-            </div>
-
-            <!-- Join Meeting Section - Initially Hidden -->
-            <div class="action-card" id="joinSection" style="display: none;">
-                <h2>Meeting beitreten</h2>
-                <input type="text" id="meetingCode" placeholder="Meeting-Code eingeben" pattern="[a-z0-9]{3}-[a-z0-9]{4}-[a-z0-9]{3}">
-                <input type="text" id="participantName" placeholder="Dein Name" maxlength="50">
-                <button id="joinMeeting" class="btn btn-secondary">
-                    Beitreten
-                </button>
-                <a href="#" id="hideJoinSection" class="toggle-link">Zurück</a>
-            </div>
         </main>
 
         <!-- Share Modal -->
@@ -71,20 +55,6 @@
         // Load name from localStorage
         const savedName = localStorage.getItem('userName') || '';
         document.getElementById('hostName').value = savedName;
-        document.getElementById('participantName').value = savedName;
-
-        // Toggle join section visibility
-        document.getElementById('showJoinSection').addEventListener('click', (e) => {
-            e.preventDefault();
-            document.getElementById('joinSection').style.display = 'block';
-            document.querySelector('.toggle-section').style.display = 'none';
-        });
-
-        document.getElementById('hideJoinSection').addEventListener('click', (e) => {
-            e.preventDefault();
-            document.getElementById('joinSection').style.display = 'none';
-            document.querySelector('.toggle-section').style.display = 'block';
-        });
 
         // Create Meeting
         document.getElementById('createMeeting').addEventListener('click', async () => {
@@ -120,51 +90,6 @@
             }
         });
 
-        // Join Meeting
-        document.getElementById('joinMeeting').addEventListener('click', async () => {
-            const meetingCode = document.getElementById('meetingCode').value.trim();
-            const participantName = document.getElementById('participantName').value.trim() || 'Teilnehmer';
-            
-            if (!meetingCode) {
-                alert('Bitte Meeting-Code eingeben');
-                return;
-            }
-            
-            // Save name to localStorage
-            localStorage.setItem('userName', participantName);
-            
-            // If it's a URL, extract meeting ID
-            let meetingId = meetingCode;
-            if (meetingCode.includes('/meeting/')) {
-                meetingId = meetingCode.split('/meeting/')[1];
-            }
-            
-            try {
-                const response = await fetch(`/api/meetings/${meetingId}/join`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ participant_name: participantName })
-                });
-
-                if (!response.ok) {
-                    if (response.status === 404) {
-                        throw new Error('Meeting nicht gefunden');
-                    }
-                    throw new Error('Fehler beim Beitreten');
-                }
-                
-                const data = await response.json();
-                
-                // Store data for meeting page
-                sessionStorage.setItem('meetingData', JSON.stringify(data));
-                
-                // Navigate to meeting
-                window.location.href = `/meeting/${data.meeting_id}`;
-            } catch (error) {
-                alert(error.message);
-            }
-        });
-
         // Copy link functionality
         document.getElementById('copyLink').addEventListener('click', () => {
             const shareLink = document.getElementById('shareLink');
@@ -182,13 +107,6 @@
         document.getElementById('shareModal').addEventListener('click', (e) => {
             if (e.target.id === 'shareModal') {
                 e.target.classList.remove('show');
-            }
-        });
-
-        // Allow Enter key to submit
-        document.getElementById('meetingCode').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                document.getElementById('joinMeeting').click();
             }
         });
     </script>
