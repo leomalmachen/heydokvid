@@ -784,8 +784,8 @@
             const confirmWorking = document.getElementById('confirmWorking').checked;
 
             if (confirmWorking) {
-                document.getElementById('step3Next').disabled = false;
-                showStatus('success', 'Perfekt! Alle Tests bestätigt. Sie können nun fortfahren.');
+                // Automatically submit media test when patient confirms
+                submitMediaTest();
             } else {
                 document.getElementById('step3Next').disabled = true;
             }
@@ -794,6 +794,8 @@
         async function submitMediaTest() {
             try {
                 const confirmWorking = document.getElementById('confirmWorking').checked;
+                
+                showStatus('info', 'Media-Test wird durchgeführt...');
                 
                 const testData = {
                     meeting_id: meetingId,
@@ -821,11 +823,11 @@
                 mediaTestId = result.test_id;
 
                 if (result.allowed_to_join) {
-                    document.getElementById('step3').classList.remove('active');
-                    document.getElementById('step3').classList.add('completed');
-                    document.getElementById('step4').classList.add('active');
-                    currentStep = 4;
-
+                    showStatus('success', '✅ Media-Test erfolgreich! Sie können nun der Sprechstunde beitreten.');
+                    
+                    // Enable next step
+                    document.getElementById('step3Next').disabled = false;
+                    
                     // Stop media streams
                     if (stream) {
                         stream.getTracks().forEach(track => track.stop());
