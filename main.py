@@ -345,7 +345,7 @@ class PatientStatusRequest(BaseModel):
     )
     status: str = Field(
         description="📊 Patient-Status",
-        regex="^(joining|in_meeting|left|setup_incomplete)$",
+        pattern="^(joining|in_meeting|left|setup_incomplete)$",
         example="in_meeting"
     )
     timestamp: Optional[str] = Field(
@@ -2130,7 +2130,7 @@ async def health_check():
             "services": {
                 "api": "healthy",
                 "database": "healthy",
-                "livekit": "healthy" if LIVEKIT_API_KEY else "config_missing"
+                "livekit": "healthy" if os.getenv('LIVEKIT_API_KEY') else "config_missing"
             },
             "metrics": {
                 "active_meetings": active_meeting_count,
