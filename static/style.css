@@ -38,10 +38,10 @@ header p {
 
 .home-main {
     display: flex;
+    flex-direction: column;
     justify-content: center;
     align-items: center;
     gap: 2rem;
-    flex-wrap: wrap;
     margin-top: 4rem;
 }
 
@@ -52,6 +52,10 @@ header p {
     width: 100%;
     max-width: 400px;
     text-align: center;
+}
+
+.action-card.centered {
+    margin: 0 auto;
 }
 
 .action-card h2 {
@@ -73,6 +77,25 @@ header p {
 .action-card input:focus {
     outline: none;
     border-color: #8ab4f8;
+}
+
+.toggle-section {
+    text-align: center;
+    margin-top: 1rem;
+}
+
+.toggle-link {
+    color: #8ab4f8;
+    text-decoration: none;
+    font-size: 0.9rem;
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+}
+
+.toggle-link:hover {
+    background-color: #303134;
+    text-decoration: underline;
 }
 
 .divider {

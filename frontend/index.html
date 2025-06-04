@@ -14,8 +14,8 @@
         </header>
 
         <main class="home-main">
-            <!-- New Meeting Section -->
-            <div class="action-card">
+            <!-- New Meeting Section - Centered -->
+            <div class="action-card centered">
                 <h2>Neues Meeting starten</h2>
                 <input type="text" id="hostName" placeholder="Dein Name" maxlength="50">
                 <button id="createMeeting" class="btn btn-primary">
@@ -26,18 +26,20 @@
                 </button>
             </div>
 
-            <div class="divider">
-                <span>oder</span>
+            <!-- Toggle Link for Join Meeting -->
+            <div class="toggle-section">
+                <a href="#" id="showJoinSection" class="toggle-link">Bestehendem Meeting beitreten?</a>
             </div>
 
-            <!-- Join Meeting Section -->
-            <div class="action-card">
+            <!-- Join Meeting Section - Initially Hidden -->
+            <div class="action-card" id="joinSection" style="display: none;">
                 <h2>Meeting beitreten</h2>
                 <input type="text" id="meetingCode" placeholder="Meeting-Code eingeben" pattern="[a-z0-9]{3}-[a-z0-9]{4}-[a-z0-9]{3}">
                 <input type="text" id="participantName" placeholder="Dein Name" maxlength="50">
                 <button id="joinMeeting" class="btn btn-secondary">
                     Beitreten
                 </button>
+                <a href="#" id="hideJoinSection" class="toggle-link">Zurück</a>
             </div>
         </main>
 
@@ -70,6 +72,19 @@
         const savedName = localStorage.getItem('userName') || '';
         document.getElementById('hostName').value = savedName;
         document.getElementById('participantName').value = savedName;
+
+        // Toggle join section visibility
+        document.getElementById('showJoinSection').addEventListener('click', (e) => {
+            e.preventDefault();
+            document.getElementById('joinSection').style.display = 'block';
+            document.querySelector('.toggle-section').style.display = 'none';
+        });
+
+        document.getElementById('hideJoinSection').addEventListener('click', (e) => {
+            e.preventDefault();
+            document.getElementById('joinSection').style.display = 'none';
+            document.querySelector('.toggle-section').style.display = 'block';
+        });
 
         // Create Meeting
         document.getElementById('createMeeting').addEventListener('click', async () => {
