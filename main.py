@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from typing import Dict, Optional
 import uuid
 import mimetypes
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Depends, Request, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
@@ -270,6 +271,8 @@ class MeetingStatusResponse(BaseModel):
     media_test_completed: bool
     meeting_active: bool
     created_at: str
+    last_patient_status: Optional[str] = None
+    last_status_update: Optional[str] = None
 
 # API Models for external meeting link creation and status updates
 class CreateMeetingLinkRequest(BaseModel):
@@ -345,8 +348,8 @@ class PatientStatusRequest(BaseModel):
     )
     status: str = Field(
         description="📊 Patient-Status",
-        pattern="^(joining|in_meeting|left|setup_incomplete)$",
-        example="in_meeting"
+        pattern="^(link_created|patient_active|in_meeting)$",
+        example="patient_active"
     )
     timestamp: Optional[str] = Field(
         None, 
@@ -359,7 +362,7 @@ class PatientStatusRequest(BaseModel):
             "example": {
                 "meeting_id": "mtg_8f4e2d1c9b6a",
                 "patient_name": "Max Mustermann", 
-                "status": "in_meeting",
+                "status": "patient_active",
                 "timestamp": "2024-01-15T14:35:00Z"
             }
         }
@@ -376,7 +379,7 @@ class PatientStatusResponse(BaseModel):
             "example": {
                 "meeting_id": "mtg_8f4e2d1c9b6a",
                 "patient_name": "Max Mustermann",
-                "status": "in_meeting", 
+                "status": "patient_active", 
                 "updated_at": "2024-01-15T14:35:00Z",
                 "success": True
             }
@@ -1589,7 +1592,9 @@ async def get_meeting_status(meeting_id: str):
         document_uploaded=document_uploaded,
         media_test_completed=meeting.get("media_test_completed", False),
         meeting_active=meeting.get("meeting_active", True),
-        created_at=meeting["created_at"]
+        created_at=meeting["created_at"],
+        last_patient_status=meeting.get("last_patient_status"),
+        last_status_update=meeting.get("last_status_update")
     )
 
 @app.post("/api/meetings/{meeting_id}/join-doctor", response_model=MeetingResponse)
@@ -1706,133 +1711,27 @@ async def doctor_join_meeting(
 
 @app.get("/doctor-dashboard/{meeting_id}", response_class=HTMLResponse)
 async def doctor_dashboard(meeting_id: str):
-    """Serve the doctor dashboard to monitor patient setup and meeting status"""
-    # Check if meeting exists, create if not (handles Heroku memory loss)
-    if meeting_id not in meetings:
-        logger.info(f"Meeting {meeting_id} not found in memory, recreating entry for doctor dashboard")
-        # Recreate meeting entry for this meeting ID
-        meetings[meeting_id] = {
-            "id": meeting_id,
-            "room_name": f"meeting-{meeting_id}",
-            "created_at": datetime.now().isoformat(),
-            "doctor_name": "Doctor",  # Default doctor name
-            "doctor_role": "doctor",
-            "doctor_joined": False,
-            "patient_name": None,
-            "patient_joined": False,
-            "patient_setup_completed": False,
-            "document_uploaded": False,
-            "media_test_completed": False,
-            "meeting_active": True,
-            "participants": [],
-            "max_participants": 2
-        }
-        # Initialize participant tracking
-        active_participants[meeting_id] = set()
+    """
+    🩺 **Arzt Dashboard für Meeting-Überwachung**
     
-    try:
-        with open("frontend/doctor_dashboard.html", "r", encoding='utf-8') as f:
-            html_content = f.read()
-            # Replace placeholder with actual meeting ID
-            html_content = html_content.replace("{{MEETING_ID}}", meeting_id)
-            return HTMLResponse(content=html_content)
-    except FileNotFoundError:
-        logger.error("doctor_dashboard.html not found")
-        # Return a simple dashboard if template doesn't exist
-        meeting_data = meetings[meeting_id]
-        patient_setup_url = f"{get_base_url()}/patient-setup?meeting={meeting_id}"
-        
-        simple_dashboard = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Doctor Dashboard - Meeting {meeting_id}</title>
-            <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1">
-            <style>
-                body {{ font-family: Arial, sans-serif; margin: 20px; }}
-                .status {{ padding: 10px; margin: 10px 0; border-radius: 5px; }}
-                .status.completed {{ background-color: #d4edda; color: #155724; }}
-                .status.pending {{ background-color: #fff3cd; color: #856404; }}
-                .status.missing {{ background-color: #f8d7da; color: #721c24; }}
-                .url-box {{ background: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0; }}
-                .url-box input {{ width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 3px; }}
-                button {{ background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; }}
-                button:hover {{ background: #0056b3; }}
-            </style>
-        </head>
-        <body>
-            <h1>Doctor Dashboard</h1>
-            <h2>Meeting: {meeting_id}</h2>
-            <p><strong>Doctor:</strong> Dr. {meeting_data["doctor_name"]}</p>
-            
-            <h3>Patient Setup Status</h3>
-            <div id="status-container">
-                <div class="status pending">Loading status...</div>
-            </div>
-            
-            <h3>Patient Setup Link</h3>
-            <div class="url-box">
-                <label>Send this link to your patient:</label>
-                <input type="text" value="{patient_setup_url}" readonly onclick="this.select()">
-                <button onclick="copyToClipboard()">Copy Link</button>
-            </div>
-            
-            <h3>Actions</h3>
-            <button onclick="joinMeeting()">Join Meeting Room</button>
-            <button onclick="refreshStatus()">Refresh Status</button>
-            
-            <script>
-                function copyToClipboard() {{
-                    const input = document.querySelector('input[readonly]');
-                    input.select();
-                    document.execCommand('copy');
-                    alert('Link copied to clipboard!');
-                }}
-                
-                function joinMeeting() {{
-                    window.open('/meeting/{meeting_id}?role=doctor', '_blank');
-                }}
-                
-                async function refreshStatus() {{
-                    try {{
-                        const response = await fetch('/api/meetings/{meeting_id}/status');
-                        const status = await response.json();
-                        updateStatusDisplay(status);
-                    }} catch (error) {{
-                        console.error('Error fetching status:', error);
-                    }}
-                }}
-                
-                function updateStatusDisplay(status) {{
-                    const container = document.getElementById('status-container');
-                    container.innerHTML = `
-                        <div class="status ${{status.patient_setup_completed ? 'completed' : 'pending'}}">
-                            Patient Setup: ${{status.patient_setup_completed ? 'Completed' : 'Pending'}}
-                        </div>
-                        <div class="status ${{status.document_uploaded ? 'completed' : 'missing'}}">
-                            Document Upload: ${{status.document_uploaded ? 'Uploaded' : 'Not uploaded'}}
-                        </div>
-                        <div class="status ${{status.media_test_completed ? 'completed' : 'pending'}}">
-                            Media Test: ${{status.media_test_completed ? 'Completed' : 'Pending'}}
-                        </div>
-                        <div class="status ${{status.patient_joined ? 'completed' : 'pending'}}">
-                            Patient Joined: ${{status.patient_joined ? 'Yes' : 'No'}}
-                        </div>
-                    `;
-                    if (status.patient_name) {{
-                        container.innerHTML += `<p><strong>Patient Name:</strong> ${{status.patient_name}}</p>`;
-                    }}
-                }}
-                
-                // Auto-refresh every 5 seconds
-                setInterval(refreshStatus, 5000);
-                refreshStatus(); // Initial load
-            </script>
-        </body>
-        </html>
-        """
-        return HTMLResponse(content=simple_dashboard)
+    Zeigt den aktuellen Patient-Status mit 3-Stufen-Ampelsystem:
+    - 🔴 Link erstellt (Patient noch nicht aktiv)
+    - 🟡 Patient aktiv (füllt Daten aus)
+    - 🟢 Im Meeting (bereit für Sprechstunde)
+    """
+    if meeting_id not in meetings:
+        raise HTTPException(status_code=404, detail="Meeting nicht gefunden")
+    
+    # Read dashboard template
+    dashboard_path = Path("frontend/doctor_dashboard.html")
+    if not dashboard_path.exists():
+        raise HTTPException(status_code=404, detail="Dashboard template nicht gefunden")
+    
+    template_content = dashboard_path.read_text(encoding='utf-8')
+    # Replace placeholder with actual meeting ID
+    html_content = template_content.replace('{{MEETING_ID}}', meeting_id)
+    
+    return html_content
 
 # ===== EXTERNAL API ENDPOINTS =====
 
@@ -1958,14 +1857,13 @@ async def create_meeting_link(request: CreateMeetingLinkRequest):
           und entsprechende Aktionen in externen Systemen auszulösen.
           
           ### 📈 Status-Werte:
-          - **`setup_incomplete`** - Patient hat Setup noch nicht abgeschlossen
-          - **`joining`** - Patient hat Setup abgeschlossen und tritt bei
+          - **`link_created`** - Meeting-Link erstellt, Patient noch nicht aktiv
+          - **`patient_active`** - Patient füllt gerade Daten aus (Setup-Prozess)
           - **`in_meeting`** - Patient ist aktiv im Meeting
-          - **`left`** - Patient hat das Meeting verlassen
           
           ### 🔄 Typischer Status-Flow:
           ```
-          setup_incomplete → joining → in_meeting → left
+          link_created → patient_active → in_meeting
           ```
           
           ### 💡 Integration-Tipps:
@@ -1982,7 +1880,7 @@ async def create_meeting_link(request: CreateMeetingLinkRequest):
                           "example": {
                               "meeting_id": "mtg_8f4e2d1c9b6a",
                               "patient_name": "Max Mustermann",
-                              "status": "in_meeting",
+                              "status": "patient_active",
                               "updated_at": "2024-01-15T14:35:00Z",
                               "success": True
                           }
@@ -2048,8 +1946,9 @@ async def update_patient_status(request: PatientStatusRequest):
             "timestamp": update_time
         })
         meeting["last_patient_status"] = request.status
-        meeting["last_patient_name"] = request.patient_name
         meeting["last_status_update"] = update_time
+        if request.patient_name:
+            meeting["patient_name"] = request.patient_name
         
         logger.info(f"📊 External API: Updated patient status for {request.meeting_id}: {request.status}")
         

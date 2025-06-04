@@ -433,6 +433,9 @@
         let isJoining = false;
         let joinTimeout = null;
 
+        // STATUS TRACKING for Doctor Dashboard
+        let statusUpdateInterval = null;
+
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
             // Get meeting ID from URL
@@ -443,6 +446,9 @@
                 showStatus('error', 'Keine Meeting-ID gefunden. Bitte verwenden Sie einen gültigen Link.');
                 return;
             }
+
+            // Send simple status update: Patient is now active
+            updatePatientStatus('patient_active', 'Patient füllt Daten aus');
 
             // Set up file drag and drop
             setupFileUpload();
@@ -542,6 +548,9 @@
                 
                 console.log('🔄 Button disabled and loading state set');
 
+                // Update status: Patient is joining meeting
+                updatePatientStatus('in_meeting', 'Patient tritt Meeting bei');
+
                 const joinData = {
                     patient_name: patientName,
                     document_id: documentId,
@@ -593,22 +602,26 @@
                     showStatus('error', 'Bitte geben Sie Ihren Namen ein.');
                     return;
                 }
+                
                 document.getElementById('step1').classList.remove('active');
                 document.getElementById('step1').classList.add('completed');
                 document.getElementById('step2').classList.add('active');
                 currentStep = 2;
             } else if (step === 2) {
-                // Document upload is optional, so we can proceed even without a document
+                // Document upload completed or skipped
                 document.getElementById('step2').classList.remove('active');
                 document.getElementById('step2').classList.add('completed');
                 document.getElementById('step3').classList.add('active');
                 currentStep = 3;
             } else if (step === 3) {
-                if (!validateMediaTest()) {
-                    showStatus('error', 'Bitte bestätigen Sie, dass Kamera und Mikrofon funktionieren.');
+                if (!mediaTestId) {
+                    showStatus('error', 'Bitte führen Sie den Media-Test durch.');
                     return;
                 }
-                submitMediaTest();
+                document.getElementById('step3').classList.remove('active');
+                document.getElementById('step3').classList.add('completed');
+                document.getElementById('step4').classList.add('active');
+                currentStep = 4;
             }
         }
 
@@ -847,6 +860,34 @@
                 setTimeout(() => {
                     statusDiv.remove();
                 }, 5000);
+            }
+        }
+
+        // Send status updates to doctor dashboard
+        async function updatePatientStatus(status, description = '') {
+            if (!meetingId) return;
+            
+            try {
+                const response = await fetch('/api/external/patient-status', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        meeting_id: meetingId,
+                        patient_name: patientName || 'Unbekannt',
+                        status: status,
+                        timestamp: new Date().toISOString()
+                    })
+                });
+                
+                if (response.ok) {
+                    console.log(`📊 Status Update sent: ${status} - ${description}`);
+                } else {
+                    console.warn(`⚠️ Status Update failed: ${status}`);
+                }
+            } catch (error) {
+                console.error('❌ Status Update Error:', error);
             }
         }
     </script>
