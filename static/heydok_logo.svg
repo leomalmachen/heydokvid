@@ -1,0 +1,41 @@
+<svg viewBox="0 0 400 150" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .logo-text {
+        font-family: 'Brush Script MT', cursive, sans-serif;
+        font-size: 72px;
+        font-weight: normal;
+        fill: #1e3a5f;
+      }
+      .medical-cross {
+        fill: #00aaff;
+      }
+      .circle-bg {
+        fill: white;
+        stroke: #1e3a5f;
+        stroke-width: 2;
+      }
+      .underline {
+        stroke: #1e3a5f;
+        stroke-width: 3;
+        fill: none;
+        stroke-linecap: round;
+      }
+    </style>
+  </defs>
+  
+  <!-- Main handwritten text "heydok" -->
+  <text x="20" y="80" class="logo-text">heydok</text>
+  
+  <!-- Medical cross in circle -->
+  <circle cx="320" cy="55" r="22" class="circle-bg"/>
+  <g class="medical-cross">
+    <!-- Vertical bar of cross -->
+    <rect x="316" y="40" width="8" height="30" rx="2"/>
+    <!-- Horizontal bar of cross -->
+    <rect x="309" y="47" width="22" height="8" rx="2"/>
+  </g>
+  
+  <!-- Decorative underline curve -->
+  <path d="M20 95 Q150 105 280 95 Q300 93 320 95" class="underline"/>
+</svg> 
