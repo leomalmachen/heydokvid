@@ -1323,6 +1323,7 @@ async function connectToRoom(data) {
             console.log('🎉 Room connected successfully!');
             console.log('🎉 Local participant identity:', room.localParticipant.identity);
             console.log('🎉 Local participant SID:', room.localParticipant.sid);
+            console.log('🎉 Remote participants count:', room.remoteParticipants.size);
             
             // CRITICAL: Process local participant first - use CONSISTENT function
             console.log('👤 Processing LOCAL participant:', room.localParticipant.identity);
@@ -1339,9 +1340,14 @@ async function connectToRoom(data) {
                 
                 // CRITICAL: Subscribe to their existing tracks
                 participant.trackPublications.forEach((publication) => {
+                    console.log(`🎵 Found existing track: ${publication.kind} from ${participant.identity}, subscribed: ${publication.isSubscribed}, track: ${!!publication.track}`);
+                    
                     if (publication.isSubscribed && publication.track) {
                         console.log('🎵 Attaching existing track:', publication.kind, 'from', participant.identity);
                         handleTrackSubscribed(publication.track, publication, participant);
+                    } else if (!publication.isSubscribed) {
+                        console.log('🎵 Track not subscribed, attempting to subscribe:', publication.kind);
+                        publication.setSubscribed(true);
                     }
                 });
                 
@@ -1364,6 +1370,18 @@ async function connectToRoom(data) {
             // IMPORTANT: Force grid update after everything is set up
             updateParticipantCount();
             updateConsistentGrid();
+            
+            // CRITICAL: Add a delay and then force process all tracks again
+            setTimeout(() => {
+                console.log('🔄 Auto-retry: Force processing all tracks after 2 seconds...');
+                forceProcessAllTracks();
+            }, 2000);
+            
+            // CRITICAL: Add another retry after 5 seconds
+            setTimeout(() => {
+                console.log('🔄 Auto-retry: Force processing all tracks after 5 seconds...');
+                forceProcessAllTracks();
+            }, 5000);
             
             console.log('✅ Room setup completely finished!');
         });
@@ -1905,4 +1923,85 @@ function handleScreenShareTrack(track, publication, participant) {
     } catch (error) {
         console.error('❌ Failed to attach screen share track:', error);
     }
+}
+
+// DEBUGGING: Force process all available tracks
+function forceProcessAllTracks() {
+    console.log('🔍 FORCE PROCESSING ALL AVAILABLE TRACKS...');
+    
+    if (!room) {
+        console.error('❌ No room available for track processing');
+        return;
+    }
+    
+    console.log('🔍 Room state:', room.state);
+    console.log('🔍 Local participant:', room.localParticipant?.identity);
+    console.log('🔍 Remote participants count:', room.remoteParticipants.size);
+    
+    // Process local participant
+    if (room.localParticipant) {
+        console.log('🔍 Local participant tracks:');
+        room.localParticipant.trackPublications.forEach((publication, key) => {
+            console.log(`  - ${publication.kind} (${publication.source}): subscribed=${publication.isSubscribed}, track=${!!publication.track}`);
+            if (publication.track && publication.isSubscribed) {
+                console.log('    → Processing local track');
+                handleTrackSubscribed(publication.track, publication, room.localParticipant);
+            }
+        });
+    }
+    
+    // Process remote participants
+    console.log('🔍 Remote participants and their tracks:');
+    room.remoteParticipants.forEach((participant) => {
+        console.log(`👤 Participant: ${participant.identity} (SID: ${participant.sid})`);
+        console.log(`   Track publications: ${participant.trackPublications.size}`);
+        
+        participant.trackPublications.forEach((publication, key) => {
+            console.log(`  - ${publication.kind} (${publication.source}): subscribed=${publication.isSubscribed}, track=${!!publication.track}`);
+            if (publication.track && publication.isSubscribed) {
+                console.log('    → Processing remote track');
+                handleTrackSubscribed(publication.track, publication, participant);
+            } else if (!publication.isSubscribed) {
+                console.log('    → Track not subscribed, attempting to subscribe...');
+                publication.setSubscribed(true);
+            }
+        });
+    });
+    
+    // Update grid
+    updateConsistentGrid();
+    console.log('🔍 Force processing completed');
+}
+
+// Add this function to global scope for debugging
+window.forceProcessAllTracks = forceProcessAllTracks;
+
+// DEBUGGING: Add a button to manually trigger track processing
+function addDebugButton() {
+    const debugBtn = document.createElement('button');
+    debugBtn.textContent = '🔍 Debug Tracks';
+    debugBtn.style.position = 'fixed';
+    debugBtn.style.top = '10px';
+    debugBtn.style.right = '10px';
+    debugBtn.style.zIndex = '9999';
+    debugBtn.style.background = '#ff4444';
+    debugBtn.style.color = 'white';
+    debugBtn.style.border = 'none';
+    debugBtn.style.padding = '10px';
+    debugBtn.style.borderRadius = '5px';
+    debugBtn.style.cursor = 'pointer';
+    
+    debugBtn.onclick = () => {
+        console.log('🔍 Manual debug triggered');
+        forceProcessAllTracks();
+    };
+    
+    document.body.appendChild(debugBtn);
+}
+
+// Add debug button when page loads
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', addDebugButton);
+} else {
+    addDebugButton();
 } 
