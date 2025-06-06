@@ -582,6 +582,52 @@ function createConsistentContainer(participant, isLocal = false) {
     video.style.objectFit = 'cover';
     video.style.background = '#202124';
     
+    // CRITICAL: Add click handler to start video if autoplay fails
+    video.addEventListener('click', () => {
+        console.log('🎥 User clicked video, attempting to play:', participant.identity);
+        video.play().then(() => {
+            console.log('✅ Video started playing after user interaction:', participant.identity);
+        }).catch(e => {
+            console.warn('⚠️ Video still failed to play after click:', participant.identity, e);
+        });
+    });
+    
+    // Add visual indicator when video is paused
+    video.addEventListener('pause', () => {
+        if (!isLocal) { // Don't show for local video since it might be muted
+            console.log('🎥 Video paused for:', participant.identity);
+            container.style.cursor = 'pointer';
+            // Add a subtle overlay to indicate clicking will start video
+            if (!container.querySelector('.play-indicator')) {
+                const playIndicator = document.createElement('div');
+                playIndicator.className = 'play-indicator';
+                playIndicator.innerHTML = '▶️ Klicken zum Starten';
+                playIndicator.style.position = 'absolute';
+                playIndicator.style.top = '50%';
+                playIndicator.style.left = '50%';
+                playIndicator.style.transform = 'translate(-50%, -50%)';
+                playIndicator.style.background = 'rgba(0, 0, 0, 0.7)';
+                playIndicator.style.color = 'white';
+                playIndicator.style.padding = '10px 15px';
+                playIndicator.style.borderRadius = '5px';
+                playIndicator.style.fontSize = '14px';
+                playIndicator.style.zIndex = '10';
+                playIndicator.style.pointerEvents = 'none';
+                container.appendChild(playIndicator);
+            }
+        }
+    });
+    
+    video.addEventListener('play', () => {
+        console.log('🎥 Video playing for:', participant.identity);
+        container.style.cursor = 'default';
+        // Remove play indicator
+        const playIndicator = container.querySelector('.play-indicator');
+        if (playIndicator) {
+            playIndicator.remove();
+        }
+    });
+    
     // Name label - CONSISTENT positioning for all
     const nameLabel = document.createElement('div');
     nameLabel.className = 'participant-name';
@@ -1254,37 +1300,7 @@ async function connectToRoom(data) {
             }
         });
         
-        // BULLETPROOF: Event handlers setup
-        room.on(LiveKit.RoomEvent.Connected, () => {
-            console.log('🎉 Room connected successfully!');
-            console.log('🎉 Local participant identity:', room.localParticipant.identity);
-            console.log('🎉 Local participant SID:', room.localParticipant.sid);
-            
-            // CRITICAL: Process local participant first - use CONSISTENT function
-            console.log('👤 Processing LOCAL participant:', room.localParticipant.identity);
-            const localContainer = createConsistentContainer(room.localParticipant, true);
-            console.log('👤 Local container created:', localContainer ? 'SUCCESS' : 'FAILED');
-            
-            // MEGA-IMPORTANT: Process ALL existing remote participants
-            console.log(`👥 Processing ${room.remoteParticipants.size} existing REMOTE participants`);
-            room.remoteParticipants.forEach((participant) => {
-                console.log('👤 Processing existing REMOTE participant:', participant.identity);
-                handleParticipantConnected(participant);
-                
-                // CRITICAL: Subscribe to their existing tracks
-                participant.trackPublications.forEach((publication) => {
-                    if (publication.isSubscribed && publication.track) {
-                        console.log('🎵 Attaching existing track:', publication.kind, 'from', participant.identity);
-                        handleTrackSubscribed(publication.track, publication, participant);
-                    }
-                });
-            });
-            
-            // Enable local camera and microphone with stored state
-            console.log('🎥 About to enable local media...');
-            enableLocalMedia();
-        });
-        
+        // FIXED: Setup all event handlers BEFORE connecting
         room.on(LiveKit.RoomEvent.ParticipantConnected, handleParticipantConnected);
         room.on(LiveKit.RoomEvent.ParticipantDisconnected, handleParticipantDisconnected);
         room.on(LiveKit.RoomEvent.TrackSubscribed, handleTrackSubscribed);
@@ -1300,6 +1316,56 @@ async function connectToRoom(data) {
         room.on(LiveKit.RoomEvent.Reconnected, () => {
             console.log('✅ Room reconnected!');
             showStatus('Verbindung wiederhergestellt!', 'success');
+        });
+        
+        // BULLETPROOF: Room connected handler
+        room.on(LiveKit.RoomEvent.Connected, async () => {
+            console.log('🎉 Room connected successfully!');
+            console.log('🎉 Local participant identity:', room.localParticipant.identity);
+            console.log('🎉 Local participant SID:', room.localParticipant.sid);
+            
+            // CRITICAL: Process local participant first - use CONSISTENT function
+            console.log('👤 Processing LOCAL participant:', room.localParticipant.identity);
+            const localContainer = createConsistentContainer(room.localParticipant, true);
+            console.log('👤 Local container created:', localContainer ? 'SUCCESS' : 'FAILED');
+            
+            // MEGA-IMPORTANT: Process ALL existing remote participants
+            console.log(`👥 Processing ${room.remoteParticipants.size} existing REMOTE participants`);
+            room.remoteParticipants.forEach((participant) => {
+                console.log('👤 Processing existing REMOTE participant:', participant.identity);
+                // Create container for existing participant
+                const container = createConsistentContainer(participant, false);
+                console.log('👤 Container created for existing participant:', container ? 'SUCCESS' : 'FAILED');
+                
+                // CRITICAL: Subscribe to their existing tracks
+                participant.trackPublications.forEach((publication) => {
+                    if (publication.isSubscribed && publication.track) {
+                        console.log('�� Attaching existing track:', publication.kind, 'from', participant.identity);
+                        handleTrackSubscribed(publication.track, publication, participant);
+                    }
+                });
+                
+                // IMPORTANT: Setup event listeners for this participant
+                participant.on(LiveKit.ParticipantEvent.TrackSubscribed, (track, publication) => {
+                    console.log('🎵 Track subscribed event for:', participant.identity, track.kind);
+                    handleTrackSubscribed(track, publication, participant);
+                });
+                
+                participant.on(LiveKit.ParticipantEvent.TrackUnsubscribed, (track, publication) => {
+                    console.log('🔇 Track unsubscribed for:', participant.identity, track.kind);
+                    handleTrackUnsubscribed(track, publication, participant);
+                });
+            });
+            
+            // Enable local camera and microphone with stored state
+            console.log('🎥 About to enable local media...');
+            await enableLocalMedia();
+            
+            // IMPORTANT: Force grid update after everything is set up
+            updateParticipantCount();
+            updateConsistentGrid();
+            
+            console.log('✅ Room setup completely finished!');
         });
         
         // CRITICAL: Attempt connection with detailed logging
@@ -1413,18 +1479,21 @@ function handleTrackSubscribed(track, publication, participant) {
         kind: track.kind,
         sid: track.sid,
         participant: participant.identity,
-        participantSid: participant.sid
+        participantSid: participant.sid,
+        source: publication.source
     });
+    
+    // CRITICAL: Handle screen share tracks separately
+    if (publication.source === LiveKit.TrackSource.ScreenShare) {
+        console.log('🖥️ Handling screen share track from:', participant.identity);
+        handleScreenShareTrack(track, publication, participant);
+        return;
+    }
     
     // Get participant container - use CONSISTENT ID scheme
     const container = document.getElementById(`participant-${participant.sid}`);
     if (!container) {
         console.warn('⚠️ No container found for participant:', participant.identity);
-        // For screen share tracks, they get their own container
-        if (publication.source === LiveKit.TrackSource.ScreenShare) {
-            handleScreenShareTrack(track, publication, participant);
-            return;
-        }
         
         // For regular video/audio tracks, we need a container - create one if missing
         console.log('📦 Creating missing container for remote participant:', participant.identity);
@@ -1442,16 +1511,6 @@ function handleTrackSubscribed(track, publication, participant) {
     if (track.kind === 'video') {
         console.log('📹 Attaching VIDEO track for:', participant.identity);
         
-        // Check if this is a screen share track
-        const isScreenShare = publication.source === LiveKit.TrackSource.ScreenShare;
-        console.log('🖥️ Is screen share track:', isScreenShare);
-        
-        if (isScreenShare) {
-            // Handle screen share track differently
-            handleScreenShareTrack(track, publication, participant);
-            return;
-        }
-        
         // Get video element for regular camera feed
         const video = container.querySelector('video');
         if (!video) {
@@ -1464,19 +1523,44 @@ function handleTrackSubscribed(track, publication, participant) {
         
         // CRITICAL: Attach track properly
         try {
+            // IMPORTANT: Detach any previous track first
+            if (video.srcObject) {
+                console.log('📹 Detaching previous video source for:', participant.identity);
+                const previousTracks = video.srcObject.getTracks();
+                previousTracks.forEach(t => t.stop());
+                video.srcObject = null;
+            }
+            
+            // Attach the new track
             track.attach(video);
+            console.log('📹 Track attached successfully for:', participant.identity);
             
             // IMPORTANT: Ensure video is visible and playing
             video.style.display = 'block';
             video.style.visibility = 'visible';
             video.style.opacity = '1';
+            video.style.objectFit = 'cover';
             
-            // Try to play the video
+            // CRITICAL: Force video element to show the track
+            video.addEventListener('loadedmetadata', () => {
+                console.log('📹 Video metadata loaded for:', participant.identity);
+                video.play().then(() => {
+                    console.log('✅ Video playing successfully for:', participant.identity);
+                }).catch(e => {
+                    console.warn('⚠️ Video autoplay prevented for:', participant.identity, e);
+                    // Try to play without sound first
+                    video.muted = true;
+                    video.play().catch(e2 => {
+                        console.warn('⚠️ Video play failed even when muted:', participant.identity, e2);
+                    });
+                });
+            });
+            
+            // Try to play immediately
             video.play().then(() => {
-                console.log('✅ Video playing successfully for:', participant.identity);
+                console.log('✅ Video playing immediately for:', participant.identity);
             }).catch(e => {
-                console.warn('⚠️ Video autoplay prevented for:', participant.identity, e);
-                // This is usually okay, user interaction will start playback
+                console.warn('⚠️ Video autoplay prevented initially for:', participant.identity, e);
             });
             
             console.log('✅ Video track attached and made visible for:', participant.identity);
@@ -1489,12 +1573,13 @@ function handleTrackSubscribed(track, publication, participant) {
         // Handle video track events
         track.on(LiveKit.TrackEvent.Muted, () => {
             console.log('📹❌ Video muted for:', participant.identity);
-            video.style.display = 'none';
+            video.style.opacity = '0.3';
+            // Don't hide completely, just dim
         });
         
         track.on(LiveKit.TrackEvent.Unmuted, () => {
             console.log('📹✅ Video unmuted for:', participant.identity);
-            video.style.display = 'block';
+            video.style.opacity = '1';
         });
         
         // CRITICAL: Update grid layout after video is attached
@@ -1502,6 +1587,16 @@ function handleTrackSubscribed(track, publication, participant) {
         
     } else if (track.kind === 'audio') {
         console.log('🔊 Attaching AUDIO track for:', participant.identity);
+        
+        // Remove any existing audio elements for this participant
+        const existingAudios = container.querySelectorAll('audio');
+        existingAudios.forEach(audio => {
+            if (audio.srcObject) {
+                const tracks = audio.srcObject.getTracks();
+                tracks.forEach(t => t.stop());
+            }
+            audio.remove();
+        });
         
         // Create audio element for remote audio
         const audio = document.createElement('audio');
@@ -1513,6 +1608,13 @@ function handleTrackSubscribed(track, publication, participant) {
         try {
             track.attach(audio);
             container.appendChild(audio);
+            
+            // Force audio to play
+            audio.play().then(() => {
+                console.log('✅ Audio playing successfully for:', participant.identity);
+            }).catch(e => {
+                console.warn('⚠️ Audio autoplay prevented for:', participant.identity, e);
+            });
             
             console.log('✅ Audio track attached successfully for:', participant.identity);
         } catch (error) {
@@ -1574,7 +1676,7 @@ async function enableLocalMedia() {
         console.log('🎥 Local participant identity:', room.localParticipant.identity);
         console.log('🎥 Local participant SID:', room.localParticipant.sid);
         
-        // Enable camera and microphone based on saved state
+        // CRITICAL: Enable camera and microphone based on saved state
         console.log('🎥 Setting camera enabled to:', videoEnabled);
         await room.localParticipant.setCameraEnabled(videoEnabled);
         console.log('🎥 Setting microphone enabled to:', audioEnabled);
@@ -1615,17 +1717,63 @@ async function enableLocalMedia() {
         console.log('🎥 Processing video track publications...');
         console.log('🎥 Video track publications count:', room.localParticipant.videoTrackPublications.size);
         
+        // CRITICAL: Wait for tracks to be published if they haven't been yet
+        let attempts = 0;
+        const maxAttempts = 10;
+        while (room.localParticipant.videoTrackPublications.size === 0 && attempts < maxAttempts) {
+            console.log(`🎥 Waiting for video tracks to be published (attempt ${attempts + 1}/${maxAttempts})...`);
+            await new Promise(resolve => setTimeout(resolve, 200));
+            attempts++;
+        }
+        
         // Attach video tracks to local video element
+        let videoAttached = false;
         room.localParticipant.videoTrackPublications.forEach((publication, index) => {
             if (publication.track) {
                 console.log(`📹 Attaching LOCAL video track ${index}:`, publication.track);
-                publication.track.attach(localVideo);
-                localVideo.style.display = videoEnabled ? 'block' : 'none';
-                console.log(`📹 Video track ${index} attached successfully, display:`, localVideo.style.display);
+                try {
+                    // Clear any existing source
+                    if (localVideo.srcObject) {
+                        const existingTracks = localVideo.srcObject.getTracks();
+                        existingTracks.forEach(t => t.stop());
+                        localVideo.srcObject = null;
+                    }
+                    
+                    publication.track.attach(localVideo);
+                    localVideo.style.display = videoEnabled ? 'block' : 'none';
+                    localVideo.style.visibility = 'visible';
+                    localVideo.style.opacity = '1';
+                    
+                    // Force video to play
+                    localVideo.play().then(() => {
+                        console.log(`📹 Local video ${index} playing successfully`);
+                    }).catch(e => {
+                        console.warn(`📹 Local video ${index} autoplay prevented:`, e);
+                    });
+                    
+                    videoAttached = true;
+                    console.log(`📹 Video track ${index} attached successfully, display:`, localVideo.style.display);
+                } catch (error) {
+                    console.error(`❌ Failed to attach local video track ${index}:`, error);
+                }
             } else {
                 console.log(`📹 Video track publication ${index} has no track`);
             }
         });
+        
+        if (!videoAttached && videoEnabled) {
+            console.warn('⚠️ No video tracks were attached but video is enabled');
+            // Try to enable camera again
+            try {
+                console.log('🎥 Retrying camera enable...');
+                await room.localParticipant.setCameraEnabled(false);
+                await new Promise(resolve => setTimeout(resolve, 100));
+                await room.localParticipant.setCameraEnabled(true);
+                console.log('🎥 Camera re-enabled successfully');
+            } catch (error) {
+                console.error('❌ Failed to re-enable camera:', error);
+            }
+        }
         
         console.log('🎥 Processing audio track publications...');
         console.log('🎥 Audio track publications count:', room.localParticipant.audioTrackPublications.size);
@@ -1648,10 +1796,6 @@ async function enableLocalMedia() {
             loadingElement.style.display = 'none';
             console.log('✅ Loading state hidden');
         }
-        
-        // Update participant count and layout
-        updateParticipantCount();
-        updateConsistentGrid();
         
         // Set share link
         const shareUrl = window.location.href;

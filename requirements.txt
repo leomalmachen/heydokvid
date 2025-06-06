@@ -1,8 +1,46 @@
+# Core Framework
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
+
+# Database
+sqlalchemy==2.0.23
+psycopg2-binary==2.9.9  # For PostgreSQL support
+
+# LiveKit Integration  
 livekit-api==1.0.2
+pyjwt==2.8.0
+cryptography>=41.0.7
+
+# Configuration & Environment
 python-dotenv==1.0.0
+pydantic[email]==2.5.0
+
+# File Handling
 python-multipart==0.0.6
 aiofiles>=24.0.0
-pyjwt==2.8.0
-cryptography>=41.0.7 
+
+# Background Tasks & Scheduling
+apscheduler==3.10.4
+celery[redis]==5.3.4  # Optional: for advanced background tasks
+
+# Monitoring & Logging
+structlog==23.2.0
+prometheus-client==0.19.0
+
+# Security
+passlib[bcrypt]==1.7.4
+python-jose[cryptography]==3.3.0
+
+# HTTP Client (for external APIs)
+httpx==0.25.2
+
+# Validation & Utils
+email-validator==2.1.0
+phonenumbers==8.13.26
+
+# Development & Testing (optional)
+pytest==7.4.3
+pytest-asyncio==0.21.1
+black==23.11.0
+flake8==6.1.0
+mypy==1.7.1 
