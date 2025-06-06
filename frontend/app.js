@@ -1420,12 +1420,22 @@ function handleTrackSubscribed(track, publication, participant) {
     const container = document.getElementById(`participant-${participant.sid}`);
     if (!container) {
         console.warn('⚠️ No container found for participant:', participant.identity);
-        // For screen share tracks, this is normal - they get their own container
+        // For screen share tracks, they get their own container
         if (publication.source === LiveKit.TrackSource.ScreenShare) {
             handleScreenShareTrack(track, publication, participant);
             return;
         }
-        console.error('❌ No regular container found and cannot create for track:', track.kind);
+        
+        // For regular video/audio tracks, we need a container - create one if missing
+        console.log('📦 Creating missing container for remote participant:', participant.identity);
+        const newContainer = createConsistentContainer(participant, false);
+        if (!newContainer) {
+            console.error('❌ Failed to create container for participant:', participant.identity);
+            return;
+        }
+        console.log('✅ Container created for remote participant:', participant.identity);
+        // Retry with the new container
+        setTimeout(() => handleTrackSubscribed(track, publication, participant), 100);
         return;
     }
     
