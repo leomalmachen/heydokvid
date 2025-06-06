@@ -643,4 +643,49 @@ header p {
         background: rgba(0, 0, 0, 0.95);
         border-color: rgba(255, 255, 255, 0.2);
     }
+}
+
+/* Screen Share Specific Styles */
+.screen-share-container {
+    /* Make screen share containers stand out */
+    border: 2px solid #4285f4;
+    border-radius: 8px;
+    background: linear-gradient(145deg, #1e1e1e, #2d2d30);
+    box-shadow: 0 4px 8px rgba(66, 133, 244, 0.3);
+}
+
+.screen-share-container .participant-label {
+    background: linear-gradient(90deg, #4285f4, #34a853);
+    color: white;
+    font-weight: 600;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.screen-share-video {
+    /* Optimize screen share video display */
+    object-fit: contain; /* Preserve aspect ratio for screen content */
+    background: #000;
+}
+
+/* Grid layout adjustments for screen sharing */
+#videoGrid:has(.screen-share-container) {
+    /* When screen share is present, adjust grid layout */
+    grid-template-columns: 2fr 1fr;
+    grid-template-rows: auto auto;
+}
+
+#videoGrid .screen-share-container {
+    /* Screen share takes priority in layout */
+    grid-column: 1;
+    grid-row: 1 / -1;
+    min-height: 400px;
+}
+
+/* Control button active state for screen share */
+.control-btn.active .screen-share-on {
+    fill: #4285f4;
+}
+
+.control-btn:not(.active) .screen-share-off {
+    fill: currentColor;
 } 

@@ -41,6 +41,7 @@ app = FastAPI(
     - 👥 **Arzt-Patient Workflow** - Speziell für medizinische Anwendungsfälle optimiert  
     - 📋 **Patient Setup Flow** - Automatische Dokumentenprüfung und Media-Tests
     - 📊 **Status-Tracking** - Echtzeitüberwachung des Patient-Flows
+    - 🖥️ **Bildschirmfreigabe** - Sowohl Ärzte als auch Patienten können ihren Bildschirm teilen
     - 🔒 **DSGVO-konform** - Sichere Ende-zu-Ende Verschlüsselung
 
     ### 🚀 Quick Start
@@ -949,6 +950,7 @@ async def patient_setup():
                 let documentId = null;
                 let mediaTestId = null;
                 let stream = null;
+                let isJoining = false; // Prevent multiple clicks
                 
                 if (!meetingId) {
                     alert('Fehler: Keine Meeting-ID gefunden');
@@ -1090,9 +1092,24 @@ async def patient_setup():
                     }
                 }
                 
-                // Step 4: Join Meeting
+                // Step 4: Join Meeting - IMPROVED WITH CLICK PROTECTION
                 async function joinMeeting() {
+                    // Prevent multiple clicks
+                    if (isJoining) {
+                        console.log('⚠️ Join already in progress, ignoring click');
+                        return;
+                    }
+                    
+                    isJoining = true;
+                    
                     try {
+                        const joinBtn = document.getElementById('joinBtn');
+                        if (joinBtn) {
+                            joinBtn.disabled = true;
+                            joinBtn.style.opacity = '0.6';
+                            joinBtn.innerHTML = '⏳ Beitritt läuft...';
+                        }
+                        
                         const response = await fetch(`/api/meetings/${meetingId}/join-patient`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
@@ -1105,14 +1122,39 @@ async def patient_setup():
                         
                         if (response.ok) {
                             const data = await response.json();
+                            
+                            // Show success message
+                            if (joinBtn) {
+                                joinBtn.innerHTML = '✅ Erfolgreich! Weiterleitung...';
+                            }
+                            
                             // Redirect to meeting room
-                            window.location.href = `/meeting/${meetingId}?role=patient`;
+                            setTimeout(() => {
+                                window.location.href = `/meeting/${meetingId}?role=patient`;
+                            }, 1000);
                         } else {
                             const error = await response.json();
                             alert(`Fehler beim Beitritt: ${error.detail}`);
+                            
+                            // Reset button on error
+                            if (joinBtn) {
+                                joinBtn.disabled = false;
+                                joinBtn.style.opacity = '1';
+                                joinBtn.innerHTML = 'Bereit für die Sprechstunde';
+                            }
+                            isJoining = false;
                         }
                     } catch (error) {
                         alert('Fehler beim Beitritt zum Meeting');
+                        
+                        // Reset button on error
+                        const joinBtn = document.getElementById('joinBtn');
+                        if (joinBtn) {
+                            joinBtn.disabled = false;
+                            joinBtn.style.opacity = '1';
+                            joinBtn.innerHTML = 'Bereit für die Sprechstunde';
+                        }
+                        isJoining = false;
                     }
                 }
             </script>

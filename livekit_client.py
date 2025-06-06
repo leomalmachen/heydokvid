@@ -39,13 +39,13 @@ class LiveKitClient:
                 can_publish=True,
                 can_subscribe=True,
                 can_publish_data=True,
+                can_publish_sources=["camera", "microphone", "screen_share"]  # Allow screen share for all participants
             )
             
             # Add additional permissions for hosts
             if is_host:
                 video_grants.room_admin = True
                 video_grants.room_record = True
-                video_grants.can_publish_sources = ["camera", "microphone", "screen_share"]
             
             # Add grants to token using the new API
             token = token.with_grants(video_grants)

@@ -6,6 +6,8 @@ let room = null;
 let localParticipant = null;
 let audioEnabled = true;
 let videoEnabled = true;
+let screenShareEnabled = false;
+let screenShareTrack = null;
 const participants = new Map();
 
 // BULLETPROOF: Prevent multiple initializations
@@ -107,11 +109,13 @@ async function attemptReconnection() {
 function saveMediaState() {
     sessionStorage.setItem('audioEnabled', JSON.stringify(audioEnabled));
     sessionStorage.setItem('videoEnabled', JSON.stringify(videoEnabled));
+    sessionStorage.setItem('screenShareEnabled', JSON.stringify(screenShareEnabled));
 }
 
 function loadMediaState() {
     const savedAudio = sessionStorage.getItem('audioEnabled');
     const savedVideo = sessionStorage.getItem('videoEnabled');
+    const savedScreenShare = sessionStorage.getItem('screenShareEnabled');
     
     if (savedAudio !== null) {
         audioEnabled = JSON.parse(savedAudio);
@@ -119,8 +123,11 @@ function loadMediaState() {
     if (savedVideo !== null) {
         videoEnabled = JSON.parse(savedVideo);
     }
+    if (savedScreenShare !== null) {
+        screenShareEnabled = JSON.parse(savedScreenShare);
+    }
     
-    console.log('📱 Loaded media state:', { audioEnabled, videoEnabled });
+    console.log('📱 Loaded media state:', { audioEnabled, videoEnabled, screenShareEnabled });
 }
 
 // PERSISTENT: Get participant name with nice modal
@@ -740,30 +747,135 @@ function updateConsistentGrid() {
 
 // PERSISTENT: Update media button states
 function updateMediaButtons() {
-    const toggleMicBtn = document.getElementById('toggleMic');
-    const toggleVideoBtn = document.getElementById('toggleVideo');
-    
-    if (toggleMicBtn) {
-        toggleMicBtn.classList.toggle('active', audioEnabled);
-        const micOnIcon = toggleMicBtn.querySelector('.mic-on');
-        const micOffIcon = toggleMicBtn.querySelector('.mic-off');
-        if (micOnIcon && micOffIcon) {
-            micOnIcon.classList.toggle('hidden', !audioEnabled);
-            micOffIcon.classList.toggle('hidden', audioEnabled);
+    // Update microphone button
+    const micBtn = document.getElementById('toggleMic');
+    if (micBtn) {
+        micBtn.classList.toggle('active', audioEnabled);
+        const micOn = micBtn.querySelector('.mic-on');
+        const micOff = micBtn.querySelector('.mic-off');
+        if (micOn && micOff) {
+            micOn.classList.toggle('hidden', !audioEnabled);
+            micOff.classList.toggle('hidden', audioEnabled);
         }
     }
-    
+
+    // Update video button
+    const toggleVideoBtn = document.getElementById('toggleVideo');
     if (toggleVideoBtn) {
         toggleVideoBtn.classList.toggle('active', videoEnabled);
-        const videoOnIcon = toggleVideoBtn.querySelector('.video-on');
-        const videoOffIcon = toggleVideoBtn.querySelector('.video-off');
-        if (videoOnIcon && videoOffIcon) {
-            videoOnIcon.classList.toggle('hidden', !videoEnabled);
-            videoOffIcon.classList.toggle('hidden', videoEnabled);
+        const videoOn = toggleVideoBtn.querySelector('.video-on');
+        const videoOff = toggleVideoBtn.querySelector('.video-off');
+        if (videoOn && videoOff) {
+            videoOn.classList.toggle('hidden', !videoEnabled);
+            videoOff.classList.toggle('hidden', videoEnabled);
         }
     }
-    
-    console.log('🎛️ Media buttons updated:', { audioEnabled, videoEnabled });
+
+    // Update screen share button
+    const toggleScreenShareBtn = document.getElementById('toggleScreenShare');
+    if (toggleScreenShareBtn) {
+        toggleScreenShareBtn.classList.toggle('active', screenShareEnabled);
+        const screenShareOn = toggleScreenShareBtn.querySelector('.screen-share-on');
+        const screenShareOff = toggleScreenShareBtn.querySelector('.screen-share-off');
+        if (screenShareOn && screenShareOff) {
+            screenShareOn.classList.toggle('hidden', !screenShareEnabled);
+            screenShareOff.classList.toggle('hidden', screenShareEnabled);
+        }
+    }
+}
+
+// Screen sharing functions
+async function startScreenShare() {
+    if (!room || !room.localParticipant) {
+        throw new Error('Kein aktiver Meeting-Raum gefunden');
+    }
+
+    try {
+        console.log('🖥️ Starting screen share...');
+        showStatus('Bildschirmfreigabe wird gestartet...', 'info');
+
+        // Request screen capture
+        const stream = await navigator.mediaDevices.getDisplayMedia({
+            video: {
+                displaySurface: 'monitor', // Prefer monitor/screen over window
+                logicalSurface: true,
+                cursor: 'always'
+            },
+            audio: {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true
+            }
+        });
+
+        console.log('🖥️ Screen capture stream obtained');
+
+        // Get video track from stream
+        const videoTrack = stream.getVideoTracks()[0];
+        if (!videoTrack) {
+            throw new Error('Kein Video-Track vom Bildschirm erhalten');
+        }
+
+        // Publish screen share track to LiveKit
+        screenShareTrack = await room.localParticipant.publishTrack(videoTrack, {
+            source: LiveKit.TrackSource.ScreenShare,
+            name: 'screen_share'
+        });
+
+        console.log('🖥️ Screen share track published to LiveKit');
+
+        // Handle track ended event (user stops sharing via browser UI)
+        videoTrack.addEventListener('ended', () => {
+            console.log('🖥️ Screen share ended by user');
+            stopScreenShare().catch(error => {
+                console.error('Error stopping screen share after user ended:', error);
+            });
+        });
+
+        screenShareEnabled = true;
+        showStatus('Bildschirmfreigabe aktiv', 'success');
+        
+        console.log('✅ Screen sharing started successfully');
+
+    } catch (error) {
+        console.error('❌ Screen share start failed:', error);
+        screenShareEnabled = false;
+        
+        if (error.name === 'NotAllowedError') {
+            throw new Error('Bildschirmfreigabe wurde vom Benutzer abgelehnt');
+        } else if (error.name === 'NotSupportedError') {
+            throw new Error('Bildschirmfreigabe wird von diesem Browser nicht unterstützt');
+        } else if (error.name === 'AbortError') {
+            throw new Error('Bildschirmfreigabe wurde abgebrochen');
+        } else {
+            throw new Error('Fehler beim Starten der Bildschirmfreigabe: ' + error.message);
+        }
+    }
+}
+
+async function stopScreenShare() {
+    try {
+        console.log('🖥️ Stopping screen share...');
+        showStatus('Bildschirmfreigabe wird beendet...', 'info');
+
+        if (screenShareTrack) {
+            // Unpublish the screen share track
+            await room.localParticipant.unpublishTrack(screenShareTrack);
+            screenShareTrack = null;
+            console.log('🖥️ Screen share track unpublished from LiveKit');
+        }
+
+        screenShareEnabled = false;
+        showStatus('Bildschirmfreigabe beendet', 'info');
+        
+        console.log('✅ Screen sharing stopped successfully');
+
+    } catch (error) {
+        console.error('❌ Screen share stop failed:', error);
+        screenShareEnabled = false;
+        screenShareTrack = null;
+        throw new Error('Fehler beim Beenden der Bildschirmfreigabe: ' + error.message);
+    }
 }
 
 // Update participant count in UI
@@ -942,12 +1054,42 @@ function setupEventListeners() {
         });
     }
 
+    // Screen share toggle with persistence
+    const toggleScreenShareBtn = document.getElementById('toggleScreenShare');
+    if (toggleScreenShareBtn) {
+        toggleScreenShareBtn.addEventListener('click', async () => {
+            if (!room) return;
+            try {
+                if (screenShareEnabled) {
+                    // Stop screen sharing
+                    await stopScreenShare();
+                } else {
+                    // Start screen sharing
+                    await startScreenShare();
+                }
+                updateMediaButtons();
+                saveMediaState(); // Save state
+                console.log('🖥️ Screen share:', screenShareEnabled ? 'enabled' : 'disabled');
+            } catch (error) {
+                console.error('Screen share toggle failed:', error);
+                showError('Bildschirmfreigabe fehlgeschlagen: ' + error.message);
+                // Ensure state is consistent
+                updateMediaButtons();
+            }
+        });
+    }
+
     // Leave meeting with cleanup
     const leaveMeetingBtn = document.getElementById('leaveMeeting');
     if (leaveMeetingBtn) {
         leaveMeetingBtn.addEventListener('click', async () => {
             if (confirm('Meeting verlassen?')) {
                 try {
+                    // Stop screen sharing if active
+                    if (screenShareEnabled) {
+                        await stopScreenShare().catch(e => console.log('Screen share cleanup failed:', e));
+                    }
+                    
                     // Clean disconnect
                     if (room) {
                         await room.disconnect();
@@ -958,6 +1100,7 @@ function setupEventListeners() {
                     sessionStorage.removeItem('participantName');
                     sessionStorage.removeItem('audioEnabled');
                     sessionStorage.removeItem('videoEnabled');
+                    sessionStorage.removeItem('screenShareEnabled');
                     
                     // Notify backend about leaving
                     const participantName = sessionStorage.getItem('participantName');
@@ -1237,11 +1380,18 @@ function handleParticipantConnected(participant) {
 function handleParticipantDisconnected(participant) {
     console.log('👋 PARTICIPANT DISCONNECTED:', participant.identity);
     
-    // Remove their container - use CONSISTENT ID scheme
+    // Remove their main container - use CONSISTENT ID scheme
     const container = document.getElementById(`participant-${participant.sid}`);
     if (container) {
         container.remove();
         console.log('🗑️ Removed container for:', participant.identity);
+    }
+    
+    // Remove their screen share container if it exists
+    const screenShareContainer = document.getElementById(`screenshare-${participant.sid}`);
+    if (screenShareContainer) {
+        screenShareContainer.remove();
+        console.log('🗑️ Removed screen share container for:', participant.identity);
     }
     
     // Update UI
@@ -1279,7 +1429,17 @@ function handleTrackSubscribed(track, publication, participant) {
     if (track.kind === 'video') {
         console.log('📹 Attaching VIDEO track for:', participant.identity);
         
-        // Get video element
+        // Check if this is a screen share track
+        const isScreenShare = publication.source === LiveKit.TrackSource.ScreenShare;
+        console.log('🖥️ Is screen share track:', isScreenShare);
+        
+        if (isScreenShare) {
+            // Handle screen share track differently
+            handleScreenShareTrack(track, publication, participant);
+            return;
+        }
+        
+        // Get video element for regular camera feed
         const video = container.querySelector('video');
         if (!video) {
             console.error('❌ No video element found in container for:', participant.identity);
@@ -1354,9 +1514,25 @@ function handleTrackSubscribed(track, publication, participant) {
 function handleTrackUnsubscribed(track, publication, participant) {
     console.log(`🔇 TRACK UNSUBSCRIBED: ${track.kind} from ${participant.identity}`);
     
-    if (track) {
-        track.detach();
+    // Handle screen share track removal
+    if (publication.source === LiveKit.TrackSource.ScreenShare) {
+        console.log('🖥️ Screen share track unsubscribed from:', participant.identity);
+        
+        // Remove the screen share container
+        const screenShareContainer = document.getElementById(`screenshare-${participant.sid}`);
+        if (screenShareContainer && screenShareContainer.parentNode) {
+            screenShareContainer.remove();
+            console.log('✅ Screen share container removed for:', participant.identity);
+        }
+        
+        // Update grid layout
+        updateConsistentGrid();
+        return;
     }
+    
+    // Handle regular video/audio track removal
+    console.log('🔇 Regular track unsubscribed, updating layout');
+    updateConsistentGrid();
 }
 
 // Handle track muted
@@ -1479,5 +1655,84 @@ async function enableLocalMedia() {
         console.error('❌ Failed to enable local media:', error);
         console.error('❌ Error stack:', error.stack);
         showError('Fehler beim Aktivieren von Kamera/Mikrofon: ' + error.message);
+    }
+}
+
+// Handle screen share track from other participants
+function handleScreenShareTrack(track, publication, participant) {
+    console.log('🖥️ Handling screen share track from:', participant.identity);
+    
+    // Create or get a dedicated screen share container
+    let screenShareContainer = document.getElementById(`screenshare-${participant.sid}`);
+    
+    if (!screenShareContainer) {
+        // Create a new container for screen share
+        screenShareContainer = document.createElement('div');
+        screenShareContainer.id = `screenshare-${participant.sid}`;
+        screenShareContainer.className = 'participant-container screen-share-container';
+        
+        // Create video element for screen share
+        const video = document.createElement('video');
+        video.autoplay = true;
+        video.playsInline = true;
+        video.muted = false; // Screen shares can have audio
+        video.className = 'screen-share-video';
+        
+        // Create label for screen share
+        const label = document.createElement('div');
+        label.className = 'participant-label';
+        label.textContent = `🖥️ ${participant.identity} (Bildschirm)`;
+        
+        screenShareContainer.appendChild(video);
+        screenShareContainer.appendChild(label);
+        
+        // Add to video grid
+        const videoGrid = document.getElementById('videoGrid');
+        if (videoGrid) {
+            videoGrid.appendChild(screenShareContainer);
+            console.log('✅ Screen share container created and added to grid');
+        }
+    }
+    
+    // Get the video element from the screen share container
+    const video = screenShareContainer.querySelector('video');
+    if (!video) {
+        console.error('❌ No video element found in screen share container');
+        return;
+    }
+    
+    try {
+        // Attach the screen share track
+        track.attach(video);
+        
+        // Ensure video is visible and playing
+        video.style.display = 'block';
+        video.style.visibility = 'visible';
+        video.style.opacity = '1';
+        
+        // Try to play the video
+        video.play().then(() => {
+            console.log('✅ Screen share playing successfully from:', participant.identity);
+        }).catch(e => {
+            console.warn('⚠️ Screen share autoplay prevented:', e);
+        });
+        
+        console.log('✅ Screen share track attached for:', participant.identity);
+        
+        // Handle track events
+        track.on(LiveKit.TrackEvent.Ended, () => {
+            console.log('🖥️ Screen share ended for:', participant.identity);
+            // Remove the screen share container
+            if (screenShareContainer && screenShareContainer.parentNode) {
+                screenShareContainer.remove();
+            }
+            updateConsistentGrid();
+        });
+        
+        // Update grid layout
+        updateConsistentGrid();
+        
+    } catch (error) {
+        console.error('❌ Failed to attach screen share track:', error);
     }
 } 
