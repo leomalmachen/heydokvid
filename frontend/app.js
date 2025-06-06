@@ -1347,8 +1347,15 @@ async function connectToRoom(data) {
 function handleParticipantConnected(participant) {
     console.log('👤 NEW PARTICIPANT CONNECTED:', participant.identity);
     
-    // BULLETPROOF: Create container for new participant - use CONSISTENT function
-    const container = createConsistentContainer(participant, false);
+    // BULLETPROOF: Check if container already exists before creating
+    const existingContainer = document.getElementById(`participant-${participant.sid}`);
+    if (existingContainer) {
+        console.log('✅ Container already exists for:', participant.identity);
+    } else {
+        // Create container for new participant only if it doesn't exist
+        const container = createConsistentContainer(participant, false);
+        console.log('👤 New container created for:', participant.identity);
+    }
     
     // IMPORTANT: Subscribe to their tracks immediately
     participant.trackPublications.forEach((publication) => {
@@ -1413,16 +1420,12 @@ function handleTrackSubscribed(track, publication, participant) {
     const container = document.getElementById(`participant-${participant.sid}`);
     if (!container) {
         console.warn('⚠️ No container found for participant:', participant.identity);
-        console.warn('⚠️ Creating missing container...');
-        // Try to create it
-        const newContainer = createConsistentContainer(participant, false);
-        if (!newContainer) {
-            console.error('❌ Failed to create container for participant:', participant.identity);
+        // For screen share tracks, this is normal - they get their own container
+        if (publication.source === LiveKit.TrackSource.ScreenShare) {
+            handleScreenShareTrack(track, publication, participant);
             return;
         }
-        console.log('✅ Container created for participant:', participant.identity);
-        // Give the container a moment to be added to DOM
-        setTimeout(() => handleTrackSubscribed(track, publication, participant), 100);
+        console.error('❌ No regular container found and cannot create for track:', track.kind);
         return;
     }
     
@@ -1578,14 +1581,10 @@ async function enableLocalMedia() {
         const localContainer = document.getElementById(localContainerId);
         
         if (!localContainer) {
-            console.log('🔧 Creating missing local container...');
-            console.log('🔧 Local participant for container creation:', room.localParticipant);
-            const newContainer = createConsistentContainer(room.localParticipant, true);
-            console.log('🔧 New container created:', newContainer ? 'SUCCESS' : 'FAILED');
-            if (newContainer) {
-                console.log('🔧 New container ID:', newContainer.id);
-            }
-            return; // Wait for container to be created
+            console.error('❌ Local container not found - this should not happen');
+            console.error('❌ Local participant SID:', room.localParticipant.sid);
+            console.error('❌ Available containers:', Array.from(document.querySelectorAll('.participant-container')).map(c => c.id));
+            return;
         }
         
         console.log('✅ Local container found:', localContainer);
@@ -1680,7 +1679,7 @@ function handleScreenShareTrack(track, publication, participant) {
         
         // Create label for screen share
         const label = document.createElement('div');
-        label.className = 'participant-label';
+        label.className = 'participant-name';
         label.textContent = `🖥️ ${participant.identity} (Bildschirm)`;
         
         screenShareContainer.appendChild(video);
