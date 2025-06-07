@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HeyDok - Video Meeting</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0f0f0f;
+            color: white;
+            overflow: hidden;
+        }
+        
+        .meeting-container {
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .header {
+            background: rgba(0,0,0,0.8);
+            padding: 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 100;
+        }
+        
+        .logo {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #4285f4;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+        
+        .btn {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        
+        .btn-primary {
+            background: #4285f4;
+            color: white;
+        }
+        
+        .btn-danger {
+            background: #ea4335;
+            color: white;
+        }
+        
+        .btn-secondary {
+            background: rgba(255,255,255,0.1);
+            color: white;
+        }
+        
+        .btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+        
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .participants-grid {
+            flex: 1;
+            display: grid;
+            gap: 1rem;
+            padding: 1rem;
+            align-items: center;
+        }
+        
+        .grid-1 {
+            grid-template-columns: 1fr;
+        }
+        
+        .grid-2 {
+            grid-template-columns: 1fr 1fr;
+        }
+        
+        .grid-3 {
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 1fr 1fr;
+        }
+        
+        .grid-4 {
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 1fr 1fr;
+        }
+        
+        .participant-container {
+            position: relative;
+            background: #1a1a1a;
+            border-radius: 12px;
+            overflow: hidden;
+            aspect-ratio: 16/9;
+            min-height: 200px;
+        }
+        
+        .participant-container video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            background: #1a1a1a;
+        }
+        
+        .participant-name {
+            position: absolute;
+            bottom: 1rem;
+            left: 1rem;
+            background: rgba(0,0,0,0.7);
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+        
+        .status-bar {
+            background: rgba(0,0,0,0.8);
+            padding: 0.5rem 1rem;
+            text-align: center;
+            font-size: 0.8rem;
+            color: #999;
+        }
+        
+        .loading {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            gap: 1rem;
+        }
+        
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(66, 133, 244, 0.3);
+            border-top: 3px solid #4285f4;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .error {
+            background: #ea4335;
+            color: white;
+            padding: 1rem;
+            border-radius: 8px;
+            margin: 1rem;
+            text-align: center;
+        }
+        
+        .debug-info {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            background: rgba(0,0,0,0.8);
+            padding: 1rem;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            z-index: 200;
+            max-width: 300px;
+        }
+        
+        @media (max-width: 768px) {
+            .controls {
+                gap: 0.5rem;
+            }
+            
+            .btn {
+                padding: 0.4rem 0.8rem;
+                font-size: 0.8rem;
+            }
+            
+            .participants-grid {
+                gap: 0.5rem;
+                padding: 0.5rem;
+            }
+            
+            .grid-2, .grid-3, .grid-4 {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="meeting-container">
+        <div class="header">
+            <div class="logo">HeyDok</div>
+            <div class="controls">
+                <button class="btn btn-secondary" onclick="toggleAudio()">
+                    🎤 Mikrofon
+                </button>
+                <button class="btn btn-secondary" onclick="toggleVideo()">
+                    📹 Kamera
+                </button>
+                <button class="btn btn-danger" onclick="leaveMeeting()">
+                    Beenden
+                </button>
+            </div>
+        </div>
+        
+        <div class="main-content">
+            <div id="participants-grid" class="participants-grid grid-1">
+                <!-- Participants werden dynamisch hinzugefügt -->
+            </div>
+        </div>
+        
+        <div class="status-bar">
+            <span id="status">Verbindung wird hergestellt...</span>
+        </div>
+    </div>
+    
+    <!-- Loading Screen -->
+    <div id="loading" class="loading">
+        <div class="spinner"></div>
+        <div>Meeting wird geladen...</div>
+    </div>
+    
+    <!-- Debug Info (nur für Development) -->
+    <div id="debug-info" class="debug-info" style="display: none;">
+        <div>Room: <span id="debug-room">-</span></div>
+        <div>Participants: <span id="debug-participants">0</span></div>
+        <div>Status: <span id="debug-status">-</span></div>
+    </div>
+    
+    <!-- LiveKit SDK -->
+    <script src="https://unpkg.com/livekit-client/dist/livekit-client.umd.min.js"></script>
+    
+    <!-- Simple Meeting Implementation -->
+    <script src="simple_meeting.js"></script>
+    
+    <script>
+        // Control Functions
+        function toggleAudio() {
+            if (window.simpleMeeting && window.simpleMeeting.room) {
+                const enabled = window.simpleMeeting.room.localParticipant.isMicrophoneEnabled;
+                window.simpleMeeting.room.localParticipant.setMicrophoneEnabled(!enabled);
+                updateControlButton('🎤 Mikrofon', !enabled);
+            }
+        }
+        
+        function toggleVideo() {
+            if (window.simpleMeeting && window.simpleMeeting.room) {
+                const enabled = window.simpleMeeting.room.localParticipant.isCameraEnabled;
+                window.simpleMeeting.room.localParticipant.setCameraEnabled(!enabled);
+                updateControlButton('📹 Kamera', !enabled);
+            }
+        }
+        
+        function leaveMeeting() {
+            if (confirm('Meeting wirklich beenden?')) {
+                if (window.simpleMeeting && window.simpleMeeting.room) {
+                    window.simpleMeeting.room.disconnect();
+                }
+                window.location.href = '/';
+            }
+        }
+        
+        function updateControlButton(text, enabled) {
+            // Button state updates
+            const buttons = document.querySelectorAll('.btn-secondary');
+            buttons.forEach(btn => {
+                if (btn.textContent.includes(text.split(' ')[1])) {
+                    btn.style.background = enabled ? '#34a853' : 'rgba(255,255,255,0.1)';
+                }
+            });
+        }
+        
+        // Status Updates
+        function updateStatus(message) {
+            document.getElementById('status').textContent = message;
+        }
+        
+        // Hide loading when ready
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                document.getElementById('loading').style.display = 'none';
+            }, 2000);
+        });
+        
+        // Development Debug
+        if (window.location.hostname === 'localhost') {
+            document.getElementById('debug-info').style.display = 'block';
+            
+            setInterval(() => {
+                if (window.simpleMeeting && window.simpleMeeting.room) {
+                    document.getElementById('debug-room').textContent = window.simpleMeeting.room.state;
+                    document.getElementById('debug-participants').textContent = window.simpleMeeting.participants.size;
+                    document.getElementById('debug-status').textContent = window.simpleMeeting.isConnected ? 'Connected' : 'Disconnected';
+                }
+            }, 1000);
+        }
+    </script>
+</body>
+</html> 

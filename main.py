@@ -10,7 +10,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Depends, Request, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 import uvicorn
@@ -1178,6 +1178,29 @@ async def serve_app_js():
         logger.error(f"Error serving app.js: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
+@app.get("/frontend/simple_meeting.js")
+async def serve_simple_meeting_js():
+    """Serve the new simple meeting JavaScript implementation"""
+    try:
+        with open("frontend/simple_meeting.js", "r", encoding="utf-8") as f:
+            js_content = f.read()
+        
+        return Response(
+            content=js_content,
+            media_type="application/javascript",
+            headers={
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0"
+            }
+        )
+    except FileNotFoundError:
+        return Response(
+            content="console.error('Simple Meeting JS not found');",
+            media_type="application/javascript",
+            status_code=404
+        )
+
 @app.get("/api/meetings/{meeting_id}/info")
 async def get_meeting_info(meeting_id: str):
     """Get meeting information"""
@@ -2102,6 +2125,65 @@ async def internal_error_handler(request: Request, exc):
         status_code=500,
         content={"detail": "Internal server error"}
     )
+
+@app.get("/simple-meeting/{meeting_id}", response_class=HTMLResponse)
+async def simple_meeting_room(meeting_id: str):
+    """New: Clean, stable meeting room implementation"""
+    try:
+        # Validate meeting exists
+        if meeting_id not in meetings:
+            return HTMLResponse(
+                content=f"""
+                <html>
+                <head><title>Meeting nicht gefunden</title></head>
+                <body style="font-family: Arial; text-align: center; padding: 50px;">
+                    <h1>❌ Meeting nicht gefunden</h1>
+                    <p>Meeting ID: {meeting_id}</p>
+                    <p>Das Meeting existiert nicht oder ist abgelaufen.</p>
+                    <a href="/" style="background: #4285f4; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">
+                        Zur Homepage
+                    </a>
+                </body>
+                </html>
+                """,
+                status_code=404
+            )
+        
+        # Load the simple meeting HTML
+        try:
+            with open("frontend/simple_meeting.html", "r", encoding="utf-8") as f:
+                html_content = f.read()
+            return HTMLResponse(content=html_content)
+        except FileNotFoundError:
+            return HTMLResponse(
+                content="""
+                <html>
+                <head><title>System Error</title></head>
+                <body style="font-family: Arial; text-align: center; padding: 50px;">
+                    <h1>⚠️ System Error</h1>
+                    <p>Simple Meeting System ist noch nicht verfügbar.</p>
+                    <p>Verwenden Sie das <a href="/meeting/{meeting_id}">Standard Meeting System</a>.</p>
+                </body>
+                </html>
+                """.replace("{meeting_id}", meeting_id),
+                status_code=503
+            )
+    
+    except Exception as e:
+        logger.error(f"Simple meeting room error: {str(e)}")
+        return HTMLResponse(
+            content=f"""
+            <html>
+            <head><title>Server Error</title></head>
+            <body style="font-family: Arial; text-align: center; padding: 50px;">
+                <h1>🚨 Server Error</h1>
+                <p>Fehler beim Laden des Meetings</p>
+                <button onclick="location.reload()">Erneut versuchen</button>
+            </body>
+            </html>
+            """,
+            status_code=500
+        )
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
