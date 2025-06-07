@@ -1490,7 +1490,7 @@ function handleParticipantDisconnected(participant) {
     updateConsistentGrid();
 }
 
-// ULTRA-ROBUST: Handle track subscription (when video/audio arrives)
+// ULTRA-ROBUST: Handle track subscription (when video/audio arrives) - FIXED VERSION
 function handleTrackSubscribed(track, publication, participant) {
     console.log(`🎵 TRACK SUBSCRIBED: ${track.kind} from ${participant.identity}`);
     console.log(`🎵 Track details:`, {
@@ -1564,37 +1564,53 @@ function handleTrackSubscribed(track, publication, participant) {
             video.style.opacity = '1';
             video.style.objectFit = 'cover';
             
-            // CRITICAL: Force video to play
-            const playVideo = async () => {
+            // CRITICAL: Force video to play with aggressive retry
+            const playVideo = async (attempt = 1) => {
                 try {
+                    console.log(`📹 Play attempt ${attempt} for:`, participant.identity);
                     await video.play();
                     console.log('✅ Video playing successfully for:', participant.identity);
                     container.style.background = 'transparent';
+                    return true;
                 } catch (e) {
-                    console.warn('⚠️ Video autoplay prevented, adding click handler:', e);
-                    container.style.background = '#333';
-                    container.style.cursor = 'pointer';
+                    console.warn(`⚠️ Video play attempt ${attempt} failed:`, e);
                     
-                    const clickToPlay = async () => {
-                        try {
-                            await video.play();
-                            console.log('✅ Video started after click for:', participant.identity);
-                            container.style.background = 'transparent';
-                            container.style.cursor = 'default';
-                            container.removeEventListener('click', clickToPlay);
-                        } catch (e2) {
-                            console.error('❌ Video failed to play even after click:', e2);
-                        }
-                    };
-                    container.addEventListener('click', clickToPlay);
+                    if (attempt < 3) {
+                        // Retry after a short delay
+                        await new Promise(resolve => setTimeout(resolve, 200 * attempt));
+                        return await playVideo(attempt + 1);
+                    } else {
+                        // Final attempt: add click handler
+                        console.warn('⚠️ All autoplay attempts failed, adding click handler');
+                        container.style.background = '#333';
+                        container.style.cursor = 'pointer';
+                        
+                        const clickToPlay = async () => {
+                            try {
+                                await video.play();
+                                console.log('✅ Video started after click for:', participant.identity);
+                                container.style.background = 'transparent';
+                                container.style.cursor = 'default';
+                                container.removeEventListener('click', clickToPlay);
+                            } catch (e2) {
+                                console.error('❌ Video failed to play even after click:', e2);
+                            }
+                        };
+                        container.addEventListener('click', clickToPlay);
+                        return false;
+                    }
                 }
             };
             
-            // Try to play immediately, and also when metadata loads
+            // Try to play immediately
             playVideo();
+            
+            // Also try when metadata loads
             video.addEventListener('loadedmetadata', () => {
                 console.log('📹 Video metadata loaded, dimensions:', video.videoWidth, 'x', video.videoHeight);
-                playVideo();
+                if (video.paused) {
+                    playVideo();
+                }
             });
             
             console.log('✅ Video track setup completed for:', participant.identity);
@@ -2069,239 +2085,6 @@ function forceSubscribeToAllRemoteTracks() {
     }, 1000);
 }
 
-// ENHANCED: Better track subscription with immediate retry
-function handleTrackSubscribed(track, publication, participant) {
-    console.log(`🎵 TRACK SUBSCRIBED: ${track.kind} from ${participant.identity}`);
-    console.log(`🎵 Track details:`, {
-        kind: track.kind,
-        sid: track.sid,
-        participant: participant.identity,
-        participantSid: participant.sid,
-        source: publication.source,
-        enabled: track.enabled,
-        muted: track.muted,
-        readyState: track.readyState
-    });
-    
-    // CRITICAL: Handle screen share tracks separately
-    if (publication.source === LiveKit.TrackSource.ScreenShare) {
-        console.log('🖥️ Handling screen share track from:', participant.identity);
-        handleScreenShareTrack(track, publication, participant);
-        return;
-    }
-    
-    // Get participant container - use CONSISTENT ID scheme
-    const container = document.getElementById(`participant-${participant.sid}`);
-    if (!container) {
-        console.warn('⚠️ No container found for participant:', participant.identity);
-        
-        // For regular video/audio tracks, we need a container - create one if missing
-        console.log('📦 Creating missing container for remote participant:', participant.identity);
-        const newContainer = createConsistentContainer(participant, false);
-        if (!newContainer) {
-            console.error('❌ Failed to create container for participant:', participant.identity);
-            return;
-        }
-        console.log('✅ Container created for remote participant:', participant.identity);
-        // Retry with the new container
-        setTimeout(() => handleTrackSubscribed(track, publication, participant), 100);
-        return;
-    }
-    
-    if (track.kind === 'video') {
-        console.log('📹 PROCESSING VIDEO TRACK for:', participant.identity);
-        
-        // Get video element for regular camera feed
-        const video = container.querySelector('video');
-        if (!video) {
-            console.error('❌ No video element found in container for:', participant.identity);
-            console.error('❌ Container HTML:', container.innerHTML);
-            return;
-        }
-        
-        console.log('📹 Video element found, attaching track...');
-        
-        // CRITICAL: Attach track properly with better error handling
-        try {
-            // Clear any existing video source first
-            if (video.srcObject) {
-                console.log('📹 Clearing previous video source');
-                const existingTracks = video.srcObject.getTracks();
-                existingTracks.forEach(t => t.stop());
-                video.srcObject = null;
-            }
-            
-            // CRITICAL: Wait a moment before attaching new track
-            setTimeout(() => {
-                try {
-                    // Use LiveKit's attach method
-                    track.attach(video);
-                    console.log('📹 Track attached successfully');
-                    
-                    // IMPORTANT: Configure video element for remote video
-                    video.muted = false; // Remote video should NOT be muted
-                    video.playsInline = true;
-                    video.autoplay = true;
-                    video.controls = false;
-                    video.style.display = 'block';
-                    video.style.visibility = 'visible';
-                    video.style.opacity = '1';
-                    video.style.objectFit = 'cover';
-                    video.style.width = '100%';
-                    video.style.height = '100%';
-                    video.style.background = 'transparent';
-                    
-                    // FORCE PLAY with multiple attempts
-                    const attemptPlay = async (attempt = 1) => {
-                        try {
-                            console.log(`📹 Play attempt ${attempt} for:`, participant.identity);
-                            await video.play();
-                            console.log('✅ Video playing successfully for:', participant.identity);
-                            container.style.background = 'transparent';
-                            
-                            // SUCCESS: Remove any click handlers since video is playing
-                            container.style.cursor = 'default';
-                            const playIndicator = container.querySelector('.play-indicator');
-                            if (playIndicator) {
-                                playIndicator.remove();
-                            }
-                            
-                        } catch (e) {
-                            console.warn(`⚠️ Video play attempt ${attempt} failed for:`, participant.identity, e);
-                            
-                            if (attempt < 3) {
-                                // Retry after a short delay
-                                setTimeout(() => attemptPlay(attempt + 1), 500);
-                            } else {
-                                // Final attempt failed, add click handler
-                                console.warn('⚠️ All autoplay attempts failed, adding click handler');
-                                container.style.background = '#333';
-                                container.style.cursor = 'pointer';
-                                
-                                // Add visual indicator
-                                if (!container.querySelector('.play-indicator')) {
-                                    const playIndicator = document.createElement('div');
-                                    playIndicator.className = 'play-indicator';
-                                    playIndicator.innerHTML = '▶️ Klicken zum Starten';
-                                    playIndicator.style.cssText = `
-                                        position: absolute;
-                                        top: 50%;
-                                        left: 50%;
-                                        transform: translate(-50%, -50%);
-                                        background: rgba(0, 0, 0, 0.8);
-                                        color: white;
-                                        padding: 10px 15px;
-                                        border-radius: 5px;
-                                        font-size: 14px;
-                                        z-index: 10;
-                                        pointer-events: none;
-                                    `;
-                                    container.appendChild(playIndicator);
-                                }
-                                
-                                const clickToPlay = async () => {
-                                    try {
-                                        await video.play();
-                                        console.log('✅ Video started after click for:', participant.identity);
-                                        container.style.background = 'transparent';
-                                        container.style.cursor = 'default';
-                                        const indicator = container.querySelector('.play-indicator');
-                                        if (indicator) indicator.remove();
-                                        container.removeEventListener('click', clickToPlay);
-                                    } catch (e2) {
-                                        console.error('❌ Video failed to play even after click:', e2);
-                                    }
-                                };
-                                container.addEventListener('click', clickToPlay);
-                            }
-                        }
-                    };
-                    
-                    // Start play attempts
-                    attemptPlay();
-                    
-                    // Also try to play when metadata loads
-                    video.addEventListener('loadedmetadata', () => {
-                        console.log('📹 Video metadata loaded, dimensions:', video.videoWidth, 'x', video.videoHeight);
-                        if (video.paused) {
-                            attemptPlay();
-                        }
-                    });
-                    
-                    // Handle video events
-                    video.addEventListener('canplay', () => {
-                        console.log('📹 Video can play for:', participant.identity);
-                        if (video.paused) {
-                            attemptPlay();
-                        }
-                    });
-                    
-                } catch (attachError) {
-                    console.error('❌ Failed to attach video track for:', participant.identity, attachError);
-                    container.style.background = '#800';
-                    container.innerHTML += `<div style="color: white; text-align: center; padding: 20px;">Video Error: ${attachError.message}</div>`;
-                }
-            }, 100);
-            
-        } catch (error) {
-            console.error('❌ Failed to setup video track for:', participant.identity, error);
-            container.style.background = '#800';
-            return;
-        }
-        
-        // Handle video track events
-        track.on(LiveKit.TrackEvent.Muted, () => {
-            console.log('📹❌ Video muted for:', participant.identity);
-            video.style.opacity = '0.3';
-        });
-        
-        track.on(LiveKit.TrackEvent.Unmuted, () => {
-            console.log('📹✅ Video unmuted for:', participant.identity);
-            video.style.opacity = '1';
-        });
-        
-        // CRITICAL: Update grid layout after video is attached
-        setTimeout(() => updateConsistentGrid(), 200);
-        
-    } else if (track.kind === 'audio') {
-        console.log('🔊 PROCESSING AUDIO TRACK for:', participant.identity);
-        
-        // Remove any existing audio elements for this participant
-        const existingAudios = container.querySelectorAll('audio');
-        existingAudios.forEach(audio => {
-            if (audio.srcObject) {
-                const tracks = audio.srcObject.getTracks();
-                tracks.forEach(t => t.stop());
-            }
-            audio.remove();
-        });
-        
-        // Create audio element for remote audio
-        const audio = document.createElement('audio');
-        audio.autoplay = true;
-        audio.muted = false; // Remote audio should NOT be muted
-        audio.volume = 1.0;
-        audio.style.display = 'none';
-        
-        try {
-            track.attach(audio);
-            container.appendChild(audio);
-            
-            // Force audio to play
-            audio.play().then(() => {
-                console.log('✅ Audio playing successfully for:', participant.identity);
-            }).catch(e => {
-                console.warn('⚠️ Audio autoplay prevented for:', participant.identity, e);
-            });
-            
-            console.log('✅ Audio track attached successfully for:', participant.identity);
-        } catch (error) {
-            console.error('❌ Failed to attach audio track for:', participant.identity, error);
-        }
-    }
-    
-    console.log('🎵 Track subscription completed for:', participant.identity, track.kind);
-}
 
 // Add forceSubscribeToAllRemoteTracks to global scope
 window.forceSubscribeToAllRemoteTracks = forceSubscribeToAllRemoteTracks; 
