@@ -62,11 +62,14 @@ class SimpleMeeting {
             return JSON.parse(meetingData);
         }
         
-        // Fallback: Join API
+        // Fallback: Join API - KORRIGIERT
         const response = await fetch(`/api/meetings/${meetingId}/join`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({name: this.getParticipantName()})
+            body: JSON.stringify({
+                participant_name: this.getParticipantName(),
+                participant_role: "patient"  // Default role
+            })
         });
         
         if (!response.ok) {
@@ -194,6 +197,36 @@ class SimpleMeeting {
     }
     
     /**
+     * Track Removal - NEU HINZUGEFÜGT
+     */
+    handleTrackRemoved(track, publication, participant) {
+        const participantData = this.participants.get(participant.sid);
+        if (!participantData) {
+            console.warn('⚠️ No participant data for track removal:', participant.identity);
+            return;
+        }
+        
+        if (track.kind === 'video') {
+            // Video Element leeren
+            const video = participantData.container.querySelector('video');
+            if (video) {
+                video.srcObject = null;
+                video.style.display = 'none';
+            }
+            participantData.videoTrack = null;
+            console.log(`📹❌ Video track removed for ${participant.identity}`);
+        } else if (track.kind === 'audio') {
+            // Audio Element entfernen
+            const audio = participantData.container.querySelector('audio');
+            if (audio) {
+                audio.remove();
+            }
+            participantData.audioTrack = null;
+            console.log(`🔊❌ Audio track removed for ${participant.identity}`);
+        }
+    }
+    
+    /**
      * Video Track Attachment - VEREINFACHT
      */
     attachVideoTrack(track, participantData) {
@@ -289,11 +322,25 @@ class SimpleMeeting {
     }
     
     /**
-     * Local Video Setup
+     * Local Video Setup - KORRIGIERT
      */
     setupLocalVideo() {
+        // Prüfe ob Local Participant bereits in Map ist
+        if (this.participants.has(this.room.localParticipant.sid)) {
+            console.log('Local participant already processed');
+            return;
+        }
+        
         const localContainer = this.createParticipantContainer(this.room.localParticipant);
         const localVideo = localContainer.querySelector('video');
+        
+        // WICHTIG: Local Participant zur Map hinzufügen
+        this.participants.set(this.room.localParticipant.sid, {
+            participant: this.room.localParticipant,
+            container: localContainer,
+            videoTrack: null,
+            audioTrack: null
+        });
         
         // Local Video Track finden und anhängen
         this.room.localParticipant.videoTrackPublications.forEach((publication) => {
@@ -303,6 +350,8 @@ class SimpleMeeting {
                 console.log('✅ Local video attached');
             }
         });
+        
+        this.updateGrid();
     }
     
     /**
@@ -314,24 +363,26 @@ class SimpleMeeting {
         
         if (!grid) return;
         
-        const count = this.participants.size + 1; // +1 for local
+        const count = this.participants.size; // Alle Participants inkl. Local
         grid.className = `participants-grid grid-${Math.min(count, 4)}`;
     }
     
     /**
-     * Existing Participants Processing
+     * Existing Participants Processing - KORRIGIERT
      */
     processExistingParticipants() {
-        // Local Participant
+        // Local Participant - NUR EINMAL
         this.setupLocalVideo();
         
-        // Remote Participants
+        // Remote Participants - NUR die echten Remote
         this.room.remoteParticipants.forEach((participant) => {
+            console.log('Processing remote participant:', participant.identity);
             this.handleParticipantJoined(participant);
             
             // Existing tracks
             participant.trackPublications.forEach((publication) => {
                 if (publication.isSubscribed && publication.track) {
+                    console.log('Processing existing track:', publication.kind, 'from', participant.identity);
                     this.handleTrackReceived(publication.track, publication, participant);
                 }
             });
