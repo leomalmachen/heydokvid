@@ -54,29 +54,81 @@ class SimpleMeeting {
         const pathParts = window.location.pathname.split('/');
         const meetingId = pathParts[pathParts.length - 1];
         
+        console.log('📝 Loading meeting data for:', meetingId);
+        
         // Prüfe SessionStorage
         let meetingData = sessionStorage.getItem('meetingData') || 
                          sessionStorage.getItem('doctorMeetingData');
         
         if (meetingData) {
+            console.log('✅ Found meeting data in session storage');
             return JSON.parse(meetingData);
         }
         
-        // Fallback: Join API - KORRIGIERT
-        const response = await fetch(`/api/meetings/${meetingId}/join`, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                participant_name: this.getParticipantName(),
-                participant_role: "patient"  // Default role
-            })
-        });
+        // Fallback: Versuche Join API - KORRIGIERT
+        console.log('🔄 No session data, trying join API...');
         
-        if (!response.ok) {
-            throw new Error(`Meeting join failed: ${response.status}`);
+        // Bestimme Rolle basierend auf URL oder Default
+        const urlParams = new URLSearchParams(window.location.search);
+        const userRole = urlParams.get('role') || 'patient'; // Default: patient
+        
+        try {
+            const response = await fetch(`/api/meetings/${meetingId}/join`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    participant_name: this.getParticipantName(),
+                    participant_role: userRole
+                })
+            });
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('❌ Join API failed:', response.status, errorText);
+                throw new Error(`Meeting join failed: ${response.status} - ${errorText}`);
+            }
+            
+            const data = await response.json();
+            console.log('✅ Meeting data loaded from API:', data);
+            return data;
+            
+        } catch (joinError) {
+            console.error('❌ Join API failed, trying fallback methods...', joinError);
+            
+            // Fallback: Versuche Meeting Info
+            try {
+                const infoResponse = await fetch(`/api/meetings/${meetingId}/info`);
+                if (infoResponse.ok) {
+                    const infoData = await infoResponse.json();
+                    console.log('ℹ️ Got meeting info, creating mock join data');
+                    
+                    // Mock join data basierend auf Meeting Info
+                    return {
+                        meeting_id: meetingId,
+                        livekit_url: infoData.livekit_url || 'wss://heydok-5pbd24sq.livekit.cloud',
+                        token: await this.requestNewToken(meetingId, this.getParticipantName(), userRole),
+                        user_role: userRole,
+                        participants_count: 0,
+                        meeting_url: window.location.href
+                    };
+                }
+            } catch (infoError) {
+                console.error('❌ Meeting info also failed:', infoError);
+            }
+            
+            // Letzte Fallback: Direkte Token-Anfrage
+            throw new Error(`Konnte Meeting-Daten nicht laden: ${joinError.message}`);
         }
-        
-        return await response.json();
+    }
+    
+    /**
+     * Neue Token anfordern - Hilfsfunktion
+     */
+    async requestNewToken(meetingId, participantName, role) {
+        // Dies ist ein vereinfachter Fallback - in der echten App würde hier
+        // eine robustere Token-Generierung stattfinden
+        console.log('🔑 Requesting new token for:', participantName, 'role:', role);
+        throw new Error('Token generation not implemented in fallback');
     }
     
     /**

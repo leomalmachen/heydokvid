@@ -316,6 +316,39 @@
                 }
             }, 1000);
         }
+        
+        // === MISSING INITIALIZATION ===
+        // Create and initialize SimpleMeeting instance
+        document.addEventListener('DOMContentLoaded', async () => {
+            console.log('🚀 DOM loaded, initializing SimpleMeeting...');
+            
+            try {
+                // Create SimpleMeeting instance
+                window.simpleMeeting = new SimpleMeeting();
+                
+                // Initialize the meeting
+                await window.simpleMeeting.initialize();
+                
+                console.log('✅ SimpleMeeting initialized successfully');
+                updateStatus('Meeting bereit - Warten auf Teilnehmer...');
+                
+            } catch (error) {
+                console.error('❌ SimpleMeeting initialization failed:', error);
+                updateStatus('Fehler beim Verbinden zum Meeting');
+                
+                // Show error to user
+                document.getElementById('participants-grid').innerHTML = `
+                    <div style="text-align: center; padding: 2rem; color: #ea4335;">
+                        <h2>❌ Verbindungsfehler</h2>
+                        <p>Das Meeting konnte nicht geladen werden.</p>
+                        <p style="font-size: 0.9rem; opacity: 0.8;">${error.message}</p>
+                        <button onclick="location.reload()" class="btn btn-primary" style="margin-top: 1rem;">
+                            Erneut versuchen
+                        </button>
+                    </div>
+                `;
+            }
+        });
     </script>
 </body>
 </html> 
