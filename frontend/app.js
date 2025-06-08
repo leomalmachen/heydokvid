@@ -1352,7 +1352,19 @@ async function connectToRoom(data) {
             updateParticipantCount();
             updateConsistentGrid();
             
-            // REMOVED: Aggressive automatic retry mechanisms that cause conflicts
+            // CRITICAL: Force track subscription after a delay to ensure everything is ready
+            setTimeout(() => {
+                console.log('🔥 Running automatic track subscription force...');
+                forceSubscribeToAllRemoteTracks();
+                
+                // Double-check after another delay
+                setTimeout(() => {
+                    console.log('🔍 Final track subscription check...');
+                    forceProcessAllTracks();
+                    updateConsistentGrid();
+                }, 2000);
+            }, 1000);
+            
             console.log('✅ Room setup completely finished!');
         });
         
@@ -1416,6 +1428,13 @@ function handleParticipantConnected(participant) {
         if (publication.isSubscribed && publication.track) {
             console.log('🎵 Processing existing track:', publication.kind, 'from', participant.identity);
             handleTrackSubscribed(publication.track, publication, participant);
+        } else if (!publication.isSubscribed) {
+            console.log('🎯 Track not subscribed, forcing subscription:', publication.kind, 'from', participant.identity);
+            publication.setSubscribed(true).then(() => {
+                console.log('✅ Subscription forced for:', publication.kind, 'from', participant.identity);
+            }).catch(e => {
+                console.error('❌ Failed to force subscription:', publication.kind, 'from', participant.identity, e);
+            });
         }
     });
     
@@ -2057,42 +2076,81 @@ function forceSubscribeToAllRemoteTracks() {
     
     if (!room) {
         console.error('❌ No room available');
-        return;
+        return false;
+    }
+    
+    if (room.state !== 'connected') {
+        console.error('❌ Room not connected, state:', room.state);
+        return false;
     }
     
     let subscriptionAttempts = 0;
+    let trackProcessAttempts = 0;
     
     room.remoteParticipants.forEach((participant) => {
-        console.log(`🎯 Processing remote participant: ${participant.identity}`);
+        console.log(`🎯 Processing remote participant: ${participant.identity} (SID: ${participant.sid})`);
+        
+        // Ensure container exists
+        const container = getOrCreateParticipantContainer(participant);
+        if (!container) {
+            console.error(`❌ Failed to get/create container for ${participant.identity}`);
+            return;
+        }
         
         participant.trackPublications.forEach((publication) => {
             console.log(`🎯 Found track: ${publication.kind} (${publication.source})`);
             console.log(`   - Subscribed: ${publication.isSubscribed}`);
             console.log(`   - Has track: ${!!publication.track}`);
+            console.log(`   - Track enabled: ${publication.track ? publication.track.enabled : 'N/A'}`);
             console.log(`   - Track muted: ${publication.track ? publication.track.muted : 'N/A'}`);
             
             // FORCE SUBSCRIPTION if not subscribed
             if (!publication.isSubscribed) {
                 console.log(`🔥 FORCE SUBSCRIBING to ${publication.kind} from ${participant.identity}`);
-                publication.setSubscribed(true);
+                publication.setSubscribed(true).then(() => {
+                    console.log(`✅ Successfully subscribed to ${publication.kind} from ${participant.identity}`);
+                }).catch(e => {
+                    console.error(`❌ Failed to subscribe to ${publication.kind} from ${participant.identity}:`, e);
+                });
                 subscriptionAttempts++;
-            } else if (publication.track && publication.kind === 'video') {
-                // Even if subscribed, ensure the track is properly attached
-                console.log(`🎥 Re-attaching already subscribed video track from ${participant.identity}`);
+            } else if (publication.track) {
+                // Track is subscribed and available - ensure it's properly attached
+                console.log(`🎥 Re-processing subscribed ${publication.kind} track from ${participant.identity}`);
                 handleTrackSubscribed(publication.track, publication, participant);
+                trackProcessAttempts++;
             }
         });
+        
+        console.log(`📊 Participant ${participant.identity}: ${subscriptionAttempts} subscription attempts, ${trackProcessAttempts} track processes`);
     });
     
-    console.log(`🔥 Force subscription completed. Attempts: ${subscriptionAttempts}`);
+    console.log(`🔥 Force subscription completed:`);
+    console.log(`   - Remote participants: ${room.remoteParticipants.size}`);
+    console.log(`   - Subscription attempts: ${subscriptionAttempts}`);
+    console.log(`   - Track processes: ${trackProcessAttempts}`);
     
-    // Give it a moment to process, then update grid
+    // Update grid immediately
+    updateConsistentGrid();
+    
+    // Give time for subscriptions to process, then update again
     setTimeout(() => {
+        console.log('🔄 Post-subscription grid update...');
         updateConsistentGrid();
-        console.log('🔥 Grid updated after force subscription');
+        
+        // Final verification
+        setTimeout(() => {
+            console.log('🔍 Final verification of track attachments...');
+            room.remoteParticipants.forEach((participant) => {
+                const container = document.getElementById(`participant-${participant.sid}`);
+                const video = container?.querySelector('video');
+                const hasVideoSource = video && (video.srcObject || video.src);
+                console.log(`🔍 ${participant.identity}: Container=${!!container}, Video=${!!video}, Source=${hasVideoSource}`);
+            });
+        }, 2000);
     }, 1000);
+    
+    return true;
 }
-
 
 // Add forceSubscribeToAllRemoteTracks to global scope
 window.forceSubscribeToAllRemoteTracks = forceSubscribeToAllRemoteTracks; 
