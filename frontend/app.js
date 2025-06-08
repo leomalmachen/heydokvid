@@ -1257,25 +1257,29 @@ async function connectToRoom(data) {
     try {
         console.log('🏗️ Creating LiveKit Room instance...');
         
-        // Initialize room with ENHANCED AUDIO SETTINGS
+        // Initialize room with OPTIMIZED AUDIO SETTINGS
         room = new LiveKit.Room({
             adaptiveStream: true,
             dynacast: true,
-            // CRITICAL: Enhanced audio settings to prevent echo
+            // OPTIMIZED: Less aggressive audio settings for better compatibility
             audioCaptureDefaults: {
                 echoCancellation: true,
                 noiseSuppression: true,
-                autoGainControl: true,
+                autoGainControl: false,  // FIXED: Less aggressive - prevents audio suppression
                 sampleRate: 48000,
-                channelCount: 1, // Mono to reduce processing
+                channelCount: 2,        // FIXED: Stereo for better quality and compatibility
             },
             videoCaptureDefaults: {
                 resolution: LiveKit.VideoPresets.h720.resolution,
             },
-            // IMPORTANT: Prevent audio feedback
+            // OPTIMIZED: Improved publish settings
             publishDefaults: {
                 stopMicTrackOnMute: false, // Keep track alive when muted
                 audioPreset: LiveKit.AudioPresets.speech, // Optimized for speech
+                videoSimulcastLayers: [
+                    LiveKit.VideoPresets.h540,
+                    LiveKit.VideoPresets.h216,
+                ], // ADDED: Simulcast for better adaptation
             },
         });
         
@@ -1330,15 +1334,16 @@ async function connectToRoom(data) {
             const localContainer = createConsistentContainer(room.localParticipant, true);
             console.log('👤 Local container created:', localContainer ? 'SUCCESS' : 'FAILED');
             
-            // MEGA-IMPORTANT: Process ALL existing remote participants
+            // FIXED: Process existing remote participants without aggressive retries
             console.log(`👥 Processing ${room.remoteParticipants.size} existing REMOTE participants`);
             room.remoteParticipants.forEach((participant) => {
                 console.log('👤 Processing existing REMOTE participant:', participant.identity);
+                
                 // Create container for existing participant
-                const container = createConsistentContainer(participant, false);
+                const container = getOrCreateParticipantContainer(participant);
                 console.log('👤 Container created for existing participant:', container ? 'SUCCESS' : 'FAILED');
                 
-                // CRITICAL: Subscribe to their existing tracks
+                // OPTIMIZED: Subscribe to their existing tracks with proper handling
                 participant.trackPublications.forEach((publication) => {
                     console.log(`🎵 Found existing track: ${publication.kind} from ${participant.identity}, subscribed: ${publication.isSubscribed}, track: ${!!publication.track}`);
                     
@@ -1351,7 +1356,7 @@ async function connectToRoom(data) {
                     }
                 });
                 
-                // IMPORTANT: Setup event listeners for this participant
+                // IMPORTANT: Setup event listeners for this participant  
                 participant.on(LiveKit.ParticipantEvent.TrackSubscribed, (track, publication) => {
                     console.log('🎵 Track subscribed event for:', participant.identity, track.kind);
                     handleTrackSubscribed(track, publication, participant);
@@ -1367,22 +1372,11 @@ async function connectToRoom(data) {
             console.log('🎥 About to enable local media...');
             await enableLocalMedia();
             
-            // IMPORTANT: Force grid update after everything is set up
+            // IMPORTANT: Update UI after everything is set up
             updateParticipantCount();
             updateConsistentGrid();
             
-            // CRITICAL: Add a delay and then force process all tracks again
-            setTimeout(() => {
-                console.log('🔄 Auto-retry: Force processing all tracks after 2 seconds...');
-                forceProcessAllTracks();
-            }, 2000);
-            
-            // CRITICAL: Add another retry after 5 seconds
-            setTimeout(() => {
-                console.log('🔄 Auto-retry: Force processing all tracks after 5 seconds...');
-                forceProcessAllTracks();
-            }, 5000);
-            
+            // REMOVED: Aggressive automatic retry mechanisms that cause conflicts
             console.log('✅ Room setup completely finished!');
         });
         
@@ -1490,7 +1484,7 @@ function handleParticipantDisconnected(participant) {
     updateConsistentGrid();
 }
 
-// ULTRA-ROBUST: Handle track subscription (when video/audio arrives) - FIXED VERSION
+// MEGA-IMPROVED: Handle track subscription with BULLETPROOF logic
 function handleTrackSubscribed(track, publication, participant) {
     console.log(`🎵 TRACK SUBSCRIBED: ${track.kind} from ${participant.identity}`);
     console.log(`🎵 Track details:`, {
@@ -1510,117 +1504,86 @@ function handleTrackSubscribed(track, publication, participant) {
         return;
     }
     
-    // Get participant container - use CONSISTENT ID scheme
-    const container = document.getElementById(`participant-${participant.sid}`);
+    // FIXED: Use atomic container retrieval/creation
+    const container = getOrCreateParticipantContainer(participant);
     if (!container) {
-        console.warn('⚠️ No container found for participant:', participant.identity);
-        
-        // For regular video/audio tracks, we need a container - create one if missing
-        console.log('📦 Creating missing container for remote participant:', participant.identity);
-        const newContainer = createConsistentContainer(participant, false);
-        if (!newContainer) {
-            console.error('❌ Failed to create container for participant:', participant.identity);
-            return;
-        }
-        console.log('✅ Container created for remote participant:', participant.identity);
-        // Retry with the new container
-        setTimeout(() => handleTrackSubscribed(track, publication, participant), 100);
+        console.error('❌ Failed to get/create container for participant:', participant.identity);
         return;
     }
     
+    // SIMPLIFIED: Direct track attachment without complex retry logic
     if (track.kind === 'video') {
-        console.log('📹 PROCESSING VIDEO TRACK for:', participant.identity);
-        
-        // Get video element for regular camera feed
-        const video = container.querySelector('video');
-        if (!video) {
-            console.error('❌ No video element found in container for:', participant.identity);
-            console.error('❌ Container HTML:', container.innerHTML);
+        attachVideoTrack(track, container, participant);
+    } else if (track.kind === 'audio') {
+        attachAudioTrack(track, container, participant);
+    }
+    
+    console.log('🎵 Track subscription completed for:', participant.identity, track.kind);
+}
+
+// NEW: Atomic container getter/creator - prevents race conditions
+function getOrCreateParticipantContainer(participant) {
+    const containerId = `participant-${participant.sid}`;
+    let container = document.getElementById(containerId);
+    
+    if (container) {
+        console.log('✅ Container exists for:', participant.identity);
+        return container;
+    }
+    
+    // Create container if it doesn't exist
+    console.log('📦 Creating container for:', participant.identity);
+    container = createConsistentContainer(participant, false);
+    
+    if (!container) {
+        console.error('❌ Failed to create container for:', participant.identity);
+        return null;
+    }
+    
+    console.log('✅ Container created for:', participant.identity);
+    return container;
+}
+
+// SIMPLIFIED: Video track attachment without aggressive retries
+function attachVideoTrack(track, container, participant) {
+    console.log('📹 ATTACHING VIDEO TRACK for:', participant.identity);
+    
+    const video = container.querySelector('video');
+    if (!video) {
+        console.error('❌ No video element found in container for:', participant.identity);
+        return;
+    }
+    
+    try {
+        // CRITICAL: Check if track is already attached
+        if (track.attachedElements && track.attachedElements.length > 0) {
+            console.log('⚠️ Video track already attached for:', participant.identity);
             return;
         }
         
-        console.log('📹 Video element found, attaching track...');
-        
-        // CRITICAL: Attach track properly with better error handling
-        try {
-            // Clear any existing video source
-            if (video.srcObject) {
-                console.log('📹 Clearing previous video source');
-                const existingTracks = video.srcObject.getTracks();
-                existingTracks.forEach(t => t.stop());
-                video.srcObject = null;
-            }
-            
-            // Use LiveKit's attach method
-            track.attach(video);
-            console.log('📹 Track attached successfully');
-            
-            // IMPORTANT: Configure video element for remote video
-            video.muted = false; // Remote video should NOT be muted
-            video.playsInline = true;
-            video.autoplay = true;
-            video.style.display = 'block';
-            video.style.visibility = 'visible';
-            video.style.opacity = '1';
-            video.style.objectFit = 'cover';
-            
-            // CRITICAL: Force video to play with aggressive retry
-            const playVideo = async (attempt = 1) => {
-                try {
-                    console.log(`📹 Play attempt ${attempt} for:`, participant.identity);
-                    await video.play();
-                    console.log('✅ Video playing successfully for:', participant.identity);
-                    container.style.background = 'transparent';
-                    return true;
-                } catch (e) {
-                    console.warn(`⚠️ Video play attempt ${attempt} failed:`, e);
-                    
-                    if (attempt < 3) {
-                        // Retry after a short delay
-                        await new Promise(resolve => setTimeout(resolve, 200 * attempt));
-                        return await playVideo(attempt + 1);
-                    } else {
-                        // Final attempt: add click handler
-                        console.warn('⚠️ All autoplay attempts failed, adding click handler');
-                        container.style.background = '#333';
-                        container.style.cursor = 'pointer';
-                        
-                        const clickToPlay = async () => {
-                            try {
-                                await video.play();
-                                console.log('✅ Video started after click for:', participant.identity);
-                                container.style.background = 'transparent';
-                                container.style.cursor = 'default';
-                                container.removeEventListener('click', clickToPlay);
-                            } catch (e2) {
-                                console.error('❌ Video failed to play even after click:', e2);
-                            }
-                        };
-                        container.addEventListener('click', clickToPlay);
-                        return false;
-                    }
-                }
-            };
-            
-            // Try to play immediately
-            playVideo();
-            
-            // Also try when metadata loads
-            video.addEventListener('loadedmetadata', () => {
-                console.log('📹 Video metadata loaded, dimensions:', video.videoWidth, 'x', video.videoHeight);
-                if (video.paused) {
-                    playVideo();
-                }
-            });
-            
-            console.log('✅ Video track setup completed for:', participant.identity);
-            
-        } catch (error) {
-            console.error('❌ Failed to attach video track for:', participant.identity, error);
-            // Show error in container
-            container.style.background = '#800';
-            return;
+        // Clear any existing video source
+        if (video.srcObject) {
+            console.log('📹 Clearing previous video source for:', participant.identity);
+            const existingTracks = video.srcObject.getTracks();
+            existingTracks.forEach(t => t.stop());
+            video.srcObject = null;
         }
+        
+        // FIXED: Use LiveKit's attach method properly
+        track.attach(video);
+        console.log('📹 Video track attached successfully for:', participant.identity);
+        
+        // IMPORTANT: Configure video element for remote video
+        video.muted = false; // Remote video should NOT be muted
+        video.playsInline = true;
+        video.autoplay = true;
+        video.style.display = 'block';
+        video.style.visibility = 'visible';
+        video.style.opacity = '1';
+        video.style.objectFit = 'cover';
+        
+        // SIMPLIFIED: Single play attempt with user interaction fallback
+        playVideoWithFallback(video, container, participant);
         
         // Handle video track events
         track.on(LiveKit.TrackEvent.Muted, () => {
@@ -1633,11 +1596,24 @@ function handleTrackSubscribed(track, publication, participant) {
             video.style.opacity = '1';
         });
         
-        // CRITICAL: Update grid layout after video is attached
-        updateConsistentGrid();
+        console.log('✅ Video track setup completed for:', participant.identity);
         
-    } else if (track.kind === 'audio') {
-        console.log('🔊 PROCESSING AUDIO TRACK for:', participant.identity);
+    } catch (error) {
+        console.error('❌ Failed to attach video track for:', participant.identity, error);
+        container.style.background = '#800';
+    }
+}
+
+// SIMPLIFIED: Audio track attachment without complex logic
+function attachAudioTrack(track, container, participant) {
+    console.log('🔊 ATTACHING AUDIO TRACK for:', participant.identity);
+    
+    try {
+        // CRITICAL: Check if track is already attached
+        if (track.attachedElements && track.attachedElements.length > 0) {
+            console.log('⚠️ Audio track already attached for:', participant.identity);
+            return;
+        }
         
         // Remove any existing audio elements for this participant
         const existingAudios = container.querySelectorAll('audio');
@@ -1649,31 +1625,77 @@ function handleTrackSubscribed(track, publication, participant) {
             audio.remove();
         });
         
-        // Create audio element for remote audio
+        // FIXED: Create and configure audio element properly
         const audio = document.createElement('audio');
         audio.autoplay = true;
         audio.muted = false; // Remote audio should NOT be muted
         audio.volume = 1.0;
         audio.style.display = 'none';
+        audio.setAttribute('data-participant', participant.identity);
         
-        try {
-            track.attach(audio);
-            container.appendChild(audio);
-            
-            // Force audio to play
-            audio.play().then(() => {
-                console.log('✅ Audio playing successfully for:', participant.identity);
-            }).catch(e => {
-                console.warn('⚠️ Audio autoplay prevented for:', participant.identity, e);
-            });
-            
-            console.log('✅ Audio track attached successfully for:', participant.identity);
-        } catch (error) {
-            console.error('❌ Failed to attach audio track for:', participant.identity, error);
-        }
+        // CRITICAL: Attach track using LiveKit's method
+        track.attach(audio);
+        container.appendChild(audio);
+        
+        // SIMPLIFIED: Direct play attempt
+        audio.play().then(() => {
+            console.log('✅ Audio playing successfully for:', participant.identity);
+        }).catch(e => {
+            console.warn('⚠️ Audio autoplay prevented for:', participant.identity, e);
+            // Add user interaction fallback
+            addAudioClickFallback(container, audio, participant);
+        });
+        
+        console.log('✅ Audio track attached successfully for:', participant.identity);
+        
+    } catch (error) {
+        console.error('❌ Failed to attach audio track for:', participant.identity, error);
     }
+}
+
+// NEW: Simplified video play with user interaction fallback
+function playVideoWithFallback(video, container, participant) {
+    video.play().then(() => {
+        console.log('✅ Video playing automatically for:', participant.identity);
+        container.style.background = 'transparent';
+        container.style.cursor = 'default';
+    }).catch(e => {
+        console.warn('⚠️ Video autoplay prevented for:', participant.identity, 'Adding click handler');
+        
+        // Visual indicator for user interaction needed
+        container.style.background = '#333';
+        container.style.cursor = 'pointer';
+        
+        // Add click handler for manual play
+        const clickHandler = async () => {
+            try {
+                await video.play();
+                console.log('✅ Video started after user click for:', participant.identity);
+                container.style.background = 'transparent';
+                container.style.cursor = 'default';
+                container.removeEventListener('click', clickHandler);
+            } catch (e2) {
+                console.error('❌ Video failed to play even after click:', e2);
+            }
+        };
+        
+        container.addEventListener('click', clickHandler);
+    });
+}
+
+// NEW: Audio click fallback for mobile browsers
+function addAudioClickFallback(container, audio, participant) {
+    const clickHandler = async () => {
+        try {
+            await audio.play();
+            console.log('✅ Audio started after user interaction for:', participant.identity);
+            container.removeEventListener('click', clickHandler);
+        } catch (e) {
+            console.warn('⚠️ Audio still failed after user interaction:', e);
+        }
+    };
     
-    console.log('🎵 Track subscription completed for:', participant.identity, track.kind);
+    container.addEventListener('click', clickHandler);
 }
 
 // Handle track unsubscription
