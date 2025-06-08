@@ -15,50 +15,58 @@ git branch -M main
 git push -u origin main
 ```
 
-### 2. Configure GitHub Secrets
-Go to your GitHub repository → Settings → Secrets and Variables → Actions
+## 🚀 Heroku Deployment Guide
 
-Add these secrets:
-- `HEROKU_API_KEY`: Your Heroku API key (found in Account Settings → API Key)
-- `HEROKU_APP_NAME`: Your Heroku app name
-- `HEROKU_EMAIL`: Your Heroku account email
+### Prerequisites
+- Heroku CLI installed
+- Git repository with your code
+- LiveKit Cloud account
 
-## 🔧 Heroku Deployment
-
-### Method 1: One-Click Deploy
-[![Deploy](https://www.herokucdn.com/deploy/button.svg)](https://heroku.com/deploy)
-
-### Method 2: Manual Heroku CLI
+### 1. Create Heroku App
 ```bash
-# Install Heroku CLI
-# Login to Heroku
-heroku login
-
-# Create new Heroku app
 heroku create your-app-name
+```
 
-# Set environment variables
-heroku config:set LIVEKIT_URL=wss://heydok-5pbd24sq.livekit.cloud
-heroku config:set LIVEKIT_API_KEY=APIysK82G8HGmFr
-heroku config:set LIVEKIT_API_SECRET=ytVhapnJwHIzfQzzqZL3sPbSJfelfdBcCtD2vCwm0bbA
+### 2. Set Environment Variables
+```bash
+# Required LiveKit Configuration (get these from your LiveKit Cloud dashboard)
+heroku config:set LIVEKIT_URL=wss://your-project-id.livekit.cloud
+heroku config:set LIVEKIT_API_KEY=your_api_key_here
+heroku config:set LIVEKIT_API_SECRET=your_api_secret_here
 
-# Deploy
+# App Configuration
+heroku config:set SECRET_KEY=your-super-secret-key-min-32-chars
+heroku config:set ENVIRONMENT=production
+heroku config:set DEBUG=false
+heroku config:set ALLOWED_ORIGINS=https://your-app-name.herokuapp.com
+
+# Database (Heroku Postgres addon will set DATABASE_URL automatically)
+heroku addons:create heroku-postgresql:essential-0
+```
+
+### 3. Deploy
+```bash
 git push heroku main
+```
 
-# Open your app
+### 4. Verify Deployment
+```bash
+heroku logs --tail
 heroku open
 ```
 
-### Method 3: GitHub Integration
-1. Go to your Heroku Dashboard
-2. Create new app
-3. Go to Deploy tab
-4. Connect to GitHub
-5. Enable automatic deploys from main branch
-6. Set Config Vars in Settings tab:
-   - `LIVEKIT_URL`: `wss://heydok-5pbd24sq.livekit.cloud`
-   - `LIVEKIT_API_KEY`: `APIysK82G8HGmFr`
-   - `LIVEKIT_API_SECRET`: `ytVhapnJwHIzfQzzqZL3sPbSJfelfdBcCtD2vCwm0bbA`
+## Environment Variables Reference
+
+### Required
+- `LIVEKIT_URL`: `wss://your-project-id.livekit.cloud`
+- `LIVEKIT_API_KEY`: `your_api_key_here`
+- `LIVEKIT_API_SECRET`: `your_api_secret_here`
+
+### Optional
+- `SECRET_KEY`: Random 32+ character string
+- `ENVIRONMENT`: `production`
+- `DEBUG`: `false`
+- `ALLOWED_ORIGINS`: Your domain(s)
 
 ## 🔍 Health Check URLs
 After deployment, test these endpoints:

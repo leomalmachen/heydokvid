@@ -105,7 +105,7 @@ class SimpleMeeting {
                     // Mock join data basierend auf Meeting Info
                     return {
                         meeting_id: meetingId,
-                        livekit_url: infoData.livekit_url || 'wss://heydok-5pbd24sq.livekit.cloud',
+                        livekit_url: infoData.livekit_url || 'wss://demo.livekit.io',
                         token: await this.requestNewToken(meetingId, this.getParticipantName(), userRole),
                         user_role: userRole,
                         participants_count: 0,

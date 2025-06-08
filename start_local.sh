@@ -1,31 +1,29 @@
 #!/bin/bash
 
-# Create .env file if it doesn't exist
-if [ ! -f .env ]; then
-    echo "Creating .env file..."
-    cat > .env << EOL
-LIVEKIT_URL=wss://heydok-5pbd24sq.livekit.cloud
-LIVEKIT_API_KEY=APIysK82G8HGmFr
-LIVEKIT_API_SECRET=ytVhapnJwHIzfQzzqZL3sPbSJfelfdBcCtD2vCwm0bbA
-EOL
-    echo ".env file created!"
+# HeyDok Video - Local Development Server
+echo "🚀 Starting HeyDok Video Server..."
+
+# Load environment variables from .env file
+if [ -f .env ]; then
+    echo "📋 Loading environment variables from .env file..."
+    export $(cat .env | grep -v '^#' | xargs)
+else
+    echo "⚠️  No .env file found! Please copy env.example to .env and configure your settings."
+    echo "   cp env.example .env"
+    exit 1
 fi
 
-# Check if virtual environment exists
-if [ ! -d "venv" ]; then
-    echo "Creating virtual environment..."
-    python3 -m venv venv
+# Verify required environment variables
+if [ -z "$LIVEKIT_URL" ] || [ -z "$LIVEKIT_API_KEY" ] || [ -z "$LIVEKIT_API_SECRET" ]; then
+    echo "❌ Missing required LiveKit environment variables!"
+    echo "   Please set LIVEKIT_URL, LIVEKIT_API_KEY, and LIVEKIT_API_SECRET in your .env file"
+    exit 1
 fi
 
-# Activate virtual environment
-echo "Activating virtual environment..."
-source venv/bin/activate
-
-# Install requirements
-echo "Installing requirements..."
-pip install -r requirements.txt
+echo "✅ Environment variables loaded"
+echo "🔗 LiveKit URL: $LIVEKIT_URL"
+echo "🔑 API Key: ${LIVEKIT_API_KEY:0:10}..."
 
 # Start the server
-echo "Starting server..."
-cd backend
-uvicorn main:app --reload --host 0.0.0.0 --port 8000 
+echo "🌟 Starting FastAPI server on http://localhost:8000"
+python3 main.py 

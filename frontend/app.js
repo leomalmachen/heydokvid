@@ -1305,12 +1305,74 @@ async function connectToRoom(data) {
         });
         
         // FIXED: Setup all event handlers BEFORE connecting
-        room.on(LiveKit.RoomEvent.ParticipantConnected, handleParticipantConnected);
-        room.on(LiveKit.RoomEvent.ParticipantDisconnected, handleParticipantDisconnected);
-        room.on(LiveKit.RoomEvent.TrackSubscribed, handleTrackSubscribed);
-        room.on(LiveKit.RoomEvent.TrackUnsubscribed, handleTrackUnsubscribed);
-        room.on(LiveKit.RoomEvent.TrackMuted, handleTrackMuted);
-        room.on(LiveKit.RoomEvent.TrackUnmuted, handleTrackUnmuted);
+        room.on(LiveKit.RoomEvent.ParticipantConnected, (participant) => {
+            console.log('🚨 ROOM EVENT: ParticipantConnected ->', participant.identity);
+            console.log('  Participant details:', {
+                identity: participant.identity,
+                sid: participant.sid,
+                trackPublications: participant.trackPublications.size,
+                connectionState: participant.connectionState
+            });
+            handleParticipantConnected(participant);
+        });
+        
+        room.on(LiveKit.RoomEvent.ParticipantDisconnected, (participant) => {
+            console.log('🚨 ROOM EVENT: ParticipantDisconnected ->', participant.identity);
+            handleParticipantDisconnected(participant);
+        });
+        
+        room.on(LiveKit.RoomEvent.TrackSubscribed, (track, publication, participant) => {
+            console.log('🚨 ROOM EVENT: TrackSubscribed ->', {
+                participantIdentity: participant.identity,
+                trackKind: track.kind,
+                trackSid: track.sid,
+                source: publication.source,
+                enabled: track.enabled,
+                muted: track.muted
+            });
+            handleTrackSubscribed(track, publication, participant);
+        });
+        
+        room.on(LiveKit.RoomEvent.TrackUnsubscribed, (track, publication, participant) => {
+            console.log('🚨 ROOM EVENT: TrackUnsubscribed ->', {
+                participantIdentity: participant.identity,
+                trackKind: track.kind,
+                source: publication.source
+            });
+            handleTrackUnsubscribed(track, publication, participant);
+        });
+        
+        room.on(LiveKit.RoomEvent.TrackMuted, (publication, participant) => {
+            console.log('🚨 ROOM EVENT: TrackMuted ->', {
+                participantIdentity: participant.identity,
+                trackKind: publication.kind,
+                source: publication.source
+            });
+            handleTrackMuted(publication, participant);
+        });
+        
+        room.on(LiveKit.RoomEvent.TrackUnmuted, (publication, participant) => {
+            console.log('🚨 ROOM EVENT: TrackUnmuted ->', {
+                participantIdentity: participant.identity,
+                trackKind: publication.kind,
+                source: publication.source
+            });
+            handleTrackUnmuted(publication, participant);
+        });
+        
+        room.on(LiveKit.RoomEvent.TrackPublished, (publication, participant) => {
+            console.log('🚨 ROOM EVENT: TrackPublished ->', {
+                participantIdentity: participant.identity,
+                trackKind: publication.kind,
+                source: publication.source,
+                isSubscribed: publication.isSubscribed
+            });
+            // Immediately try to subscribe to new tracks
+            if (!publication.isSubscribed) {
+                console.log('🎯 Auto-subscribing to newly published track...');
+                publication.setSubscribed(true);
+            }
+        });
         
         room.on(LiveKit.RoomEvent.Reconnecting, () => {
             console.log('🔄 Room reconnecting...');
@@ -1329,14 +1391,49 @@ async function connectToRoom(data) {
             console.log('🎉 Local participant SID:', room.localParticipant.sid);
             console.log('🎉 Remote participants count:', room.remoteParticipants.size);
             
+            // SUPER DEBUG: Log everything about current state
+            console.log('🔍 SUPER DEBUG - ROOM STATE AFTER CONNECTION:');
+            console.log('  Room state:', room.state);
+            console.log('  Room name:', room.name);
+            console.log('  Room SID:', room.sid);
+            console.log('  Local participant:', {
+                identity: room.localParticipant.identity,
+                sid: room.localParticipant.sid,
+                trackPublications: room.localParticipant.trackPublications.size,
+                videoTracks: room.localParticipant.videoTrackPublications.size,
+                audioTracks: room.localParticipant.audioTrackPublications.size
+            });
+            
             // CRITICAL: Process local participant first - use CONSISTENT function
             console.log('👤 Processing LOCAL participant:', room.localParticipant.identity);
             const localContainer = createConsistentContainer(room.localParticipant, true);
             console.log('👤 Local container created:', localContainer ? 'SUCCESS' : 'FAILED');
             
-            // FIXED: Process existing remote participants without aggressive retries
-            console.log(`👥 Processing ${room.remoteParticipants.size} existing REMOTE participants`);
-            room.remoteParticipants.forEach((participant) => {
+            // SUPER DEBUG: Log existing remote participants in detail
+            console.log(`👥 SUPER DEBUG - Processing ${room.remoteParticipants.size} existing REMOTE participants`);
+            room.remoteParticipants.forEach((participant, index) => {
+                console.log(`🔍 REMOTE PARTICIPANT ${index + 1}:`, {
+                    identity: participant.identity,
+                    sid: participant.sid,
+                    trackPublications: participant.trackPublications.size,
+                    videoTracks: participant.videoTrackPublications.size,
+                    audioTracks: participant.audioTrackPublications.size,
+                    connectionState: participant.connectionState
+                });
+                
+                // Log each track publication in detail
+                participant.trackPublications.forEach((publication, trackIndex) => {
+                    console.log(`  📹 Track ${trackIndex + 1}:`, {
+                        kind: publication.kind,
+                        source: publication.source,
+                        isSubscribed: publication.isSubscribed,
+                        hasTrack: !!publication.track,
+                        enabled: publication.track ? publication.track.enabled : 'N/A',
+                        muted: publication.track ? publication.track.muted : 'N/A',
+                        sid: publication.track ? publication.track.sid : 'N/A'
+                    });
+                });
+                
                 console.log('👤 Processing existing REMOTE participant:', participant.identity);
                 
                 // FIXED: Use handleParticipantConnected to avoid duplicate event handlers
@@ -1352,17 +1449,53 @@ async function connectToRoom(data) {
             updateParticipantCount();
             updateConsistentGrid();
             
+            // SUPER DEBUG: Log final state before force subscription
+            console.log('🔍 SUPER DEBUG - STATE BEFORE FORCE SUBSCRIPTION:');
+            console.log('  Video grid containers:', document.querySelectorAll('.participant-container').length);
+            document.querySelectorAll('.participant-container').forEach((container, index) => {
+                const video = container.querySelector('video');
+                const nameLabel = container.querySelector('.participant-name');
+                console.log(`  Container ${index + 1}:`, {
+                    id: container.id,
+                    name: nameLabel?.textContent || 'No name',
+                    hasVideo: !!video,
+                    videoSource: video ? (video.srcObject ? 'Has srcObject' : 'No srcObject') : 'No video element',
+                    display: container.style.display
+                });
+            });
+            
             // CRITICAL: Force track subscription after a delay to ensure everything is ready
             setTimeout(() => {
-                console.log('🔥 Running automatic track subscription force...');
+                console.log('🔥 Running SUPER AGGRESSIVE track subscription force...');
                 forceSubscribeToAllRemoteTracks();
                 
                 // Double-check after another delay
                 setTimeout(() => {
-                    console.log('🔍 Final track subscription check...');
+                    console.log('🔍 FINAL SUPER DEBUG track subscription check...');
                     forceProcessAllTracks();
                     updateConsistentGrid();
-                }, 2000);
+                    
+                    // Log final final state
+                    console.log('🔍 FINAL FINAL STATE:');
+                    room.remoteParticipants.forEach((participant) => {
+                        const container = document.getElementById(`participant-${participant.sid}`);
+                        const video = container?.querySelector('video');
+                        const hasVideoSource = video && (video.srcObject || video.src);
+                        console.log(`🔍 ${participant.identity}: Container=${!!container}, Video=${!!video}, Source=${hasVideoSource}`);
+                        
+                        if (video) {
+                            console.log(`    Video details:`, {
+                                src: video.src,
+                                srcObject: !!video.srcObject,
+                                autoplay: video.autoplay,
+                                muted: video.muted,
+                                paused: video.paused,
+                                readyState: video.readyState,
+                                networkState: video.networkState
+                            });
+                        }
+                    });
+                }, 3000);
             }, 1000);
             
             console.log('✅ Room setup completely finished!');
