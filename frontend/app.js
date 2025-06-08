@@ -225,325 +225,46 @@ function getParticipantName() {
 
 // ULTRA-SIMPLE initialization
 async function initializeMeeting() {
-    // BULLETPROOF: Prevent multiple calls
-    if (isInitializing || isInitialized) {
-        console.log('⚠️ Meeting already initializing or initialized, skipping...');
+    console.log('🚀 INITIALIZING MEETING - AGGRESSIVE MODE');
+    
+    // Step 1: FORCE local media BEFORE connecting
+    console.log('🎥 STEP 1: Getting local media FIRST...');
+    try {
+        // CRITICAL: Get media access immediately
+        const stream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: true
+        });
+        console.log('✅ Local media stream obtained:', stream);
+        
+        // Create local video element immediately
+        const localVideoContainer = document.querySelector('.participant-container:first-child video');
+        if (localVideoContainer) {
+            localVideoContainer.srcObject = stream;
+            localVideoContainer.muted = true; // Prevent echo
+            localVideoContainer.play();
+            console.log('✅ Local video displayed immediately');
+        }
+        
+    } catch (mediaError) {
+        console.error('❌ Failed to get local media:', mediaError);
+        alert('Kamera/Mikrofon Zugriff verweigert! Bitte erlauben Sie den Zugriff und laden Sie die Seite neu.');
         return;
     }
     
-    isInitializing = true;
-    console.log('🔥 ULTRA-SIMPLE initialization starting...');
+    // Step 2: Connect to room
+    console.log('🎥 STEP 2: Connecting to LiveKit room...');
+    await connectToRoom();
     
-    try {
-        // SECURITY: Check if we're in a secure context
-        if (!window.isSecureContext) {
-            throw new Error('Diese App benötigt eine sichere HTTPS-Verbindung für Kamera und Mikrofon.');
-        }
-        
-        // Load previous media state
-        loadMediaState();
-        
-        // Set up page visibility handling
-        document.addEventListener('visibilitychange', handleVisibilityChange);
-        
-        // Wait for LiveKit - SIMPLE check
-        if (typeof window.LiveKit === 'undefined') {
-            console.log('⏳ Waiting for LiveKit...');
-            let attempts = 0;
-            while (typeof window.LiveKit === 'undefined' && attempts < 50) {
-                await new Promise(resolve => setTimeout(resolve, 100));
-                attempts++;
-            }
-            
-            if (typeof window.LiveKit === 'undefined') {
-                throw new Error('LiveKit could not be loaded');
-            }
-        }
-        
-        console.log('✅ LiveKit available, proceeding...');
-        
-        // SECURITY: Pre-check media permissions
-        try {
-            console.log('🔒 Checking media permissions...');
-            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-                // Test media access to avoid later issues
-                const testStream = await navigator.mediaDevices.getUserMedia({ 
-                    video: true, 
-                    audio: true 
-                });
-                // Immediately stop the test stream
-                testStream.getTracks().forEach(track => track.stop());
-                console.log('✅ Media permissions granted');
-            }
-        } catch (mediaError) {
-            console.warn('⚠️ Media permission check failed:', mediaError);
-            // Continue anyway, but user will be prompted later
-        }
-        
-        console.log('🚀 Starting ULTRA-SIMPLE meeting initialization...');
-        showStatus('Verbindung wird aufgebaut...', 'info');
-        
-        // Validate meeting ID from global variable
-        if (!meetingId || meetingId === 'meeting') {
-            throw new Error('Meeting-ID nicht gefunden in URL');
-        }
-        
-        console.log('Meeting ID:', meetingId);
-        
-        // Check if we have stored meeting data from patient setup
-        let meetingData = sessionStorage.getItem('meetingData');
-        const patientSetupCompleted = sessionStorage.getItem('patientSetupCompleted');
-        
-        if (patientSetupCompleted === 'true' && meetingData) {
-            console.log('✅ Using stored meeting data from patient setup');
-            try {
-                meetingData = JSON.parse(meetingData);
-                
-                // Verify the meeting data is for the correct meeting
-                if (meetingData.meeting_id === meetingId) {
-                    console.log('✅ Meeting data matches current meeting ID');
-                    
-                    // Connect directly to room
-                    await connectToRoom(meetingData);
-                    isInitialized = true;
-                    console.log('🎉 Patient initialization completed using stored data!');
-                    return;
-                } else {
-                    console.warn('⚠️ Stored meeting data is for different meeting, clearing...');
-                    sessionStorage.removeItem('meetingData');
-                    sessionStorage.removeItem('patientSetupCompleted');
-                    meetingData = null;
-                }
-            } catch (error) {
-                console.error('❌ Error parsing stored meeting data:', error);
-                sessionStorage.removeItem('meetingData');
-                sessionStorage.removeItem('patientSetupCompleted');
-                meetingData = null;
-            }
-        }
-        
-        if (!meetingData) {
-            // Check user role from URL parameters
-            const urlParams = new URLSearchParams(window.location.search);
-            const userRole = urlParams.get('role');
-            const directJoin = urlParams.get('direct'); // New: Check if this is a direct join from meeting creation
-            
-            console.log('🔍 URL Role parameter:', userRole);
-            console.log('🔍 Direct join parameter:', directJoin);
-            console.log('🔍 Current URL:', window.location.href);
-            
-            // Check if doctor has stored meeting data from meeting creation
-            if (userRole === 'doctor' && directJoin === 'true') {
-                const storedDoctorData = sessionStorage.getItem('doctorMeetingData');
-                if (storedDoctorData) {
-                    try {
-                        const doctorMeetingData = JSON.parse(storedDoctorData);
-                        if (doctorMeetingData.meeting_id === meetingId) {
-                            console.log('🩺 Using stored doctor meeting data from creation');
-                            console.log('🩺 Stored data:', doctorMeetingData);
-                            meetingData = doctorMeetingData;
-                            sessionStorage.setItem('meetingData', JSON.stringify(meetingData));
-                            
-                            // Clear the stored doctor data so it's only used once
-                            sessionStorage.removeItem('doctorMeetingData');
-                            
-                            // Connect directly to room using stored token
-                            await connectToRoom(meetingData);
-                            isInitialized = true;
-                            console.log('🎉 Doctor initialization completed using stored token!');
-                            return;
-                        } else {
-                            console.warn('⚠️ Stored doctor data is for different meeting, clearing...');
-                            sessionStorage.removeItem('doctorMeetingData');
-                        }
-                    } catch (error) {
-                        console.error('❌ Error parsing stored doctor data:', error);
-                        sessionStorage.removeItem('doctorMeetingData');
-                    }
-                }
-            }
-            
-            // FALLBACK: Check if doctor has stored data even without direct=true (for refreshes/direct URLs)
-            if (userRole === 'doctor') {
-                const storedDoctorData = sessionStorage.getItem('doctorMeetingData');
-                if (storedDoctorData) {
-                    try {
-                        const doctorMeetingData = JSON.parse(storedDoctorData);
-                        if (doctorMeetingData.meeting_id === meetingId) {
-                            console.log('🩺 FALLBACK: Using stored doctor data for direct URL access');
-                            meetingData = doctorMeetingData;
-                            sessionStorage.setItem('meetingData', JSON.stringify(meetingData));
-                            
-                            // Connect directly to room using stored token
-                            await connectToRoom(meetingData);
-                            isInitialized = true;
-                            console.log('🎉 Doctor fallback initialization completed!');
-                            return;
-                        }
-                    } catch (error) {
-                        console.warn('⚠️ Stored doctor data parsing failed for fallback:', error);
-                    }
-                }
-            }
-            
-            // IMPROVED: Use nice modal for name input
-            try {
-                let participantName;
-                
-                // SPECIAL: For doctors, try to use stored meeting data first
-                if (userRole === 'doctor') {
-                    // Try to get doctor name from meeting data that might be lost due to Heroku restart
-                    try {
-                        const response = await fetch(`/api/meetings/${meetingId}/status`);
-                        if (response.ok) {
-                            const statusData = await response.json();
-                            if (statusData.doctor_name) {
-                                participantName = statusData.doctor_name;
-                                console.log('🩺 Using doctor name from meeting status:', participantName);
-                            }
-                        }
-                    } catch (error) {
-                        console.warn('⚠️ Could not fetch meeting status for doctor name:', error);
-                    }
-                }
-                
-                // If no automatic name found, ask user
-                if (!participantName) {
-                    participantName = await getParticipantName();
-                }
-                
-                // Use role-specific endpoints
-                let joinEndpoint, joinData;
-                
-                if (userRole === 'doctor') {
-                    console.log('🩺 Doctor joining meeting...');
-                    console.log('🩺 Using doctor endpoint for:', participantName);
-                    joinEndpoint = `/api/meetings/${meetingId}/join-doctor`;
-                    joinData = {
-                        participant_name: participantName,
-                        participant_role: 'doctor'
-                    };
-                } else {
-                    console.log('👤 Participant joining meeting...');
-                    console.log('👤 Using patient endpoint for:', participantName);
-                    joinEndpoint = `/api/meetings/${meetingId}/join`;
-                    joinData = {
-                        participant_name: participantName
-                    };
-                }
-                
-                console.log('📞 Making API call to:', joinEndpoint);
-                console.log('📞 With data:', joinData);
-                
-                const response = await fetch(joinEndpoint, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(joinData)
-                });
-
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    console.error('❌ API Error:', errorData);
-                    throw new Error(errorData.detail || 'Could not join meeting');
-                }
-
-                meetingData = await response.json();
-                console.log('✅ Meeting data received:', meetingData);
-                sessionStorage.setItem('meetingData', JSON.stringify(meetingData));
-                
-            } catch (nameError) {
-                if (nameError.message === 'User cancelled joining') {
-                    // Redirect back to homepage
-                    window.location.href = '/';
-                    return;
-                }
-                throw nameError;
-            }
-        }
-
-        // CRITICAL FIX: Ensure meetingData is always parsed as object before connecting
-        if (typeof meetingData === 'string') {
-            console.log('🔧 Parsing meetingData string to object...');
-            try {
-                meetingData = JSON.parse(meetingData);
-                console.log('✅ meetingData successfully parsed:', meetingData);
-            } catch (parseError) {
-                console.error('❌ Failed to parse meetingData:', parseError);
-                console.error('❌ Raw meetingData:', meetingData);
-                throw new Error('Meeting data is corrupted and cannot be parsed');
-            }
-        }
-        
-        // VALIDATION: Ensure meetingData has required fields
-        if (!meetingData || typeof meetingData !== 'object') {
-            throw new Error('Meeting data is not a valid object');
-        }
-        
-        if (!meetingData.livekit_url) {
-            console.error('❌ Missing livekit_url in meetingData:', meetingData);
-            throw new Error('LiveKit URL is missing from meeting data');
-        }
-        
-        if (!meetingData.token) {
-            console.error('❌ Missing token in meetingData:', meetingData);
-            throw new Error('LiveKit token is missing from meeting data');
-        }
-        
-        console.log('✅ meetingData validation passed:', {
-            has_livekit_url: !!meetingData.livekit_url,
-            has_token: !!meetingData.token,
-            meeting_id: meetingData.meeting_id
-        });
-
-        // Connect to room - ULTRA-SIMPLE
-        await connectToRoom(meetingData);
-        
-        isInitialized = true;
-        console.log('🎉 ULTRA-SIMPLE initialization completed!');
-        
-        // DEBUG: Show success information if debug parameter is present
-        const showDebug = new URLSearchParams(window.location.search).get('debug');
-        if (showDebug === 'true') {
-            const debugInfo = {
-                success: true,
-                meetingId: meetingId,
-                currentURL: window.location.href,
-                userRole: new URLSearchParams(window.location.search).get('role'),
-                directJoin: new URLSearchParams(window.location.search).get('direct'),
-                meetingData: meetingData,
-                roomState: room ? room.state : 'null',
-                participantCount: room ? (1 + room.remoteParticipants.size) : 0,
-                timestamp: new Date().toISOString()
-            };
-            
-            setTimeout(() => showDebugOverlay(debugInfo), 2000);
-        }
-        
-    } catch (error) {
-        console.error('❌ Initialization failed:', error);
-        
-        // EMERGENCY DEBUG: Show detailed error information
-        const debugInfo = {
-            error: error.message,
-            stack: error.stack,
-            meetingId: meetingId,
-            currentURL: window.location.href,
-            userRole: new URLSearchParams(window.location.search).get('role'),
-            directJoin: new URLSearchParams(window.location.search).get('direct'),
-            sessionStorageData: {
-                meetingData: sessionStorage.getItem('meetingData'),
-                doctorMeetingData: sessionStorage.getItem('doctorMeetingData'),
-                participantName: sessionStorage.getItem('participantName')
-            },
-            roomState: room ? room.state : 'null',
-            timestamp: new Date().toISOString()
-        };
-        
-        showDebugOverlay(debugInfo);
-        showError('Fehler beim Verbinden: ' + error.message);
-    } finally {
-        isInitializing = false;
-    }
+    // Step 3: FORCE enable local media in room
+    console.log('🎥 STEP 3: Enabling local media in room...');
+    await enableLocalMedia();
+    
+    // Step 4: AGGRESSIVE track subscription
+    console.log('🎥 STEP 4: Setting up aggressive track subscription...');
+    setupAggressiveTrackSubscription();
+    
+    console.log('✅ Meeting initialization completed');
 }
 
 // CONSISTENT container creation for all users (Google Meet style)
@@ -1542,89 +1263,44 @@ async function connectToRoom(data) {
     }
 }
 
-// MEGA-IMPROVED: Handle new participant joining
+// BULLETPROOF: Handle new participant joining - AGGRESSIVE MODE
 function handleParticipantConnected(participant) {
-    console.log('👤 PARTICIPANT CONNECTED:', participant.identity);
+    console.log('👤 HANDLING PARTICIPANT CONNECTION:', participant.identity);
+    console.log('👤 Participant SID:', participant.sid);
+    console.log('👤 Is local:', participant === room.localParticipant);
     
-    // BULLETPROOF: Check if container already exists before creating
-    const existingContainer = document.getElementById(`participant-${participant.sid}`);
-    if (existingContainer) {
-        console.log('✅ Container already exists for:', participant.identity);
-    } else {
-        // Create container for new participant only if it doesn't exist
-        const container = createConsistentContainer(participant, false);
-        console.log('👤 Container created for:', participant.identity);
+    // Skip if this is the local participant (handled separately)
+    if (participant === room.localParticipant) {
+        console.log('👤 Skipping local participant container creation');
+        return;
     }
     
-    // CRITICAL FIX: More aggressive track subscription
-    console.log(`🎯 AGGRESSIVE TRACK PROCESSING for ${participant.identity}:`);
-    console.log(`   - Track publications: ${participant.trackPublications.size}`);
+    // Check if container already exists
+    let container = document.getElementById(`participant-${participant.sid}`);
+    if (container) {
+        console.log('✅ Container already exists for:', participant.identity);
+    } else {
+        // Create new container for remote participant
+        container = createConsistentContainer(participant, false);
+        console.log('✅ Created new container for:', participant.identity);
+    }
     
-    participant.trackPublications.forEach((publication) => {
-        console.log(`🎯 Processing track: ${publication.kind} (${publication.source})`);
-        console.log(`   - Subscribed: ${publication.isSubscribed}`);
-        console.log(`   - Has track: ${!!publication.track}`);
+    // AGGRESSIVE: Subscribe to ALL existing tracks immediately
+    console.log('🔄 Subscribing to existing tracks for:', participant.identity);
+    participant.trackPublications.forEach((publication, key) => {
+        console.log(`📋 Found track publication: ${publication.kind} (subscribed: ${publication.isSubscribed})`);
         
-        if (publication.isSubscribed && publication.track) {
-            console.log('🎵 Processing existing subscribed track:', publication.kind, 'from', participant.identity);
+        if (publication.track) {
+            console.log(`✅ Track already available: ${publication.kind}`);
             handleTrackSubscribed(publication.track, publication, participant);
-        } else {
-            console.log('🎯 FORCING subscription for:', publication.kind, 'from', participant.identity);
-            publication.setSubscribed(true).then(() => {
-                console.log('✅ Forced subscription successful for:', publication.kind, 'from', participant.identity);
-                // Process the track once it's subscribed
-                if (publication.track) {
-                    handleTrackSubscribed(publication.track, publication, participant);
-                }
-            }).catch(e => {
-                console.error('❌ Failed to force subscription:', publication.kind, 'from', participant.identity, e);
-            });
+        } else if (!publication.isSubscribed) {
+            console.log(`🔄 Subscribing to track: ${publication.kind}`);
+            publication.setSubscribed(true);
         }
     });
     
-    // CRITICAL: Prevent duplicate event handler registration
-    if (!participant._heydokEventHandlersRegistered) {
-        console.log('🎯 Registering event handlers for:', participant.identity);
-        
-        participant.on(LiveKit.ParticipantEvent.TrackSubscribed, (track, publication) => {
-            console.log('🎵 Track subscribed event for:', participant.identity, track.kind);
-            handleTrackSubscribed(track, publication, participant);
-        });
-        
-        participant.on(LiveKit.ParticipantEvent.TrackUnsubscribed, (track, publication) => {
-            console.log('🎵 Track unsubscribed event for:', participant.identity, track.kind);
-            handleTrackUnsubscribed(track, publication, participant);
-        });
-        
-        participant.on(LiveKit.ParticipantEvent.TrackPublished, (publication) => {
-            console.log('🎵 NEW Track published by:', participant.identity, publication.kind);
-            // Immediately try to subscribe to newly published tracks
-            if (!publication.isSubscribed) {
-                console.log('🎯 Auto-subscribing to newly published track:', publication.kind);
-                publication.setSubscribed(true);
-            }
-        });
-        
-        participant.on(LiveKit.ParticipantEvent.TrackMuted, (publication) => {
-            console.log('🔇 Track muted:', participant.identity, publication.kind);
-            handleTrackMuted(publication, participant);
-        });
-        
-        participant.on(LiveKit.ParticipantEvent.TrackUnmuted, (publication) => {
-            console.log('🔊 Track unmuted:', participant.identity, publication.kind);
-            handleTrackUnmuted(publication, participant);
-        });
-        
-        // Mark handlers as registered
-        participant._heydokEventHandlersRegistered = true;
-        console.log('✅ Event handlers registered for:', participant.identity);
-    } else {
-        console.log('⚠️ Event handlers already registered for:', participant.identity);
-    }
-    
-    // Update UI
-    updateParticipantCount();
-    updateConsistentGrid();
+    // Update grid layout
+    updateParticipantGrid();
     
     console.log(`✅ Participant ${participant.identity} fully processed`);
 }
@@ -2046,265 +1722,128 @@ function handleTrackUnmuted(publication, participant) {
     console.log(`🔊 Track unmuted: ${publication.kind} from ${participant.identity}`);
 }
 
-// PERSISTENT: Enable local media with saved state
+// CRITICAL FIX: Enable local media - SUPER AGGRESSIVE VERSION  
 async function enableLocalMedia() {
+    console.log('🎥 ENABLING LOCAL MEDIA - SUPER AGGRESSIVE MODE');
+    
     if (!room || !room.localParticipant) {
         console.error('❌ No room or local participant available');
-        console.error('❌ Room:', room);
-        console.error('❌ Local participant:', room ? room.localParticipant : 'Room is null');
-        return;
+        throw new Error('Room not connected');
     }
     
     try {
-        console.log('🎥 AGGRESSIVE LOCAL MEDIA ENABLING...');
-        console.log('🎥 Video enabled state:', videoEnabled);
-        console.log('🎥 Audio enabled state:', audioEnabled);
         console.log('🎥 Local participant identity:', room.localParticipant.identity);
         console.log('🎥 Local participant SID:', room.localParticipant.sid);
         
-        // CRITICAL FIX: More aggressive media enabling with retries
+        // STEP 1: Enable camera with aggressive retry
         let cameraEnabled = false;
-        let micEnabled = false;
-        const maxRetries = 3;
-        
-        // Enable camera with retries
-        if (videoEnabled) {
-            for (let attempt = 1; attempt <= maxRetries; attempt++) {
-                try {
-                    console.log(`🎥 Camera enable attempt ${attempt}/${maxRetries}...`);
-                    await room.localParticipant.setCameraEnabled(true);
-                    cameraEnabled = true;
-                    console.log('✅ Camera enabled successfully');
-                    break;
-                } catch (error) {
-                    console.error(`❌ Camera enable attempt ${attempt} failed:`, error);
-                    if (attempt === maxRetries) {
-                        console.error('❌ All camera enable attempts failed');
-                        showError('Kamera konnte nicht aktiviert werden: ' + error.message);
-                    } else {
-                        await new Promise(resolve => setTimeout(resolve, 500));
-                    }
-                }
-            }
-        }
-        
-        // Enable microphone with retries
-        if (audioEnabled) {
-            for (let attempt = 1; attempt <= maxRetries; attempt++) {
-                try {
-                    console.log(`🎤 Microphone enable attempt ${attempt}/${maxRetries}...`);
-                    await room.localParticipant.setMicrophoneEnabled(true);
-                    micEnabled = true;
-                    console.log('✅ Microphone enabled successfully');
-                    break;
-                } catch (error) {
-                    console.error(`❌ Microphone enable attempt ${attempt} failed:`, error);
-                    if (attempt === maxRetries) {
-                        console.error('❌ All microphone enable attempts failed');
-                        showError('Mikrofon konnte nicht aktiviert werden: ' + error.message);
-                    } else {
-                        await new Promise(resolve => setTimeout(resolve, 500));
-                    }
-                }
-            }
-        }
-        
-        // Update UI buttons immediately
-        updateMediaButtons();
-        
-        // CRITICAL: Handle local tracks properly - use CONSISTENT ID scheme
-        const localContainerId = `participant-${room.localParticipant.sid}`;
-        console.log('🎥 Looking for local container with ID:', localContainerId);
-        const localContainer = document.getElementById(localContainerId);
-        
-        if (!localContainer) {
-            console.error('❌ Local container not found - creating emergency container');
-            console.error('❌ Local participant SID:', room.localParticipant.sid);
-            console.error('❌ Available containers:', Array.from(document.querySelectorAll('.participant-container')).map(c => c.id));
-            
-            // Emergency: Try to create local container
-            const emergencyContainer = createConsistentContainer(room.localParticipant, true);
-            if (!emergencyContainer) {
-                console.error('❌ Failed to create emergency local container');
-                return;
-            }
-            console.log('✅ Emergency local container created');
-        }
-        
-        const currentLocalContainer = document.getElementById(localContainerId);
-        if (!currentLocalContainer) {
-            console.error('❌ Still no local container after emergency creation');
-            return;
-        }
-        
-        console.log('✅ Local container found/created:', currentLocalContainer);
-        
-        const localVideo = currentLocalContainer.querySelector('video');
-        if (!localVideo) {
-            console.error('❌ Local video element not found in container');
-            console.error('❌ Container contents:', currentLocalContainer.innerHTML);
-            return;
-        }
-        
-        console.log('✅ Local video element found:', localVideo);
-        
-        // ECHO PREVENTION: Ensure local video is ALWAYS muted
-        localVideo.muted = true;
-        localVideo.volume = 0;
-        
-        // AGGRESSIVE: Wait for tracks to be published with longer timeout
-        console.log('🎥 Waiting for video tracks to be published...');
         let attempts = 0;
-        const maxAttempts = 20; // Increased from 10
-        while (room.localParticipant.videoTrackPublications.size === 0 && attempts < maxAttempts) {
-            console.log(`🎥 Waiting for video tracks (attempt ${attempts + 1}/${maxAttempts})...`);
-            await new Promise(resolve => setTimeout(resolve, 300)); // Increased delay
-            attempts++;
-            
-            // Force camera re-enable every 5 attempts if no tracks
-            if (attempts % 5 === 0 && videoEnabled && attempts < maxAttempts) {
-                console.log('🔄 Force camera re-enable...');
-                try {
-                    await room.localParticipant.setCameraEnabled(false);
-                    await new Promise(resolve => setTimeout(resolve, 200));
-                    await room.localParticipant.setCameraEnabled(true);
-                } catch (e) {
-                    console.warn('⚠️ Camera re-enable failed:', e);
-                }
-            }
-        }
+        const maxAttempts = 5;
         
-        console.log(`🎥 Video track publications after wait: ${room.localParticipant.videoTrackPublications.size}`);
-        
-        // AGGRESSIVE: Attach video tracks to local video element
-        let videoAttached = false;
-        room.localParticipant.videoTrackPublications.forEach((publication, index) => {
-            if (publication.track) {
-                console.log(`📹 Attaching LOCAL video track ${index}:`, publication.track);
-                try {
-                    // Clear any existing source first
-                    if (localVideo.srcObject) {
-                        const existingTracks = localVideo.srcObject.getTracks();
-                        existingTracks.forEach(t => t.stop());
-                        localVideo.srcObject = null;
-                    }
-                    
-                    // Attach the track
-                    publication.track.attach(localVideo);
-                    
-                    // Configure video element
-                    localVideo.style.display = videoEnabled ? 'block' : 'none';
-                    localVideo.style.visibility = 'visible';
-                    localVideo.style.opacity = '1';
-                    localVideo.style.objectFit = 'cover';
-                    localVideo.playsInline = true;
-                    localVideo.autoplay = true;
-                    
-                    // Force video to play with aggressive retry
-                    const playVideo = async () => {
-                        try {
-                            await localVideo.play();
-                            console.log(`📹 Local video ${index} playing successfully`);
-                            videoAttached = true;
-                        } catch (e) {
-                            console.warn(`📹 Local video ${index} autoplay prevented, retrying:`, e);
-                            // Retry after short delay
-                            setTimeout(async () => {
-                                try {
-                                    await localVideo.play();
-                                    console.log(`📹 Local video ${index} playing after retry`);
-                                    videoAttached = true;
-                                } catch (e2) {
-                                    console.warn(`📹 Local video ${index} still failed:`, e2);
-                                }
-                            }, 1000);
-                        }
-                    };
-                    
-                    playVideo();
-                    
-                    console.log(`📹 Video track ${index} attached, display:`, localVideo.style.display);
-                } catch (error) {
-                    console.error(`❌ Failed to attach local video track ${index}:`, error);
-                }
-            } else {
-                console.log(`📹 Video track publication ${index} has no track`);
-            }
-        });
-        
-        // FALLBACK: If no video attached and camera should be enabled
-        if (!videoAttached && videoEnabled && cameraEnabled) {
-            console.warn('⚠️ No video tracks attached but camera enabled - emergency fallback');
+        while (!cameraEnabled && attempts < maxAttempts) {
             try {
-                console.log('🚨 Emergency camera restart...');
-                await room.localParticipant.setCameraEnabled(false);
-                await new Promise(resolve => setTimeout(resolve, 500));
+                console.log(`🎥 Camera enable attempt ${attempts + 1}/${maxAttempts}`);
                 await room.localParticipant.setCameraEnabled(true);
-                
-                // Wait a bit more and try again
-                setTimeout(async () => {
-                    console.log('🚨 Emergency track check after restart...');
-                    room.localParticipant.videoTrackPublications.forEach((publication) => {
-                        if (publication.track) {
-                            console.log('🚨 Emergency track attachment...');
-                            try {
-                                publication.track.attach(localVideo);
-                                localVideo.play();
-                                console.log('✅ Emergency video attachment successful');
-                            } catch (e) {
-                                console.error('❌ Emergency attachment failed:', e);
-                            }
-                        }
-                    });
-                }, 2000);
+                cameraEnabled = true;
+                console.log('✅ Camera enabled successfully!');
             } catch (error) {
-                console.error('❌ Emergency camera restart failed:', error);
+                console.warn(`⚠️ Camera enable attempt ${attempts + 1} failed:`, error);
+                attempts++;
+                if (attempts < maxAttempts) {
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
             }
         }
         
-        console.log('🎥 Processing audio track publications...');
-        console.log('🎥 Audio track publications count:', room.localParticipant.audioTrackPublications.size);
-        
-        // CRITICAL: NEVER attach local audio tracks to prevent echo
-        room.localParticipant.audioTrackPublications.forEach((publication, index) => {
-            if (publication.track) {
-                console.log(`🔇 LOCAL audio track ${index} found - NOT attaching to prevent echo`);
-                // Do NOT attach local audio track - this prevents echo!
-            } else {
-                console.log(`🔇 Audio track publication ${index} has no track`);
-            }
-        });
-        
-        console.log('✅ Local media enabled successfully (echo-free)');
-        
-        // Hide loading and show controls
-        const loadingElement = document.getElementById('loadingState');
-        if (loadingElement) {
-            loadingElement.style.display = 'none';
-            console.log('✅ Loading state hidden');
+        if (!cameraEnabled) {
+            throw new Error('Failed to enable camera after multiple attempts');
         }
         
-        // Set share link
-        const shareUrl = window.location.href;
-        const shareLinkInput = document.getElementById('shareLinkInput');
-        if (shareLinkInput) {
-            shareLinkInput.value = shareUrl;
+        // STEP 2: Enable microphone
+        try {
+            await room.localParticipant.setMicrophoneEnabled(true);
+            console.log('✅ Microphone enabled successfully!');
+        } catch (error) {
+            console.warn('⚠️ Microphone enable failed:', error);
+            // Continue anyway, video is more important
         }
         
-        // CRITICAL: Update grid and force remote track processing
-        updateConsistentGrid();
+        // STEP 3: FORCE local video display
+        await forceLocalVideoDisplay();
         
-        // Delay and force remote track subscription
-        setTimeout(() => {
-            console.log('🔥 Post-local-media remote track force...');
-            forceSubscribeToAllRemoteTracks();
-        }, 2000);
+        // STEP 4: Update media button states
+        updateMediaButtonStates();
+        
+        console.log('✅ Local media setup completed successfully!');
         
     } catch (error) {
         console.error('❌ Failed to enable local media:', error);
-        console.error('❌ Error stack:', error.stack);
-        showError('Fehler beim Aktivieren von Kamera/Mikrofon: ' + error.message);
+        showError('Kamera konnte nicht aktiviert werden: ' + error.message);
+        throw error;
     }
+}
+
+// FORCE local video display for ALL participants (especially patients)
+async function forceLocalVideoDisplay() {
+    console.log('🎥 FORCING LOCAL VIDEO DISPLAY...');
+    
+    // Wait a bit for tracks to be published
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
+    // Find or create local participant container
+    let localContainer = document.getElementById(`participant-${room.localParticipant.sid}`);
+    
+    if (!localContainer) {
+        console.log('🎥 Creating local participant container...');
+        localContainer = createConsistentContainer(room.localParticipant, true);
+    }
+    
+    const localVideo = localContainer.querySelector('video');
+    if (!localVideo) {
+        console.error('❌ No video element found in local container');
+        return;
+    }
+    
+    // AGGRESSIVE: Try multiple methods to attach local video
+    console.log('🎥 Attempting to attach local video track...');
+    
+    // Method 1: Find camera track from publications
+    room.localParticipant.videoTrackPublications.forEach((publication) => {
+        if (publication.source === LiveKit.TrackSource.Camera && publication.track) {
+            console.log('✅ Found local camera track, attaching...');
+            publication.track.attach(localVideo);
+            localVideo.muted = true; // Prevent echo
+            localVideo.play().catch(e => console.log('Video play error:', e));
+            
+            // Add participant name
+            const nameElement = localContainer.querySelector('.participant-name');
+            if (nameElement) {
+                nameElement.textContent = room.localParticipant.identity + ' (Sie)';
+            }
+            
+            console.log('✅ Local video displayed successfully!');
+        }
+    });
+    
+    // Method 2: If no published track found, get media stream directly
+    if (!localVideo.srcObject && !localVideo.currentSrc) {
+        console.log('🎥 No published track found, getting media stream directly...');
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: true,
+                audio: true
+            });
+            localVideo.srcObject = stream;
+            localVideo.muted = true;
+            localVideo.play();
+            console.log('✅ Local video attached via direct media stream');
+        } catch (error) {
+            console.error('❌ Failed to get direct media stream:', error);
+        }
+    }
+    
+    // Update grid
+    updateParticipantGrid();
 }
 
 // Handle screen share track from other participants
@@ -2572,3 +2111,161 @@ function forceSubscribeToAllRemoteTracks() {
 
 // Add forceSubscribeToAllRemoteTracks to global scope
 window.forceSubscribeToAllRemoteTracks = forceSubscribeToAllRemoteTracks; 
+
+// MISSING FUNCTION: connectToRoom - SUPER AGGRESSIVE VERSION
+async function connectToRoom() {
+    console.log('🔗 CONNECTING TO ROOM - AGGRESSIVE MODE');
+    
+    // Get meeting data
+    let meetingData = sessionStorage.getItem('meetingData');
+    if (!meetingData) {
+        console.error('❌ No meeting data found');
+        throw new Error('Meeting data not found');
+    }
+    
+    meetingData = JSON.parse(meetingData);
+    console.log('📋 Meeting data:', meetingData);
+    
+    // Create room with aggressive settings
+    room = new LiveKit.Room({
+        adaptiveStream: true,
+        dynacast: true,
+        audioCaptureDefaults: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+        },
+        videoCaptureDefaults: {
+            resolution: {
+                width: 1280,
+                height: 720
+            },
+            frameRate: 30
+        }
+    });
+    
+    // CRITICAL: Set up ALL event handlers BEFORE connecting
+    setupRoomEvents();
+    
+    // Connect to room
+    console.log('🔗 Connecting to LiveKit...');
+    await room.connect(meetingData.livekit_url, meetingData.token);
+    
+    console.log('✅ Connected to room:', room.name);
+    console.log('🎯 Local participant:', room.localParticipant.identity);
+    console.log('👥 Remote participants:', room.remoteParticipants.size);
+    
+    // FORCE track subscription for ALL existing participants
+    room.remoteParticipants.forEach(participant => {
+        console.log('🔄 Processing existing participant:', participant.identity);
+        handleParticipantConnected(participant);
+    });
+}
+
+// AGGRESSIVE track subscription setup
+function setupAggressiveTrackSubscription() {
+    console.log('🎯 Setting up AGGRESSIVE track subscription...');
+    
+    if (!room) {
+        console.error('❌ No room available for track subscription');
+        return;
+    }
+    
+    // Force subscribe to ALL tracks immediately
+    const forceSubscribeInterval = setInterval(() => {
+        room.remoteParticipants.forEach(participant => {
+            participant.trackPublications.forEach(publication => {
+                if (!publication.isSubscribed && publication.isEnabled) {
+                    console.log('🔄 FORCING subscription to:', publication.kind, 'from', participant.identity);
+                    publication.setSubscribed(true);
+                }
+            });
+        });
+    }, 1000);
+    
+    // Stop after 30 seconds
+    setTimeout(() => {
+        clearInterval(forceSubscribeInterval);
+        console.log('⏹️ Stopped aggressive track subscription');
+    }, 30000);
+}
+
+// FIXED: Room Events Setup - AGGRESSIVE MODE
+function setupRoomEvents() {
+    console.log('🎬 Setting up room events - AGGRESSIVE MODE');
+    
+    // BULLETPROOF: Room connected handler
+    room.on(LiveKit.RoomEvent.Connected, async () => {
+        console.log('🎉 Room connected successfully!');
+        console.log('🎉 Local participant identity:', room.localParticipant.identity);
+        console.log('🎉 Local participant SID:', room.localParticipant.sid);
+        console.log('🎉 Remote participants count:', room.remoteParticipants.size);
+        
+        // IMMEDIATE: Enable local media
+        console.log('🎥 Enabling local camera and microphone...');
+        await enableLocalMedia();
+        
+        // IMMEDIATE: Process all existing participants
+        console.log('👥 Processing existing participants...');
+        room.remoteParticipants.forEach(participant => {
+            console.log('👤 Processing existing remote participant:', participant.identity);
+            handleParticipantConnected(participant);
+        });
+        
+        // Update UI
+        showStatus('Verbunden! Video wird geladen...', 'success');
+        hideLoadingOverlay();
+    });
+    
+    // Participant connected
+    room.on(LiveKit.RoomEvent.ParticipantConnected, (participant) => {
+        console.log('👤 NEW PARTICIPANT CONNECTED:', participant.identity);
+        handleParticipantConnected(participant);
+    });
+    
+    // Participant disconnected  
+    room.on(LiveKit.RoomEvent.ParticipantDisconnected, (participant) => {
+        console.log('👤 PARTICIPANT DISCONNECTED:', participant.identity);
+        const container = document.getElementById(`participant-${participant.sid}`);
+        if (container) {
+            container.remove();
+            updateParticipantGrid();
+        }
+    });
+    
+    // CRITICAL: Track subscribed
+    room.on(LiveKit.RoomEvent.TrackSubscribed, (track, publication, participant) => {
+        console.log(`🎵 TRACK SUBSCRIBED: ${track.kind} from ${participant.identity}`);
+        handleTrackSubscribed(track, publication, participant);
+    });
+    
+    // Track unsubscribed
+    room.on(LiveKit.RoomEvent.TrackUnsubscribed, (track, publication, participant) => {
+        console.log(`🔇 TRACK UNSUBSCRIBED: ${track.kind} from ${participant.identity}`);
+        track.detach();
+    });
+    
+    // Track published
+    room.on(LiveKit.RoomEvent.TrackPublished, (publication, participant) => {
+        console.log(`📢 TRACK PUBLISHED: ${publication.kind} from ${participant.identity}`);
+        // Force immediate subscription
+        setTimeout(() => {
+            if (!publication.isSubscribed) {
+                console.log('🔄 Force subscribing to newly published track');
+                publication.setSubscribed(true);
+            }
+        }, 100);
+    });
+    
+    // Connection quality changed
+    room.on(LiveKit.RoomEvent.ConnectionQualityChanged, (quality, participant) => {
+        console.log(`📶 Connection quality for ${participant.identity}:`, quality);
+    });
+    
+    // Disconnected
+    room.on(LiveKit.RoomEvent.Disconnected, () => {
+        console.log('❌ Room disconnected');
+        showError('Verbindung unterbrochen. Seite wird neu geladen...');
+        setTimeout(() => location.reload(), 3000);
+    });
+}
