@@ -1339,33 +1339,9 @@ async function connectToRoom(data) {
             room.remoteParticipants.forEach((participant) => {
                 console.log('👤 Processing existing REMOTE participant:', participant.identity);
                 
-                // Create container for existing participant
-                const container = getOrCreateParticipantContainer(participant);
-                console.log('👤 Container created for existing participant:', container ? 'SUCCESS' : 'FAILED');
-                
-                // OPTIMIZED: Subscribe to their existing tracks with proper handling
-                participant.trackPublications.forEach((publication) => {
-                    console.log(`🎵 Found existing track: ${publication.kind} from ${participant.identity}, subscribed: ${publication.isSubscribed}, track: ${!!publication.track}`);
-                    
-                    if (publication.isSubscribed && publication.track) {
-                        console.log('🎵 Attaching existing track:', publication.kind, 'from', participant.identity);
-                        handleTrackSubscribed(publication.track, publication, participant);
-                    } else if (!publication.isSubscribed) {
-                        console.log('🎵 Track not subscribed, attempting to subscribe:', publication.kind);
-                        publication.setSubscribed(true);
-                    }
-                });
-                
-                // IMPORTANT: Setup event listeners for this participant  
-                participant.on(LiveKit.ParticipantEvent.TrackSubscribed, (track, publication) => {
-                    console.log('🎵 Track subscribed event for:', participant.identity, track.kind);
-                    handleTrackSubscribed(track, publication, participant);
-                });
-                
-                participant.on(LiveKit.ParticipantEvent.TrackUnsubscribed, (track, publication) => {
-                    console.log('🔇 Track unsubscribed for:', participant.identity, track.kind);
-                    handleTrackUnsubscribed(track, publication, participant);
-                });
+                // FIXED: Use handleParticipantConnected to avoid duplicate event handlers
+                // This handles container creation, track subscription AND event handlers properly
+                handleParticipantConnected(participant);
             });
             
             // Enable local camera and microphone with stored state
@@ -1423,7 +1399,7 @@ async function connectToRoom(data) {
 
 // MEGA-IMPROVED: Handle new participant joining
 function handleParticipantConnected(participant) {
-    console.log('👤 NEW PARTICIPANT CONNECTED:', participant.identity);
+    console.log('👤 PARTICIPANT CONNECTED:', participant.identity);
     
     // BULLETPROOF: Check if container already exists before creating
     const existingContainer = document.getElementById(`participant-${participant.sid}`);
@@ -1432,27 +1408,37 @@ function handleParticipantConnected(participant) {
     } else {
         // Create container for new participant only if it doesn't exist
         const container = createConsistentContainer(participant, false);
-        console.log('👤 New container created for:', participant.identity);
+        console.log('👤 Container created for:', participant.identity);
     }
     
     // IMPORTANT: Subscribe to their tracks immediately
     participant.trackPublications.forEach((publication) => {
         if (publication.isSubscribed && publication.track) {
-            console.log('🎵 Subscribing to existing track:', publication.kind, 'from', participant.identity);
+            console.log('🎵 Processing existing track:', publication.kind, 'from', participant.identity);
             handleTrackSubscribed(publication.track, publication, participant);
         }
     });
     
-    // CRITICAL: Listen for future track events
-    participant.on(LiveKit.ParticipantEvent.TrackSubscribed, (track, publication) => {
-        console.log('🎵 Track subscribed event for:', participant.identity, track.kind);
-        handleTrackSubscribed(track, publication, participant);
-    });
-    
-    participant.on(LiveKit.ParticipantEvent.TrackUnsubscribed, (track, publication) => {
-        console.log('🔇 Track unsubscribed for:', participant.identity, track.kind);
-        handleTrackUnsubscribed(track, publication, participant);
-    });
+    // CRITICAL: Prevent duplicate event handler registration
+    if (!participant._heydokEventHandlersRegistered) {
+        console.log('🎯 Registering event handlers for:', participant.identity);
+        
+        participant.on(LiveKit.ParticipantEvent.TrackSubscribed, (track, publication) => {
+            console.log('🎵 Track subscribed event for:', participant.identity, track.kind);
+            handleTrackSubscribed(track, publication, participant);
+        });
+        
+        participant.on(LiveKit.ParticipantEvent.TrackUnsubscribed, (track, publication) => {
+            console.log('🔇 Track unsubscribed for:', participant.identity, track.kind);
+            handleTrackUnsubscribed(track, publication, participant);
+        });
+        
+        // Mark event handlers as registered
+        participant._heydokEventHandlersRegistered = true;
+        console.log('✅ Event handlers registered for:', participant.identity);
+    } else {
+        console.log('⚡ Event handlers already registered for:', participant.identity);
+    }
     
     // Update UI
     updateParticipantCount();
