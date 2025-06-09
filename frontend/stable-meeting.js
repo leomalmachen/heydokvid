@@ -74,6 +74,13 @@ async function connectToMeeting(meetingData) {
         // Setup basic event handlers
         room.on(LiveKit.RoomEvent.Connected, async () => {
             console.log('✅ Connected to meeting!');
+            
+            // IMMEDIATE UI FIX: Create local participant container right away
+            console.log('🎯 Creating local participant container...');
+            const localContainer = createParticipantContainer(room.localParticipant);
+            console.log('✅ Local participant container created');
+            
+            // Then enable media
             await enableLocalMedia();
             updateUI();
         });
@@ -259,22 +266,67 @@ function createParticipantContainer(participant) {
     container = document.createElement('div');
     container.id = containerId;
     container.className = `participant-container ${isLocal ? 'local' : 'remote'}`;
+    container.style.cssText = `
+        position: relative;
+        background: #2d2d2d;
+        border-radius: 8px;
+        overflow: hidden;
+        min-height: 200px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+    `;
     
     const nameLabel = document.createElement('div');
     nameLabel.className = 'participant-name';
     nameLabel.textContent = isLocal ? 'Sie' : participant.identity;
+    nameLabel.style.cssText = `
+        position: absolute;
+        bottom: 10px;
+        left: 10px;
+        background: rgba(0,0,0,0.7);
+        color: white;
+        padding: 5px 10px;
+        border-radius: 4px;
+        font-size: 14px;
+        z-index: 10;
+    `;
     
+    // Add placeholder when no video
+    const placeholder = document.createElement('div');
+    placeholder.className = 'video-placeholder';
+    placeholder.innerHTML = `
+        <div style="text-align: center; color: #888;">
+            <div style="font-size: 48px; margin-bottom: 10px;">👤</div>
+            <div>${isLocal ? 'Ihre Kamera wird geladen...' : 'Wartet auf Video...'}</div>
+        </div>
+    `;
+    placeholder.style.cssText = `
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #1a1a1a;
+    `;
+    
+    container.appendChild(placeholder);
     container.appendChild(nameLabel);
     
     const videoGrid = document.getElementById('videoGrid');
     const loadingState = document.getElementById('loadingState');
     
+    // IMPORTANT: Remove loading state when first participant appears
     if (loadingState) {
+        console.log('🎯 Removing loading state - participant container created');
         loadingState.remove();
     }
     
     videoGrid.appendChild(container);
     participants.set(participant.sid, container);
+    
+    console.log(`✅ Participant container created for: ${isLocal ? 'local' : participant.identity}`);
     
     return container;
 }
@@ -290,6 +342,16 @@ function getOrCreateParticipantContainer(participant) {
 
 // STABLE: Attach video track
 function attachVideoTrack(track, container, participant) {
+    console.log('📹 Attaching video track for:', participant.identity);
+    
+    // Remove placeholder if it exists
+    const placeholder = container.querySelector('.video-placeholder');
+    if (placeholder) {
+        console.log('🎯 Removing video placeholder');
+        placeholder.remove();
+    }
+    
+    // Remove existing video
     const existingVideo = container.querySelector('video');
     if (existingVideo) {
         existingVideo.remove();
@@ -299,11 +361,17 @@ function attachVideoTrack(track, container, participant) {
     video.autoplay = true;
     video.playsInline = true;
     video.muted = participant === room.localParticipant;
+    video.style.cssText = `
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        background: #000;
+    `;
     
     track.attach(video);
     container.appendChild(video);
     
-    console.log('📹 Video track attached for:', participant.identity);
+    console.log('✅ Video track attached and placeholder removed for:', participant.identity);
 }
 
 // STABLE: Attach audio track
