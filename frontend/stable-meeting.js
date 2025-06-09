@@ -60,9 +60,16 @@ function createStableRoom() {
 // STABLE: Connect with retry mechanism
 async function connectToMeeting(meetingData) {
     console.log('🔗 Connecting to meeting with stable settings...');
+    console.log('📊 Meeting data:', {
+        meeting_id: meetingData.meeting_id,
+        livekit_url: meetingData.livekit_url,
+        token_length: meetingData.token ? meetingData.token.length : 0,
+        user_role: meetingData.user_role
+    });
     
     try {
         room = createStableRoom();
+        console.log('✅ Room created successfully');
         
         // Setup basic event handlers
         room.on(LiveKit.RoomEvent.Connected, async () => {
@@ -93,12 +100,53 @@ async function connectToMeeting(meetingData) {
             }
         });
         
-        // Connect to room
+        // Add more specific error handlers
+        room.on(LiveKit.RoomEvent.ConnectionQualityChanged, (quality, participant) => {
+            console.log('📶 Connection quality changed:', quality, participant?.identity);
+        });
+        
+        room.on(LiveKit.RoomEvent.MediaDevicesError, (error) => {
+            console.error('🎥 Media devices error:', error);
+        });
+        
+        room.on(LiveKit.RoomEvent.ConnectionStateChanged, (state) => {
+            console.log('🔌 Connection state changed:', state);
+        });
+        
+        // Connect to room with detailed logging
+        console.log('🌐 Attempting LiveKit connection...');
+        console.log('📡 URL:', meetingData.livekit_url);
+        console.log('🎫 Token preview:', meetingData.token.substring(0, 50) + '...');
+        
         await room.connect(meetingData.livekit_url, meetingData.token);
+        
+        console.log('🎉 LiveKit connection successful!');
         
     } catch (error) {
         console.error('❌ Connection failed:', error);
-        showError('Verbindung fehlgeschlagen: ' + error.message);
+        console.error('❌ Error details:', {
+            name: error.name,
+            message: error.message,
+            stack: error.stack
+        });
+        
+        // More user-friendly error message
+        let errorMessage = 'Verbindung fehlgeschlagen';
+        if (error.message.includes('401')) {
+            errorMessage = 'Token ungültig - bitte Meeting neu starten';
+        } else if (error.message.includes('timeout')) {
+            errorMessage = 'Verbindung zu langsam - bitte erneut versuchen';
+        } else if (error.message.includes('websocket')) {
+            errorMessage = 'WebSocket-Verbindung fehlgeschlagen - Firewall prüfen';
+        }
+        
+        showError(errorMessage + ': ' + error.message);
+        
+        // Try automatic retry after 3 seconds
+        setTimeout(() => {
+            console.log('🔄 Automatic retry in 3 seconds...');
+            connectToMeeting(meetingData);
+        }, 3000);
     }
 }
 
@@ -106,19 +154,62 @@ async function connectToMeeting(meetingData) {
 async function enableLocalMedia() {
     try {
         console.log('🎥 Enabling local media...');
+        console.log('📹 Video enabled:', videoEnabled);
+        console.log('🎤 Audio enabled:', audioEnabled);
         
-        // Enable camera if available
-        if (videoEnabled) {
-            await room.localParticipant.enableCameraAndMicrophone();
-        } else {
-            await room.localParticipant.setMicrophoneEnabled(audioEnabled);
+        if (!room || !room.localParticipant) {
+            console.error('❌ No room or local participant available');
+            return;
         }
         
-        console.log('✅ Local media enabled');
+        // Try to enable media step by step
+        if (audioEnabled && videoEnabled) {
+            console.log('🎬 Enabling camera and microphone...');
+            await room.localParticipant.enableCameraAndMicrophone();
+            console.log('✅ Camera and microphone enabled successfully');
+        } else if (audioEnabled) {
+            console.log('🎤 Enabling microphone only...');
+            await room.localParticipant.setMicrophoneEnabled(true);
+            console.log('✅ Microphone enabled successfully');
+        } else if (videoEnabled) {
+            console.log('📹 Enabling camera only...');
+            await room.localParticipant.setCameraEnabled(true);
+            console.log('✅ Camera enabled successfully');
+        }
+        
+        console.log('✅ Local media setup completed');
+        
+        // Remove loading state
+        const loadingState = document.getElementById('loadingState');
+        if (loadingState) {
+            console.log('🎯 Removing loading state');
+            loadingState.remove();
+        }
         
     } catch (error) {
         console.error('❌ Failed to enable media:', error);
-        // Continue without local media
+        console.error('❌ Media error details:', {
+            name: error.name,
+            message: error.message,
+            code: error.code
+        });
+        
+        // Continue without local media but inform user
+        const loadingState = document.getElementById('loadingState');
+        if (loadingState) {
+            loadingState.innerHTML = `
+                <div class="spinner"></div>
+                <p>⚠️ Kamera/Mikrofon nicht verfügbar</p>
+                <p>Sie können trotzdem teilnehmen</p>
+            `;
+        }
+        
+        // Try to continue without media after 2 seconds
+        setTimeout(() => {
+            if (loadingState) {
+                loadingState.remove();
+            }
+        }, 2000);
     }
 }
 
