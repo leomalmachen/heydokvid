@@ -100,9 +100,13 @@ async function connectToMeeting(meetingData) {
             const localContainer = createParticipantContainer(room.localParticipant);
             console.log('✅ Local participant container created');
             
-            // Then enable media
-            await enableLocalMedia();
-            updateUI();
+            // TIMING FIX: Wait a moment for room to be fully ready before enabling media
+            console.log('⏳ Waiting for room to be fully ready...');
+            setTimeout(async () => {
+                console.log('🎬 Room should be ready now, enabling media...');
+                await enableLocalMedia();
+                updateUI();
+            }, 1500);
         });
         
         room.on(LiveKit.RoomEvent.ParticipantConnected, (participant) => {
@@ -247,7 +251,7 @@ async function connectToMeeting(meetingData) {
 
 // STABLE: Enable local media with error handling
 async function enableLocalMedia() {
-    console.log('🎥 ENABLING LOCAL MEDIA - LiveKit Primary Method');
+    console.log('🎥 ENABLING LOCAL MEDIA - LiveKit Corrected Method');
     
     if (!room || !room.localParticipant) {
         console.error('❌ No room or local participant available');
@@ -255,48 +259,60 @@ async function enableLocalMedia() {
     }
     
     console.log('🎯 Room state:', room.state);
-    console.log('🎯 Local participant state:', room.localParticipant.identity);
+    console.log('🎯 Local participant identity:', room.localParticipant.identity);
     
     try {
-        // STEP 1: Wait for proper connection state
-        if (room.state !== 'connected') {
-            console.log('⏳ Waiting for room to be fully connected...');
-            await new Promise((resolve) => {
-                const checkConnection = () => {
-                    if (room.state === 'connected') {
-                        resolve();
-                    } else {
-                        setTimeout(checkConnection, 100);
-                    }
-                };
-                checkConnection();
-            });
-        }
-        
-        console.log('✅ Room is connected, proceeding with media enablement...');
-        
-        // STEP 2: Enable camera first (LiveKit primary method)
+        // STEP 1: Enable camera using correct LiveKit API
         if (videoEnabled) {
-            console.log('🎬 Enabling camera via LiveKit...');
+            console.log('🎬 Enabling camera via LiveKit setCameraEnabled...');
             try {
                 await room.localParticipant.setCameraEnabled(true);
-                console.log('✅ LiveKit camera enabled successfully!');
+                console.log('✅ LiveKit setCameraEnabled(true) successful!');
                 
-                // Wait a moment for track to be published
-                await new Promise(resolve => setTimeout(resolve, 1000));
+                // CORRECT: Wait for track to be published and use proper API
+                await new Promise(resolve => setTimeout(resolve, 2000));
                 
-                // Check if video track was published
-                const videoTrack = room.localParticipant.getTrackPublication('camera')?.track;
-                if (videoTrack) {
-                    console.log('✅ Video track found and published');
+                // CORRECT: Use videoTrackPublications instead of getTrackPublication
+                console.log('🔍 Looking for published video tracks...');
+                console.log('📊 Video track publications:', room.localParticipant.videoTrackPublications.size);
+                
+                let videoTrack = null;
+                room.localParticipant.videoTrackPublications.forEach((publication) => {
+                    console.log('📹 Found video publication:', {
+                        source: publication.source,
+                        kind: publication.kind,
+                        trackSid: publication.trackSid,
+                        hasTrack: !!publication.track
+                    });
                     
-                    // Attach to local video element
+                    // CORRECT: Check for camera source specifically
+                    if (publication.source === LiveKit.TrackSource.Camera && publication.track) {
+                        videoTrack = publication.track;
+                        console.log('✅ Found camera track!');
+                    }
+                });
+                
+                if (videoTrack) {
+                    console.log('🎯 Attaching video track to local element...');
+                    
+                    // Find local video element
                     const localVideo = document.querySelector('.participant-container.local video');
                     if (localVideo) {
+                        // CORRECT: Use LiveKit's attach method
                         videoTrack.attach(localVideo);
                         localVideo.muted = true;
-                        localVideo.play().catch(e => console.log('Video play caught:', e));
-                        console.log('✅ Video track attached to local element');
+                        
+                        // Force play with error handling
+                        try {
+                            await localVideo.play();
+                            console.log('✅ Video playing successfully!');
+                        } catch (playError) {
+                            console.log('⚠️ Video autoplay blocked, user interaction needed:', playError);
+                            // Add click handler to start video
+                            localVideo.addEventListener('click', () => {
+                                localVideo.play().catch(e => console.log('Manual play failed:', e));
+                            });
+                        }
                         
                         // Remove placeholder
                         const placeholder = localVideo.closest('.participant-container').querySelector('.video-placeholder');
@@ -304,9 +320,17 @@ async function enableLocalMedia() {
                             placeholder.remove();
                             console.log('✅ Video placeholder removed');
                         }
+                        
+                        console.log('✅ Video track attached and playing!');
+                    } else {
+                        console.error('❌ No local video element found');
                     }
                 } else {
-                    console.warn('⚠️ Video track not found after enabling camera');
+                    console.warn('⚠️ No camera track found after setCameraEnabled');
+                    console.log('🔍 Available video publications:');
+                    room.localParticipant.videoTrackPublications.forEach((pub) => {
+                        console.log('  -', pub.source, pub.kind, !!pub.track);
+                    });
                 }
                 
             } catch (cameraError) {
@@ -315,7 +339,7 @@ async function enableLocalMedia() {
             }
         }
         
-        // STEP 3: Enable microphone (LiveKit method)
+        // STEP 2: Enable microphone
         if (audioEnabled) {
             console.log('🎤 Enabling microphone via LiveKit...');
             try {
@@ -327,7 +351,7 @@ async function enableLocalMedia() {
             }
         }
         
-        // STEP 4: Update UI state
+        // STEP 3: Update UI state
         console.log('🎯 Updating UI state...');
         
         // Remove loading state
