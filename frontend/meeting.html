@@ -192,7 +192,7 @@
     <script src="/static/livekit-client.umd.min.js"></script>
     
     <!-- STABLE MEETING: Use optimized stable meeting script instead of complex app.js -->
-    <script src="/frontend/stable-meeting.js?v=20250609-5"></script>
+    <script src="/frontend/stable-meeting.js?v=20250609-6"></script>
     
     <script>
         // STABILITY CHECK: Ensure LiveKit is loaded before starting
@@ -212,6 +212,24 @@
             }
         } else {
             console.log('✅ LiveKit loaded successfully');
+        }
+        
+        // CRITICAL FIX: Ensure TrackSource constants exist
+        console.log('🔧 CRITICAL: Checking TrackSource constants...');
+        if (window.LiveKit && !window.LiveKit.TrackSource) {
+            console.warn('⚠️ LiveKit.TrackSource missing, creating manually...');
+            window.LiveKit.TrackSource = {
+                Camera: 'camera',
+                Microphone: 'microphone',
+                ScreenShare: 'screen_share'
+            };
+            console.log('✅ TrackSource constants created manually');
+        }
+        
+        if (window.LiveKit && window.LiveKit.TrackSource) {
+            console.log('✅ TrackSource available:', window.LiveKit.TrackSource);
+        } else {
+            console.error('❌ TrackSource still not available!');
         }
     </script>
 </body>

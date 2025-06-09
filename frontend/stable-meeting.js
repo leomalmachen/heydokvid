@@ -285,8 +285,12 @@ async function enableLocalMedia() {
                         hasTrack: !!publication.track
                     });
                     
-                    // CORRECT: Check for camera source specifically
-                    if (publication.source === LiveKit.TrackSource.Camera && publication.track) {
+                    // SAFE: Check for camera source using multiple methods
+                    const isCamera = publication.source === 'camera' || 
+                                   (window.LiveKit && window.LiveKit.TrackSource && publication.source === window.LiveKit.TrackSource.Camera) ||
+                                   publication.kind === 'video';  // Fallback: any video is likely camera
+                    
+                    if (isCamera && publication.track) {
                         videoTrack = publication.track;
                         console.log('✅ Found camera track!');
                     }
@@ -331,6 +335,29 @@ async function enableLocalMedia() {
                     room.localParticipant.videoTrackPublications.forEach((pub) => {
                         console.log('  -', pub.source, pub.kind, !!pub.track);
                     });
+                    
+                    // FALLBACK: If no track found, try to get first video track
+                    if (room.localParticipant.videoTrackPublications.size > 0) {
+                        const firstPublication = Array.from(room.localParticipant.videoTrackPublications.values())[0];
+                        if (firstPublication && firstPublication.track) {
+                            console.log('🔄 Using first available video track as fallback');
+                            videoTrack = firstPublication.track;
+                            
+                            const localVideo = document.querySelector('.participant-container.local video');
+                            if (localVideo) {
+                                videoTrack.attach(localVideo);
+                                localVideo.muted = true;
+                                localVideo.play().catch(e => console.log('Fallback video play failed:', e));
+                                
+                                // Remove placeholder
+                                const placeholder = localVideo.closest('.participant-container').querySelector('.video-placeholder');
+                                if (placeholder) {
+                                    placeholder.remove();
+                                }
+                                console.log('✅ Fallback video track attached!');
+                            }
+                        }
+                    }
                 }
                 
             } catch (cameraError) {
