@@ -249,206 +249,73 @@ async function connectToMeeting(meetingData) {
 async function enableLocalMedia() {
     try {
         console.log('🎥 Enabling local media...');
-        console.log('📹 Video enabled:', videoEnabled);
-        console.log('🎤 Audio enabled:', audioEnabled);
         
         if (!room || !room.localParticipant) {
             console.error('❌ No room or local participant available');
             return;
         }
         
-        // DOCTOR FIX: Check browser permissions first
-        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-            try {
-                console.log('🔍 Checking camera permissions...');
-                
-                // Request permissions explicitly
-                const permissionResult = await navigator.permissions.query({name: 'camera'});
-                console.log('📹 Camera permission status:', permissionResult.state);
-                
-                if (permissionResult.state === 'denied') {
-                    console.error('❌ Camera permission denied by user');
-                    showCameraPermissionError();
-                    return;
-                }
-                
-                // Test camera access
-                const testStream = await navigator.mediaDevices.getUserMedia({ 
-                    video: true, 
-                    audio: audioEnabled 
-                });
-                console.log('✅ Camera access test successful');
-                
-                // Stop test stream
-                testStream.getTracks().forEach(track => track.stop());
-                
-            } catch (permissionError) {
-                console.error('❌ Camera permission error:', permissionError);
-                
-                if (permissionError.name === 'NotAllowedError') {
-                    showCameraPermissionError();
-                    return;
-                } else if (permissionError.name === 'NotFoundError') {
-                    showCameraNotFoundError();
-                    return;
-                } else if (permissionError.name === 'NotReadableError') {
-                    showCameraInUseError();
-                    return;
-                }
-            }
-        }
+        // SIMPLE FIX: Just enable camera and microphone directly
+        console.log('🎬 Activating camera and microphone...');
         
-        // Try to enable media step by step
-        if (audioEnabled && videoEnabled) {
-            console.log('🎬 Enabling camera and microphone...');
-            
-            // CRITICAL FIX: Use individual methods instead of combined method
+        // BACKUP METHOD: If LiveKit fails, get media directly
+        let cameraWorked = false;
+        let micWorked = false;
+        
+        if (videoEnabled) {
             try {
                 await room.localParticipant.setCameraEnabled(true);
-                console.log('✅ Camera enabled successfully');
+                console.log('✅ Camera activated');
+                cameraWorked = true;
             } catch (cameraError) {
-                console.error('❌ Camera enable failed:', cameraError);
+                console.error('❌ Camera failed:', cameraError.message);
+                
+                // BACKUP: Get camera directly from browser
+                try {
+                    console.log('🔄 Trying direct camera access...');
+                    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                    
+                    // Find local video element and attach stream directly
+                    const localVideo = document.querySelector('.participant-container.local video');
+                    if (localVideo) {
+                        localVideo.srcObject = stream;
+                        localVideo.muted = true;
+                        localVideo.play();
+                        console.log('✅ Camera attached directly');
+                        cameraWorked = true;
+                    }
+                } catch (directError) {
+                    console.error('❌ Direct camera access also failed:', directError.message);
+                }
             }
-            
-            try {
-                await room.localParticipant.setMicrophoneEnabled(true);
-                console.log('✅ Microphone enabled successfully');
-            } catch (micError) {
-                console.error('❌ Microphone enable failed:', micError);
-            }
-            
-        } else if (audioEnabled) {
-            console.log('🎤 Enabling microphone only...');
-            await room.localParticipant.setMicrophoneEnabled(true);
-            console.log('✅ Microphone enabled successfully');
-        } else if (videoEnabled) {
-            console.log('📹 Enabling camera only...');
-            await room.localParticipant.setCameraEnabled(true);
-            console.log('✅ Camera enabled successfully');
         }
         
-        console.log('✅ Local media setup completed');
+        if (audioEnabled) {
+            try {
+                await room.localParticipant.setMicrophoneEnabled(true);
+                console.log('✅ Microphone activated');
+                micWorked = true;
+            } catch (micError) {
+                console.error('❌ Microphone failed:', micError.message);
+            }
+        }
         
-        // Remove loading state
+        console.log('✅ Media setup completed');
+        
+        // Remove loading state immediately
         const loadingState = document.getElementById('loadingState');
         if (loadingState) {
-            console.log('🎯 Removing loading state');
             loadingState.remove();
         }
         
     } catch (error) {
-        console.error('❌ Failed to enable media:', error);
-        console.error('❌ Media error details:', {
-            name: error.name,
-            message: error.message,
-            code: error.code
-        });
+        console.error('❌ Media setup failed:', error);
         
-        // Show specific error message based on error type
-        if (error.name === 'NotAllowedError') {
-            showCameraPermissionError();
-        } else if (error.name === 'NotFoundError') {
-            showCameraNotFoundError();
-        } else if (error.name === 'NotReadableError') {
-            showCameraInUseError();
-        } else {
-            // Continue without local media but inform user
-            const loadingState = document.getElementById('loadingState');
-            if (loadingState) {
-                loadingState.innerHTML = `
-                    <div class="spinner"></div>
-                    <p>⚠️ Kamera/Mikrofon nicht verfügbar</p>
-                    <p>Fehler: ${error.message}</p>
-                    <p>Sie können trotzdem teilnehmen</p>
-                `;
-            }
+        // Remove loading state even on error
+        const loadingState = document.getElementById('loadingState');
+        if (loadingState) {
+            loadingState.remove();
         }
-        
-        // Try to continue without media after 3 seconds
-        setTimeout(() => {
-            const loadingState = document.getElementById('loadingState');
-            if (loadingState) {
-                loadingState.remove();
-            }
-        }, 3000);
-    }
-}
-
-// DOCTOR FIX: Add specific error handling functions
-function showCameraPermissionError() {
-    const loadingState = document.getElementById('loadingState');
-    if (loadingState) {
-        loadingState.innerHTML = `
-            <div style="text-align: center; color: #ea4335; padding: 20px;">
-                <div style="font-size: 48px; margin-bottom: 15px;">🚫</div>
-                <h3>Kamera-Berechtigung erforderlich</h3>
-                <p>Bitte erlauben Sie den Zugriff auf Ihre Kamera:</p>
-                <ol style="text-align: left; margin: 15px 0;">
-                    <li>Klicken Sie auf das Kamera-Symbol in der Adressleiste</li>
-                    <li>Wählen Sie "Zulassen" für Kamera und Mikrofon</li>
-                    <li>Laden Sie die Seite neu</li>
-                </ol>
-                <button onclick="location.reload()" style="
-                    background: #1a73e8; 
-                    color: white; 
-                    border: none; 
-                    padding: 10px 20px; 
-                    border-radius: 4px; 
-                    cursor: pointer;
-                    margin-top: 10px;
-                ">Seite neu laden</button>
-            </div>
-        `;
-    }
-}
-
-function showCameraNotFoundError() {
-    const loadingState = document.getElementById('loadingState');
-    if (loadingState) {
-        loadingState.innerHTML = `
-            <div style="text-align: center; color: #ea4335; padding: 20px;">
-                <div style="font-size: 48px; margin-bottom: 15px;">📹</div>
-                <h3>Keine Kamera gefunden</h3>
-                <p>Bitte prüfen Sie:</p>
-                <ul style="text-align: left; margin: 15px 0;">
-                    <li>Ist eine Kamera angeschlossen?</li>
-                    <li>Ist die Kamera aktiviert?</li>
-                    <li>Wird die Kamera von einer anderen App verwendet?</li>
-                </ul>
-                <button onclick="location.reload()" style="
-                    background: #1a73e8; 
-                    color: white; 
-                    border: none; 
-                    padding: 10px 20px; 
-                    border-radius: 4px; 
-                    cursor: pointer;
-                    margin-top: 10px;
-                ">Erneut versuchen</button>
-            </div>
-        `;
-    }
-}
-
-function showCameraInUseError() {
-    const loadingState = document.getElementById('loadingState');
-    if (loadingState) {
-        loadingState.innerHTML = `
-            <div style="text-align: center; color: #ea4335; padding: 20px;">
-                <div style="font-size: 48px; margin-bottom: 15px;">⚠️</div>
-                <h3>Kamera wird bereits verwendet</h3>
-                <p>Ihre Kamera wird von einer anderen Anwendung verwendet.</p>
-                <p>Bitte schließen Sie andere Video-Apps und versuchen Sie es erneut.</p>
-                <button onclick="location.reload()" style="
-                    background: #1a73e8; 
-                    color: white; 
-                    border: none; 
-                    padding: 10px 20px; 
-                    border-radius: 4px; 
-                    cursor: pointer;
-                    margin-top: 10px;
-                ">Erneut versuchen</button>
-            </div>
-        `;
     }
 }
 
