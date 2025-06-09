@@ -67,6 +67,17 @@ async function connectToMeeting(meetingData) {
         user_role: meetingData.user_role
     });
     
+    // DOCTOR FIX: Enhanced logging for doctors
+    if (userRole === 'doctor') {
+        console.log('🩺 DOCTOR CONNECTION DEBUG:');
+        console.log('  Meeting ID:', meetingData.meeting_id);
+        console.log('  User Role:', meetingData.user_role);
+        console.log('  Token Preview:', meetingData.token ? meetingData.token.substring(0, 50) + '...' : 'NO TOKEN');
+        console.log('  LiveKit URL:', meetingData.livekit_url);
+        console.log('  Browser:', navigator.userAgent);
+        console.log('  Timestamp:', new Date().toISOString());
+    }
+    
     try {
         room = createStableRoom();
         console.log('✅ Room created successfully');
@@ -74,6 +85,15 @@ async function connectToMeeting(meetingData) {
         // Setup basic event handlers
         room.on(LiveKit.RoomEvent.Connected, async () => {
             console.log('✅ Connected to meeting!');
+            
+            // DOCTOR FIX: Additional debug info on connection
+            if (userRole === 'doctor') {
+                console.log('🩺 DOCTOR CONNECTED - Room Details:');
+                console.log('  Local Participant:', room.localParticipant?.identity);
+                console.log('  Room Name:', room.name);
+                console.log('  Connection State:', room.state);
+                console.log('  Can Publish Video:', room.localParticipant?.permissions?.canPublish);
+            }
             
             // IMMEDIATE UI FIX: Create local participant container right away
             console.log('🎯 Creating local participant container...');
@@ -102,6 +122,17 @@ async function connectToMeeting(meetingData) {
         
         room.on(LiveKit.RoomEvent.Disconnected, (reason) => {
             console.log('❌ Disconnected:', reason);
+            
+            // DOCTOR FIX: Special handling for doctor disconnections
+            if (userRole === 'doctor') {
+                console.log('🩺 DOCTOR DISCONNECTED:', reason);
+                
+                if (reason !== LiveKit.DisconnectReason.CLIENT_INITIATED) {
+                    // Show doctor-specific reconnection message
+                    showEarlyWarning('Verbindung verloren', 'Als Arzt versuche ich automatisch eine Wiederverbindung...');
+                }
+            }
+            
             if (reason !== LiveKit.DisconnectReason.CLIENT_INITIATED) {
                 setTimeout(reconnectToMeeting, 3000);
             }
@@ -110,14 +141,38 @@ async function connectToMeeting(meetingData) {
         // Add more specific error handlers
         room.on(LiveKit.RoomEvent.ConnectionQualityChanged, (quality, participant) => {
             console.log('📶 Connection quality changed:', quality, participant?.identity);
+            
+            // DOCTOR FIX: Warn doctor about poor connection quality
+            if (userRole === 'doctor' && quality === 'poor') {
+                showEarlyWarning('Schlechte Verbindungsqualität', 'Ihre Internetverbindung ist möglicherweise zu schwach für eine stabile Video-Übertragung.');
+            }
         });
         
         room.on(LiveKit.RoomEvent.MediaDevicesError, (error) => {
             console.error('🎥 Media devices error:', error);
+            
+            // DOCTOR FIX: Show specific help for doctors with media errors
+            if (userRole === 'doctor') {
+                console.error('🩺 DOCTOR MEDIA ERROR:', error);
+                showEarlyWarning('Kamera/Mikrofon Problem', 'Klicken Sie auf das Hilfe-Symbol (?) für Lösungsschritte.');
+                
+                // Show the help button
+                const helpButton = document.getElementById('cameraHelp');
+                if (helpButton) {
+                    helpButton.style.display = 'block';
+                    helpButton.style.background = '#ea4335';
+                    helpButton.style.animation = 'pulse 2s infinite';
+                }
+            }
         });
         
         room.on(LiveKit.RoomEvent.ConnectionStateChanged, (state) => {
             console.log('🔌 Connection state changed:', state);
+            
+            // DOCTOR FIX: Log state changes for doctors
+            if (userRole === 'doctor') {
+                console.log('🩺 DOCTOR CONNECTION STATE:', state);
+            }
         });
         
         // Connect to room with detailed logging
@@ -129,6 +184,18 @@ async function connectToMeeting(meetingData) {
         
         console.log('🎉 LiveKit connection successful!');
         
+        // DOCTOR FIX: Store successful connection info for doctors
+        if (userRole === 'doctor') {
+            const connectionInfo = {
+                connected_at: new Date().toISOString(),
+                meeting_id: meetingData.meeting_id,
+                room_name: room.name,
+                participant_id: room.localParticipant?.sid,
+                success: true
+            };
+            sessionStorage.setItem('doctorConnectionInfo', JSON.stringify(connectionInfo));
+        }
+        
     } catch (error) {
         console.error('❌ Connection failed:', error);
         console.error('❌ Error details:', {
@@ -136,6 +203,27 @@ async function connectToMeeting(meetingData) {
             message: error.message,
             stack: error.stack
         });
+        
+        // DOCTOR FIX: Enhanced error logging for doctors
+        if (userRole === 'doctor') {
+            console.error('🩺 DOCTOR CONNECTION FAILED:');
+            console.error('  Error Type:', error.name);
+            console.error('  Error Message:', error.message);
+            console.error('  Meeting ID:', meetingData.meeting_id);
+            console.error('  LiveKit URL:', meetingData.livekit_url);
+            console.error('  Token Length:', meetingData.token ? meetingData.token.length : 0);
+            
+            // Store error info for support
+            const errorInfo = {
+                error_at: new Date().toISOString(),
+                error_name: error.name,
+                error_message: error.message,
+                meeting_id: meetingData.meeting_id,
+                user_role: userRole,
+                browser: navigator.userAgent
+            };
+            sessionStorage.setItem('doctorConnectionError', JSON.stringify(errorInfo));
+        }
         
         // More user-friendly error message
         let errorMessage = 'Verbindung fehlgeschlagen';
@@ -167,6 +255,47 @@ async function enableLocalMedia() {
         if (!room || !room.localParticipant) {
             console.error('❌ No room or local participant available');
             return;
+        }
+        
+        // DOCTOR FIX: Check browser permissions first
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+            try {
+                console.log('🔍 Checking camera permissions...');
+                
+                // Request permissions explicitly
+                const permissionResult = await navigator.permissions.query({name: 'camera'});
+                console.log('📹 Camera permission status:', permissionResult.state);
+                
+                if (permissionResult.state === 'denied') {
+                    console.error('❌ Camera permission denied by user');
+                    showCameraPermissionError();
+                    return;
+                }
+                
+                // Test camera access
+                const testStream = await navigator.mediaDevices.getUserMedia({ 
+                    video: true, 
+                    audio: audioEnabled 
+                });
+                console.log('✅ Camera access test successful');
+                
+                // Stop test stream
+                testStream.getTracks().forEach(track => track.stop());
+                
+            } catch (permissionError) {
+                console.error('❌ Camera permission error:', permissionError);
+                
+                if (permissionError.name === 'NotAllowedError') {
+                    showCameraPermissionError();
+                    return;
+                } else if (permissionError.name === 'NotFoundError') {
+                    showCameraNotFoundError();
+                    return;
+                } else if (permissionError.name === 'NotReadableError') {
+                    showCameraInUseError();
+                    return;
+                }
+            }
         }
         
         // Try to enable media step by step
@@ -201,22 +330,111 @@ async function enableLocalMedia() {
             code: error.code
         });
         
-        // Continue without local media but inform user
-        const loadingState = document.getElementById('loadingState');
-        if (loadingState) {
-            loadingState.innerHTML = `
-                <div class="spinner"></div>
-                <p>⚠️ Kamera/Mikrofon nicht verfügbar</p>
-                <p>Sie können trotzdem teilnehmen</p>
-            `;
+        // Show specific error message based on error type
+        if (error.name === 'NotAllowedError') {
+            showCameraPermissionError();
+        } else if (error.name === 'NotFoundError') {
+            showCameraNotFoundError();
+        } else if (error.name === 'NotReadableError') {
+            showCameraInUseError();
+        } else {
+            // Continue without local media but inform user
+            const loadingState = document.getElementById('loadingState');
+            if (loadingState) {
+                loadingState.innerHTML = `
+                    <div class="spinner"></div>
+                    <p>⚠️ Kamera/Mikrofon nicht verfügbar</p>
+                    <p>Fehler: ${error.message}</p>
+                    <p>Sie können trotzdem teilnehmen</p>
+                `;
+            }
         }
         
-        // Try to continue without media after 2 seconds
+        // Try to continue without media after 3 seconds
         setTimeout(() => {
+            const loadingState = document.getElementById('loadingState');
             if (loadingState) {
                 loadingState.remove();
             }
-        }, 2000);
+        }, 3000);
+    }
+}
+
+// DOCTOR FIX: Add specific error handling functions
+function showCameraPermissionError() {
+    const loadingState = document.getElementById('loadingState');
+    if (loadingState) {
+        loadingState.innerHTML = `
+            <div style="text-align: center; color: #ea4335; padding: 20px;">
+                <div style="font-size: 48px; margin-bottom: 15px;">🚫</div>
+                <h3>Kamera-Berechtigung erforderlich</h3>
+                <p>Bitte erlauben Sie den Zugriff auf Ihre Kamera:</p>
+                <ol style="text-align: left; margin: 15px 0;">
+                    <li>Klicken Sie auf das Kamera-Symbol in der Adressleiste</li>
+                    <li>Wählen Sie "Zulassen" für Kamera und Mikrofon</li>
+                    <li>Laden Sie die Seite neu</li>
+                </ol>
+                <button onclick="location.reload()" style="
+                    background: #1a73e8; 
+                    color: white; 
+                    border: none; 
+                    padding: 10px 20px; 
+                    border-radius: 4px; 
+                    cursor: pointer;
+                    margin-top: 10px;
+                ">Seite neu laden</button>
+            </div>
+        `;
+    }
+}
+
+function showCameraNotFoundError() {
+    const loadingState = document.getElementById('loadingState');
+    if (loadingState) {
+        loadingState.innerHTML = `
+            <div style="text-align: center; color: #ea4335; padding: 20px;">
+                <div style="font-size: 48px; margin-bottom: 15px;">📹</div>
+                <h3>Keine Kamera gefunden</h3>
+                <p>Bitte prüfen Sie:</p>
+                <ul style="text-align: left; margin: 15px 0;">
+                    <li>Ist eine Kamera angeschlossen?</li>
+                    <li>Ist die Kamera aktiviert?</li>
+                    <li>Wird die Kamera von einer anderen App verwendet?</li>
+                </ul>
+                <button onclick="location.reload()" style="
+                    background: #1a73e8; 
+                    color: white; 
+                    border: none; 
+                    padding: 10px 20px; 
+                    border-radius: 4px; 
+                    cursor: pointer;
+                    margin-top: 10px;
+                ">Erneut versuchen</button>
+            </div>
+        `;
+    }
+}
+
+function showCameraInUseError() {
+    const loadingState = document.getElementById('loadingState');
+    if (loadingState) {
+        loadingState.innerHTML = `
+            <div style="text-align: center; color: #ea4335; padding: 20px;">
+                <div style="font-size: 48px; margin-bottom: 15px;">⚠️</div>
+                <h3>Kamera wird bereits verwendet</h3>
+                <p>Ihre Kamera wird von einer anderen Anwendung verwendet.</p>
+                <p>Bitte schließen Sie andere Video-Apps und versuchen Sie es erneut.</p>
+                <button onclick="location.reload()" style="
+                    background: #1a73e8; 
+                    color: white; 
+                    border: none; 
+                    padding: 10px 20px; 
+                    border-radius: 4px; 
+                    cursor: pointer;
+                    margin-top: 10px;
+                ">Erneut versuchen</button>
+            </div>
+        `;
     }
 }
 
@@ -423,6 +641,11 @@ function showError(message) {
 async function initializeStableMeeting() {
     console.log('🚀 Initializing stable meeting...');
     
+    // DOCTOR FIX: Add system diagnostics for doctors
+    if (userRole === 'doctor') {
+        await runDoctorDiagnostics();
+    }
+    
     try {
         let participantName;
         let apiEndpoint;
@@ -499,6 +722,96 @@ async function initializeStableMeeting() {
     }
 }
 
+// DOCTOR FIX: Run diagnostics specifically for doctors
+async function runDoctorDiagnostics() {
+    console.log('🩺 Running doctor diagnostics...');
+    
+    // Check browser support
+    const diagnostics = {
+        browser: navigator.userAgent,
+        webrtc_support: !!(window.RTCPeerConnection || window.webkitRTCPeerConnection),
+        getUserMedia_support: !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia),
+        livekit_loaded: typeof window.LiveKit !== 'undefined',
+        url: window.location.href,
+        timestamp: new Date().toISOString()
+    };
+    
+    console.log('🔧 DOCTOR DIAGNOSTICS:', diagnostics);
+    
+    // Check media devices
+    if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
+        try {
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const cameras = devices.filter(device => device.kind === 'videoinput');
+            const microphones = devices.filter(device => device.kind === 'audioinput');
+            
+            console.log('📹 Available cameras:', cameras.length);
+            console.log('🎤 Available microphones:', microphones.length);
+            
+            diagnostics.available_cameras = cameras.length;
+            diagnostics.available_microphones = microphones.length;
+            
+            // If no cameras found, show early warning
+            if (cameras.length === 0) {
+                console.warn('⚠️ No cameras detected! This may cause issues.');
+                showEarlyWarning('Keine Kamera erkannt', 'Es wurde keine Kamera gefunden. Bitte prüfen Sie Ihre Hardware-Verbindung.');
+            }
+            
+        } catch (deviceError) {
+            console.error('❌ Device enumeration failed:', deviceError);
+            diagnostics.device_error = deviceError.message;
+        }
+    }
+    
+    // Store diagnostics for support
+    sessionStorage.setItem('doctorDiagnostics', JSON.stringify(diagnostics));
+    
+    return diagnostics;
+}
+
+// DOCTOR FIX: Show early warning messages
+function showEarlyWarning(title, message) {
+    const warningDiv = document.createElement('div');
+    warningDiv.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: #fff3cd;
+        border: 1px solid #ffeaa7;
+        color: #856404;
+        padding: 15px;
+        border-radius: 8px;
+        max-width: 300px;
+        z-index: 1000;
+        font-size: 14px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    `;
+    
+    warningDiv.innerHTML = `
+        <div style="font-weight: bold; margin-bottom: 5px;">${title}</div>
+        <div>${message}</div>
+        <button onclick="this.parentElement.remove()" style="
+            margin-top: 10px;
+            background: #856404;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        ">Verstanden</button>
+    `;
+    
+    document.body.appendChild(warningDiv);
+    
+    // Auto-remove after 10 seconds
+    setTimeout(() => {
+        if (warningDiv.parentElement) {
+            warningDiv.remove();
+        }
+    }, 10000);
+}
+
 // STABLE: Setup event listeners
 function setupStableEventListeners() {
     // Toggle microphone
@@ -534,6 +847,101 @@ function setupStableEventListeners() {
             }
             window.location.href = '/';
         });
+    }
+    
+    // DOCTOR FIX: Camera help button
+    const cameraHelp = document.getElementById('cameraHelp');
+    if (cameraHelp) {
+        cameraHelp.addEventListener('click', () => {
+            showCameraHelpModal();
+        });
+        
+        // Show help button for doctors
+        if (userRole === 'doctor') {
+            cameraHelp.style.display = 'block';
+        }
+    }
+    
+    // DOCTOR FIX: Help modal buttons
+    const copyDiagnostics = document.getElementById('copyDiagnostics');
+    if (copyDiagnostics) {
+        copyDiagnostics.addEventListener('click', copyDiagnosticsToClipboard);
+    }
+    
+    const refreshPage = document.getElementById('refreshPage');
+    if (refreshPage) {
+        refreshPage.addEventListener('click', () => {
+            location.reload();
+        });
+    }
+}
+
+// DOCTOR FIX: Show camera help modal
+function showCameraHelpModal() {
+    const modal = document.getElementById('cameraHelpModal');
+    const diagnosticsInfo = document.getElementById('diagnosticsInfo');
+    
+    if (modal) {
+        modal.classList.add('show');
+        
+        // Load and display diagnostics
+        const storedDiagnostics = sessionStorage.getItem('doctorDiagnostics');
+        if (storedDiagnostics && diagnosticsInfo) {
+            const diagnostics = JSON.parse(storedDiagnostics);
+            diagnosticsInfo.innerHTML = `
+Browser: ${diagnostics.browser}<br>
+WebRTC Support: ${diagnostics.webrtc_support ? '✅' : '❌'}<br>
+getUserMedia Support: ${diagnostics.getUserMedia_support ? '✅' : '❌'}<br>
+LiveKit Loaded: ${diagnostics.livekit_loaded ? '✅' : '❌'}<br>
+Available Cameras: ${diagnostics.available_cameras || 'Unknown'}<br>
+Available Microphones: ${diagnostics.available_microphones || 'Unknown'}<br>
+URL: ${diagnostics.url}<br>
+Timestamp: ${new Date(diagnostics.timestamp).toLocaleString()}<br>
+${diagnostics.device_error ? `Device Error: ${diagnostics.device_error}<br>` : ''}
+            `.trim();
+        }
+    }
+}
+
+// DOCTOR FIX: Copy diagnostics to clipboard
+async function copyDiagnosticsToClipboard() {
+    const storedDiagnostics = sessionStorage.getItem('doctorDiagnostics');
+    if (storedDiagnostics) {
+        try {
+            const diagnostics = JSON.parse(storedDiagnostics);
+            const diagnosticsText = `
+HeyDok Video - Diagnose Report
+=================================
+Browser: ${diagnostics.browser}
+WebRTC Support: ${diagnostics.webrtc_support ? 'Yes' : 'No'}
+getUserMedia Support: ${diagnostics.getUserMedia_support ? 'Yes' : 'No'}
+LiveKit Loaded: ${diagnostics.livekit_loaded ? 'Yes' : 'No'}
+Available Cameras: ${diagnostics.available_cameras || 'Unknown'}
+Available Microphones: ${diagnostics.available_microphones || 'Unknown'}
+URL: ${diagnostics.url}
+Timestamp: ${new Date(diagnostics.timestamp).toLocaleString()}
+${diagnostics.device_error ? `Device Error: ${diagnostics.device_error}` : ''}
+Meeting ID: ${meetingId}
+User Role: ${userRole}
+            `.trim();
+            
+            await navigator.clipboard.writeText(diagnosticsText);
+            
+            // Show confirmation
+            const button = document.getElementById('copyDiagnostics');
+            const originalText = button.textContent;
+            button.textContent = '✅ Kopiert!';
+            button.style.background = '#34a853';
+            
+            setTimeout(() => {
+                button.textContent = originalText;
+                button.style.background = '';
+            }, 2000);
+            
+        } catch (error) {
+            console.error('Failed to copy diagnostics:', error);
+            alert('Konnte Diagnose nicht kopieren. Bitte verwenden Sie Strg+A und Strg+C im Diagnose-Bereich.');
+        }
     }
 }
 

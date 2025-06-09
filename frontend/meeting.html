@@ -87,6 +87,13 @@
                         <path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.68.28-.3 0-.55-.13-.74-.33-.48-.52-.46-1.34.06-1.84 1.06-.98 2.25-1.78 3.53-2.36A9.868 9.868 0 0112 10c1.88 0 3.64.52 5.65 1.32 1.28.58 2.46 1.37 3.52 2.35.52.5.54 1.32.06 1.84-.49.52-1.31.54-1.84.06-.79-.73-1.68-1.36-2.66-1.85-.33-.16-.56-.51-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z"/>
                     </svg>
                 </button>
+
+                <!-- DOCTOR FIX: Add help button for camera troubleshooting -->
+                <button id="cameraHelp" class="control-btn help" title="Kamera-Hilfe" style="display: none;">
+                    <svg width="24" height="24" viewBox="0 0 24 24">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z"/>
+                    </svg>
+                </button>
             </div>
         </footer>
 
@@ -116,6 +123,67 @@
                     <button id="confirmJoin" class="btn btn-primary">Meeting beitreten</button>
                 </div>
                 <div id="nameError" style="color: #ea4335; margin-top: 0.5rem; font-size: 0.875rem; display: none;"></div>
+            </div>
+        </div>
+
+        <!-- DOCTOR FIX: Camera Help Modal -->
+        <div id="cameraHelpModal" class="modal">
+            <div class="modal-content" style="max-width: 600px;">
+                <h2>🩺 Kamera-Problembehebung für Ärzte</h2>
+                
+                <div style="margin: 20px 0;">
+                    <h3>📋 Häufige Probleme und Lösungen:</h3>
+                    
+                    <div style="background: #1a1a1a; padding: 15px; border-radius: 8px; margin: 10px 0;">
+                        <h4>🚫 Kamera-Berechtigung verweigert</h4>
+                        <ul>
+                            <li>Klicken Sie auf das Kamera-Symbol in der Adressleiste</li>
+                            <li>Wählen Sie "Zulassen" für Kamera und Mikrofon</li>
+                            <li>Laden Sie die Seite neu (F5 oder Strg+R)</li>
+                        </ul>
+                    </div>
+                    
+                    <div style="background: #1a1a1a; padding: 15px; border-radius: 8px; margin: 10px 0;">
+                        <h4>📹 Keine Kamera gefunden</h4>
+                        <ul>
+                            <li>Prüfen Sie, ob Ihre Kamera angeschlossen ist</li>
+                            <li>Starten Sie andere Video-Apps (Zoom, Teams) nicht parallel</li>
+                            <li>Testen Sie mit einer anderen Browser-Tab: <a href="https://webcamtests.com" target="_blank" style="color: #4285f4;">webcamtests.com</a></li>
+                        </ul>
+                    </div>
+                    
+                    <div style="background: #1a1a1a; padding: 15px; border-radius: 8px; margin: 10px 0;">
+                        <h4>⚠️ Kamera wird bereits verwendet</h4>
+                        <ul>
+                            <li>Schließen Sie Zoom, Teams, Skype oder andere Video-Apps</li>
+                            <li>Beenden Sie andere Browser-Tabs mit Video-Anrufen</li>
+                            <li>Starten Sie Ihren Browser neu</li>
+                        </ul>
+                    </div>
+                    
+                    <div style="background: #1a1a1a; padding: 15px; border-radius: 8px; margin: 10px 0;">
+                        <h4>🔧 Erweiterte Problembehandlung</h4>
+                        <ul>
+                            <li>Verwenden Sie Chrome oder Firefox (beste Kompatibilität)</li>
+                            <li>Prüfen Sie Ihre Firewall-Einstellungen</li>
+                            <li>Bei Windows: Prüfen Sie Datenschutz-Einstellungen → Kamera</li>
+                            <li>Bei Mac: Systemeinstellungen → Sicherheit → Datenschutz → Kamera</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <div style="border-top: 1px solid #333; padding-top: 15px; margin-top: 20px;">
+                    <h4>📊 System-Diagnose:</h4>
+                    <div id="diagnosticsInfo" style="font-family: monospace; font-size: 12px; background: #0a0a0a; padding: 10px; border-radius: 4px; color: #888;">
+                        Diagnose wird geladen...
+                    </div>
+                </div>
+                
+                <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+                    <button id="copyDiagnostics" class="btn btn-secondary">📋 Diagnose kopieren</button>
+                    <button id="refreshPage" class="btn btn-primary">🔄 Seite neu laden</button>
+                    <button onclick="document.getElementById('cameraHelpModal').classList.remove('show')" class="btn btn-secondary">Schließen</button>
+                </div>
             </div>
         </div>
     </div>
