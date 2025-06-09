@@ -664,22 +664,15 @@ async def join_meeting(
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
     
-    # Check participant limit
-    if len(meeting.participants) >= meeting.max_participants:
+    # Check participant limit (simplified - max 2: doctor + patient)
+    participants_count = 1 + (1 if meeting.patient_joined else 0)
+    if participants_count >= 2:  # max 2 participants
         raise HTTPException(status_code=429, detail="Meeting is full")
     
     participant_name = request.participant_name.strip()
     
-    # Check if participant already exists in this meeting
-    if meeting_service.is_participant_in_meeting(meeting_id, participant_name):
-        logger.warning(f"Participant {participant_name} already exists in meeting {meeting_id}")
-        # Return existing token or generate new one for reconnection
-        pass  # Allow reconnection with new token
-    else:
-        # Add to active participants
-        meeting_service.add_participant(meeting_id, participant_name, request.participant_role)
-    
-    room_name = meeting.room_name
+    # Generate room name and token (no participant tracking needed)
+    room_name = livekit_client.get_room_name(meeting_id)
     
     # Generate participant token
     token = livekit_client.generate_token(
@@ -695,7 +688,7 @@ async def join_meeting(
         meeting_url=f"{base_url}/meeting/{meeting_id}",
         livekit_url=livekit_client.url,
         token=token,
-        participants_count=len(meeting.participants),
+        participants_count=participants_count,
         user_role=request.participant_role,
         meeting_status={}
     )
@@ -772,7 +765,8 @@ async def meeting_room(meeting_id: str, role: Optional[str] = None, meeting_serv
             else:
                 # Patient has role=patient parameter, so they completed setup
                 # Update meeting data to reflect this (in case data was lost)
-                meeting_service.update_meeting(meeting_id, patient_setup_completed=True, media_test_completed=True)
+                meeting_service.mark_patient_setup_completed(meeting_id)
+                meeting_service.mark_media_test_completed(meeting_id)
                 logger.info(f"Updated meeting {meeting_id} patient setup status after database loss")
     
     try:
@@ -794,7 +788,7 @@ async def meeting_room(meeting_id: str, role: Optional[str] = None, meeting_serv
         # Replace placeholders with actual values - ensure all values are strings
         html_content = html_content.replace("{{MEETING_ID}}", str(meeting_id))
         html_content = html_content.replace("{{USER_ROLE}}", str(user_role))
-        html_content = html_content.replace("{{DOCTOR_NAME}}", str(meeting.doctor_name or "Doctor"))
+        html_content = html_content.replace("{{DOCTOR_NAME}}", str(meeting.host_name or "Doctor"))
         html_content = html_content.replace("{{PATIENT_NAME}}", str(meeting.patient_name or ""))
         
         return HTMLResponse(content=html_content)
@@ -1165,10 +1159,10 @@ async def get_meeting_info(meeting_id: str, meeting_service: MeetingService = De
     
     return {
         "meeting_id": meeting_id,
-        "host_name": meeting.doctor_name,
+        "host_name": meeting.host_name,
         "created_at": meeting.created_at.isoformat(),
-        "participants_count": len(meeting.participants),
-        "is_active": meeting.is_active
+        "participants_count": 1 + (1 if meeting.patient_joined else 0),
+        "is_active": meeting.meeting_active
     }
 
 @app.get("/health", response_model=HealthResponse)
@@ -1266,10 +1260,9 @@ async def debug_meeting():
 
 # Add new endpoint to handle participant disconnect
 @app.post("/api/meetings/{meeting_id}/leave")
-async def leave_meeting(meeting_id: str, participant_name: str, meeting_service: MeetingService = Depends(get_meeting_service)):
+async def leave_meeting(meeting_id: str, participant_name: str):
     """Handle participant leaving the meeting"""
-    meeting_service.remove_participant(meeting_id, participant_name)
-    
+    # Simplified - just return success (participant tracking removed)
     return {"status": "left"}
 
 @app.post("/api/meetings/{meeting_id}/upload-document", response_model=DocumentUploadResponse)
@@ -1325,7 +1318,7 @@ async def upload_patient_document(
     )
     
     # Update meeting status
-    meeting_service.update_meeting(meeting_id, document_uploaded=True)
+    meeting_service.mark_document_uploaded(meeting_id)
     
     logger.info(f"Document uploaded for meeting {meeting_id}: {file.filename} ({len(file_content)} bytes)")
     
@@ -1406,7 +1399,7 @@ async def submit_media_test(
     
     # Update meeting status if test passed
     if allowed_to_join:
-        meeting_service.update_meeting(meeting_id, media_test_completed=True)
+        meeting_service.mark_media_test_completed(meeting_id)
     
     logger.info(f"Media test completed for meeting {meeting_id}: allowed={allowed_to_join}")
     
@@ -1471,14 +1464,11 @@ async def patient_join_meeting(
             detail="Media-Test fehlgeschlagen. Bitte stellen Sie sicher, dass Kamera und Mikrofon funktionieren."
         )
     
-    # Check for duplicate participants
-    if meeting_service.is_participant_in_meeting(meeting_id, request.patient_name):
-        raise HTTPException(status_code=409, detail="Patient bereits im Meeting")
-    
     try:
         # Generate token for patient with limited permissions
+        room_name = livekit_client.get_room_name(meeting_id)
         token = livekit_client.generate_token(
-            room_name=meeting.room_name,
+            room_name=room_name,
             participant_name=f"Patient: {request.patient_name}",
             is_host=False
         )
@@ -1493,16 +1483,7 @@ async def patient_join_meeting(
             media_test_completed=True
         )
         
-        # Add patient to participants list
-        meeting_service.add_participant(
-            meeting_id=meeting_id,
-            participant_name=request.patient_name,
-            participant_role="patient",
-            document_id=request.document_id,
-            media_test_id=request.media_test_id
-        )
-        
-        participants_count = len(meeting.participants)
+        participants_count = 2  # Doctor + Patient
         
         logger.info(f"Patient {request.patient_name} erfolgreich dem Meeting {meeting_id} beigetreten")
         
@@ -1514,7 +1495,7 @@ async def patient_join_meeting(
             participants_count=participants_count,
             user_role="patient",
             meeting_status={
-                "doctor_name": meeting.doctor_name or "Doctor",
+                "doctor_name": meeting.host_name or "Doctor",
                 "patient_setup_completed": True,
                 "document_uploaded": document_uploaded,
                 "media_test_completed": True
@@ -1522,8 +1503,6 @@ async def patient_join_meeting(
         )
         
     except Exception as e:
-        # Remove from active participants if token generation fails
-        meeting_service.remove_participant(meeting_id, request.patient_name)
         logger.error(f"Fehler beim Token-Generieren für Patient {request.patient_name}: {e}")
         raise HTTPException(status_code=500, detail="Fehler beim Meeting-Beitritt")
 
@@ -1551,13 +1530,13 @@ async def get_meeting_status(meeting_id: str, meeting_service: MeetingService = 
     
     return MeetingStatusResponse(
         meeting_id=meeting_id,
-        doctor_name=str(meeting.doctor_name or "Doctor"),
+        doctor_name=str(meeting.host_name or "Doctor"),
         patient_name=meeting.patient_name,
         patient_joined=meeting.patient_joined,
         patient_setup_completed=patient_setup_completed,
         document_uploaded=document_uploaded,
         media_test_completed=meeting.media_test_completed,
-        meeting_active=meeting.is_active,
+        meeting_active=meeting.meeting_active,
         created_at=meeting.created_at.isoformat(),
         last_patient_status=meeting.last_patient_status,
         last_status_update=meeting.last_status_update.isoformat() if meeting.last_status_update else None
@@ -1580,7 +1559,7 @@ async def doctor_join_meeting(
         logger.error(f"❌ Meeting {meeting_id} not found for doctor join")
         raise HTTPException(status_code=404, detail="Meeting not found")
     
-    logger.info(f"🩺 Meeting data found: doctor_name={meeting.doctor_name}")
+    logger.info(f"🩺 Meeting data found: doctor_name={meeting.host_name}")
     
     # Validate this is actually a doctor joining
     if request.participant_role != "doctor":
@@ -1588,8 +1567,8 @@ async def doctor_join_meeting(
         raise HTTPException(status_code=400, detail="This endpoint is for doctors only")
     
     # Check if this is the original doctor or another doctor
-    is_original_doctor = request.participant_name == meeting.doctor_name
-    logger.info(f"🩺 Is original doctor: {is_original_doctor} (request={request.participant_name}, stored={meeting.doctor_name})")
+    is_original_doctor = request.participant_name == meeting.host_name
+    logger.info(f"🩺 Is original doctor: {is_original_doctor} (request={request.participant_name}, stored={meeting.host_name})")
     
     if not is_original_doctor:
         # For now, only allow the original doctor
@@ -1604,10 +1583,11 @@ async def doctor_join_meeting(
     try:
         # Generate token for doctor with admin permissions
         doctor_display_name = f"Dr. {request.participant_name}"
-        logger.info(f"🩺 Generating token for doctor: {doctor_display_name} in room: {meeting.room_name}")
+        room_name = livekit_client.get_room_name(meeting_id)
+        logger.info(f"🩺 Generating token for doctor: {doctor_display_name} in room: {room_name}")
         
         token = livekit_client.generate_token(
-            room_name=meeting.room_name,
+            room_name=room_name,
             participant_name=doctor_display_name,
             is_host=True
         )
@@ -1616,18 +1596,10 @@ async def doctor_join_meeting(
         logger.info(f"🔗 LiveKit URL: {livekit_client.url}")
         
         # Update meeting status using database service
-        meeting_service.update_meeting(meeting_id, is_active=True)
-        
-        # Add doctor to participants using database service
-        if not meeting_service.is_participant_in_meeting(meeting_id, participant_key):
-            meeting_service.add_participant(
-                meeting_id=meeting_id,
-                participant_name=participant_key,
-                participant_role="doctor"
-            )
+        meeting_service.update_meeting(meeting_id, meeting_active=True)
         
         # Get current participants count
-        participants_count = len(meeting.participants)
+        participants_count = 1 + (1 if meeting.patient_joined else 0)
         
         logger.info(f"✅ Doctor {request.participant_name} joined meeting {meeting_id} successfully")
         logger.info(f"📊 Final meeting state: participants_count={participants_count}")
@@ -1640,7 +1612,7 @@ async def doctor_join_meeting(
             participants_count=participants_count,
             user_role="doctor",
             meeting_status={
-                "doctor_name": meeting.doctor_name,
+                "doctor_name": meeting.host_name,
                 "patient_name": meeting.patient_name,
                 "patient_setup_completed": meeting.patient_setup_completed,
                 "document_uploaded": meeting.document_uploaded,

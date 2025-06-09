@@ -178,12 +178,32 @@ class MeetingService:
         
         return meeting
     
+    def update_meeting(self, meeting_id: str, **kwargs) -> Meeting:
+        """Update meeting with arbitrary fields"""
+        
+        meeting = self.get_meeting(meeting_id)
+        
+        # Update any provided fields
+        for field, value in kwargs.items():
+            if hasattr(meeting, field):
+                setattr(meeting, field, value)
+        
+        self.db.commit()
+        self.db.refresh(meeting)
+        
+        return meeting
+    
     def get_active_meetings(self, limit: int = 100) -> List[Meeting]:
         """Get list of active (non-expired) meetings"""
         
         return self.db.query(Meeting).filter(
             Meeting.expires_at > datetime.utcnow()
         ).limit(limit).all()
+    
+    def get_total_meetings_count(self) -> int:
+        """Get total count of all meetings"""
+        
+        return self.db.query(Meeting).count()
     
     def get_meetings_by_external_id(self, external_id: str) -> List[Meeting]:
         """Get meetings by external ID"""
