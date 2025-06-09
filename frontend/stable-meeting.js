@@ -487,25 +487,27 @@ function createParticipantContainer(participant) {
         z-index: 10;
     `;
     
-    // Add placeholder when no video
-    const placeholder = document.createElement('div');
-    placeholder.className = 'video-placeholder';
-    placeholder.innerHTML = `
-        <div style="text-align: center; color: #888;">
-            <div style="font-size: 48px; margin-bottom: 10px;">👤</div>
-            <div>${isLocal ? 'Ihre Kamera wird geladen...' : 'Wartet auf Video...'}</div>
-        </div>
-    `;
-    placeholder.style.cssText = `
-        width: 100%;
-        height: 100%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: #1a1a1a;
-    `;
+    // CLEAN UX: Only show placeholder for remote participants, not local
+    if (!isLocal) {
+        const placeholder = document.createElement('div');
+        placeholder.className = 'video-placeholder';
+        placeholder.innerHTML = `
+            <div style="text-align: center; color: #888;">
+                <div style="font-size: 48px; margin-bottom: 10px;">👤</div>
+                <div>Wartet auf Video...</div>
+            </div>
+        `;
+        placeholder.style.cssText = `
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #1a1a1a;
+        `;
+        container.appendChild(placeholder);
+    }
     
-    container.appendChild(placeholder);
     container.appendChild(nameLabel);
     
     const videoGrid = document.getElementById('videoGrid');
@@ -613,6 +615,38 @@ function showError(message) {
     alert(message);
 }
 
+// CLEAN UX: Request permissions before connecting
+async function requestMediaPermissions() {
+    console.log('🔐 Requesting media permissions...');
+    
+    try {
+        // Request permissions explicitly before connecting
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+            video: true, 
+            audio: true 
+        });
+        
+        console.log('✅ Permissions granted!');
+        
+        // Stop the test stream immediately - we just needed permissions
+        stream.getTracks().forEach(track => track.stop());
+        
+        return true;
+    } catch (error) {
+        console.error('❌ Permission denied:', error);
+        
+        // Show user-friendly permission error
+        const errorMessage = error.name === 'NotAllowedError' 
+            ? 'Kamera-Zugriff wurde verweigert. Bitte erlauben Sie den Zugriff und laden die Seite neu.'
+            : error.name === 'NotFoundError'
+            ? 'Keine Kamera gefunden. Bitte schließen Sie eine Kamera an.'
+            : 'Fehler beim Zugriff auf Kamera/Mikrofon: ' + error.message;
+            
+        showError(errorMessage);
+        return false;
+    }
+}
+
 // STABLE: Initialize meeting
 async function initializeStableMeeting() {
     console.log('🚀 Initializing stable meeting...');
@@ -621,6 +655,17 @@ async function initializeStableMeeting() {
     if (userRole === 'doctor') {
         await runDoctorDiagnostics();
     }
+    
+    // CLEAN UX: Request permissions FIRST
+    console.log('🔐 Step 1: Requesting media permissions...');
+    const permissionsGranted = await requestMediaPermissions();
+    
+    if (!permissionsGranted) {
+        console.error('❌ Cannot proceed without permissions');
+        return;
+    }
+    
+    console.log('✅ Step 2: Permissions granted, proceeding with meeting...');
     
     try {
         let participantName;
@@ -672,7 +717,7 @@ async function initializeStableMeeting() {
             };
         }
         
-        console.log(`🔗 Joining via ${apiEndpoint} as ${participantName}`);
+        console.log(`🔗 Step 3: Joining via ${apiEndpoint} as ${participantName}`);
         
         // Join meeting
         const response = await fetch(apiEndpoint, {
@@ -689,7 +734,7 @@ async function initializeStableMeeting() {
         const meetingData = await response.json();
         sessionStorage.setItem('meetingData', JSON.stringify(meetingData));
         
-        console.log('✅ Meeting join successful, connecting to LiveKit...');
+        console.log('✅ Step 4: Meeting join successful, connecting to LiveKit...');
         await connectToMeeting(meetingData);
         
     } catch (error) {
