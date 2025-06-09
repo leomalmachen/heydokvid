@@ -122,6 +122,71 @@
 
     <!-- LiveKit Client SDK - Direct loading from local file -->
     <script src="/static/livekit-client.umd.min.js"></script>
+    <!-- LiveKit Compatibility Layer - MUST load before app.js -->
+    <script>
+        // URGENT FIX: LiveKit compatibility layer to prevent undefined errors
+        console.log('🔧 URGENT: Setting up LiveKit compatibility layer...');
+        
+        function ensureLiveKitConstants() {
+            if (typeof window.LiveKit !== 'undefined') {
+                // Fix TrackSource constants
+                if (!window.LiveKit.TrackSource) {
+                    window.LiveKit.TrackSource = {
+                        Camera: 'camera',
+                        Microphone: 'microphone',
+                        ScreenShare: 'screen_share'
+                    };
+                    console.log('✅ FIXED: Added missing LiveKit.TrackSource');
+                }
+                
+                // Fix Track.Source constants
+                if (!window.LiveKit.Track) {
+                    window.LiveKit.Track = {};
+                }
+                if (!window.LiveKit.Track.Source) {
+                    window.LiveKit.Track.Source = {
+                        Camera: 'camera',
+                        Microphone: 'microphone',
+                        ScreenShare: 'screen_share'
+                    };
+                    console.log('✅ FIXED: Added missing LiveKit.Track.Source');
+                }
+                
+                // Fix Track.Kind constants
+                if (!window.LiveKit.Track.Kind) {
+                    window.LiveKit.Track.Kind = {
+                        Video: 'video',
+                        Audio: 'audio'
+                    };
+                    console.log('✅ FIXED: Added missing LiveKit.Track.Kind');
+                }
+                
+                console.log('✅ LiveKit constants verified/fixed:', {
+                    TrackSource: window.LiveKit.TrackSource,
+                    'Track.Source': window.LiveKit.Track.Source,
+                    'Track.Kind': window.LiveKit.Track.Kind
+                });
+                
+                return true;
+            }
+            return false;
+        }
+        
+        // Try immediately
+        if (!ensureLiveKitConstants()) {
+            // If LiveKit not ready, wait for it
+            let attempts = 0;
+            const waitForLiveKit = setInterval(() => {
+                attempts++;
+                if (ensureLiveKitConstants() || attempts > 50) {
+                    clearInterval(waitForLiveKit);
+                    if (attempts > 50) {
+                        console.error('❌ FAILED: LiveKit constants could not be fixed');
+                    }
+                }
+            }, 100);
+        }
+    </script>
     <!-- App.js - Main application logic -->
     <script src="/frontend/app.js"></script>
     <!-- Critical fix for meeting initialization -->
