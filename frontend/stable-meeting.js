@@ -12,6 +12,13 @@ const participants = new Map();
 const pathParts = window.location.pathname.split('/');
 const meetingId = pathParts[pathParts.length - 1];
 
+// DOCTOR FIX: Get role from URL parameters
+const urlParams = new URLSearchParams(window.location.search);
+const userRole = urlParams.get('role') || 'patient';
+const isDirect = urlParams.get('direct') === 'true';
+
+console.log(`👤 User role detected: ${userRole}, direct access: ${isDirect}`);
+
 // STABLE: Conservative LiveKit Room Configuration
 function createStableRoom() {
     console.log('🏗️ Creating STABLE LiveKit Room...');
@@ -258,26 +265,73 @@ async function initializeStableMeeting() {
     console.log('🚀 Initializing stable meeting...');
     
     try {
-        // Get participant name
-        const participantName = sessionStorage.getItem('participantName') || 
-                              prompt('Ihr Name:') || 'Teilnehmer';
+        let participantName;
+        let apiEndpoint;
+        let requestBody;
         
-        sessionStorage.setItem('participantName', participantName);
+        // DOCTOR FIX: Handle doctor vs patient differently
+        if (userRole === 'doctor') {
+            console.log('🩺 Doctor joining - using stored meeting data');
+            
+            // Get doctor name from session storage (set during meeting creation)
+            const storedMeetingData = sessionStorage.getItem('doctorMeetingData');
+            if (storedMeetingData) {
+                const meetingInfo = JSON.parse(storedMeetingData);
+                // Extract doctor name from the meeting status
+                participantName = meetingInfo.meeting_status?.doctor_name || 'Doctor';
+                console.log(`🩺 Using doctor name: ${participantName}`);
+            } else {
+                // Fallback: fetch meeting info to get doctor name
+                console.log('🩺 Fetching meeting info for doctor name...');
+                const infoResponse = await fetch(`/api/meetings/${meetingId}/info`);
+                if (infoResponse.ok) {
+                    const meetingInfo = await infoResponse.json();
+                    participantName = meetingInfo.host_name || 'Doctor';
+                } else {
+                    participantName = 'Doctor';
+                }
+            }
+            
+            // Use doctor join endpoint
+            apiEndpoint = `/api/meetings/${meetingId}/join-doctor`;
+            requestBody = {
+                participant_name: participantName,
+                participant_role: 'doctor'
+            };
+            
+        } else {
+            // Patient flow (existing logic)
+            console.log('👤 Patient joining - requesting name');
+            participantName = sessionStorage.getItem('participantName') || 
+                              prompt('Ihr Name:') || 'Patient';
+            
+            sessionStorage.setItem('participantName', participantName);
+            
+            apiEndpoint = `/api/meetings/${meetingId}/join`;
+            requestBody = {
+                participant_name: participantName,
+                participant_role: 'patient'
+            };
+        }
+        
+        console.log(`🔗 Joining via ${apiEndpoint} as ${participantName}`);
         
         // Join meeting
-        const response = await fetch(`/api/meetings/${meetingId}/join`, {
+        const response = await fetch(apiEndpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ participant_name: participantName })
+            body: JSON.stringify(requestBody)
         });
         
         if (!response.ok) {
-            throw new Error('Failed to join meeting');
+            const errorData = await response.json();
+            throw new Error(errorData.detail || 'Failed to join meeting');
         }
         
         const meetingData = await response.json();
         sessionStorage.setItem('meetingData', JSON.stringify(meetingData));
         
+        console.log('✅ Meeting join successful, connecting to LiveKit...');
         await connectToMeeting(meetingData);
         
     } catch (error) {
