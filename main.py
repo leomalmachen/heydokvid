@@ -701,10 +701,9 @@ async def join_meeting(
     )
 
 @app.get("/meeting/{meeting_id}", response_class=HTMLResponse)
-async def meeting_room(meeting_id: str, role: Optional[str] = None):
+async def meeting_room(meeting_id: str, role: Optional[str] = None, meeting_service: MeetingService = Depends(get_meeting_service)):
     """Serve the meeting room page with role-based interface"""
     # Check if meeting exists, create if not (handles Heroku memory loss)
-    meeting_service = get_meeting_service()
     meeting = meeting_service.get_meeting(meeting_id)
     
     if not meeting:
@@ -1151,10 +1150,9 @@ async def get_meeting_fix_js():
         return Response("// Meeting fix JS file not found", status_code=404, media_type="application/javascript")
 
 @app.get("/api/meetings/{meeting_id}/info")
-async def get_meeting_info(meeting_id: str):
+async def get_meeting_info(meeting_id: str, meeting_service: MeetingService = Depends(get_meeting_service)):
     """Get meeting information"""
     # Check if meeting exists, create if not (handles Heroku memory loss)
-    meeting_service = get_meeting_service()
     meeting = meeting_service.get_meeting(meeting_id)
     
     if not meeting:
@@ -1268,9 +1266,8 @@ async def debug_meeting():
 
 # Add new endpoint to handle participant disconnect
 @app.post("/api/meetings/{meeting_id}/leave")
-async def leave_meeting(meeting_id: str, participant_name: str):
+async def leave_meeting(meeting_id: str, participant_name: str, meeting_service: MeetingService = Depends(get_meeting_service)):
     """Handle participant leaving the meeting"""
-    meeting_service = get_meeting_service()
     meeting_service.remove_participant(meeting_id, participant_name)
     
     return {"status": "left"}
@@ -1279,12 +1276,13 @@ async def leave_meeting(meeting_id: str, participant_name: str):
 async def upload_patient_document(
     meeting_id: str,
     file: UploadFile = File(...),
-    patient_name: str = Form(...)
+    patient_name: str = Form(...),
+    meeting_service: MeetingService = Depends(get_meeting_service),
+    document_service: DocumentService = Depends(get_document_service)
 ):
     """Upload patient document (Krankenkassenschein etc.) before joining meeting"""
     
     # Validate meeting exists
-    meeting_service = get_meeting_service()
     meeting = meeting_service.get_meeting(meeting_id)
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
@@ -1316,7 +1314,6 @@ async def upload_patient_document(
     file_content = await file.read()
     
     # Store document metadata
-    document_service = get_document_service()
     document_service.create_document(
         document_id=document_id,
         meeting_id=meeting_id,
@@ -1366,11 +1363,15 @@ async def process_patient_document(meeting_id: str, document_id: str = Form(...)
     }
 
 @app.post("/api/meetings/{meeting_id}/media-test", response_model=MediaTestResponse)
-async def submit_media_test(meeting_id: str, request: MediaTestRequest):
+async def submit_media_test(
+    meeting_id: str, 
+    request: MediaTestRequest,
+    meeting_service: MeetingService = Depends(get_meeting_service),
+    media_test_service: MediaTestService = Depends(get_media_test_service)
+):
     """Submit patient media test results"""
     
     # Validate meeting exists
-    meeting_service = get_meeting_service()
     meeting = meeting_service.get_meeting(meeting_id)
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
@@ -1392,7 +1393,6 @@ async def submit_media_test(meeting_id: str, request: MediaTestRequest):
                 f"camera_working={request.camera_working}, microphone_working={request.microphone_working}")
     
     # Store test results
-    media_test_service = get_media_test_service()
     media_test_service.create_media_test(
         test_id=test_id,
         meeting_id=meeting_id,
@@ -1528,10 +1528,9 @@ async def patient_join_meeting(
         raise HTTPException(status_code=500, detail="Fehler beim Meeting-Beitritt")
 
 @app.get("/api/meetings/{meeting_id}/status", response_model=MeetingStatusResponse)
-async def get_meeting_status(meeting_id: str):
+async def get_meeting_status(meeting_id: str, meeting_service: MeetingService = Depends(get_meeting_service), document_service: DocumentService = Depends(get_document_service)):
     """Get detailed meeting status for role-based UI updates"""
     # Check if meeting exists, create if not (handles Heroku memory loss)
-    meeting_service = get_meeting_service()
     meeting = meeting_service.get_meeting(meeting_id)
     
     if not meeting:
@@ -1548,7 +1547,6 @@ async def get_meeting_status(meeting_id: str):
     )
     
     # Check if documents were uploaded
-    document_service = get_document_service()
     document_uploaded = document_service.has_documents_for_meeting(meeting_id)
     
     return MeetingStatusResponse(
