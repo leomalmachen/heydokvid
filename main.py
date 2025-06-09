@@ -1590,10 +1590,9 @@ async def doctor_join_meeting(
         logger.warning(f"⚠️ Non-original doctor trying to join: {request.participant_name}")
         raise HTTPException(status_code=403, detail="Only the original doctor can join this meeting")
     
-    # Check for duplicate participants using database service
-    participant_key = f"doctor_{request.participant_name.lower()}"
-    if meeting_service.is_participant_in_meeting(meeting_id, participant_key):
-        logger.info(f"🩺 Doctor already in meeting, allowing reconnection")
+    # REMOVED: Duplicate check since database doesn't track participants
+    # doctor can always reconnect if they lose connection
+    logger.info(f"🩺 Doctor joining meeting {meeting_id}")
     
     try:
         # Generate token for doctor with admin permissions
