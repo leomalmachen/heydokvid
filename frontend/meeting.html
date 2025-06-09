@@ -122,126 +122,28 @@
 
     <!-- LiveKit Client SDK - Direct loading from local file -->
     <script src="/static/livekit-client.umd.min.js"></script>
-    <!-- LiveKit Compatibility Layer - MUST load before app.js -->
+    
+    <!-- STABLE MEETING: Use optimized stable meeting script instead of complex app.js -->
+    <script src="/frontend/stable-meeting.js"></script>
+    
     <script>
-        // URGENT FIX: LiveKit compatibility layer to prevent undefined errors
-        console.log('🔧 URGENT: Setting up LiveKit compatibility layer...');
+        // STABILITY CHECK: Ensure LiveKit is loaded before starting
+        console.log('🔧 STABILITY: Checking LiveKit availability...');
         
-        function ensureLiveKitConstants() {
-            if (typeof window.LiveKit !== 'undefined') {
-                // Fix TrackSource constants
-                if (!window.LiveKit.TrackSource) {
-                    window.LiveKit.TrackSource = {
-                        Camera: 'camera',
-                        Microphone: 'microphone',
-                        ScreenShare: 'screen_share'
-                    };
-                    console.log('✅ FIXED: Added missing LiveKit.TrackSource');
-                }
-                
-                // Fix Track.Source constants
-                if (!window.LiveKit.Track) {
-                    window.LiveKit.Track = {};
-                }
-                if (!window.LiveKit.Track.Source) {
-                    window.LiveKit.Track.Source = {
-                        Camera: 'camera',
-                        Microphone: 'microphone',
-                        ScreenShare: 'screen_share'
-                    };
-                    console.log('✅ FIXED: Added missing LiveKit.Track.Source');
-                }
-                
-                // Fix Track.Kind constants
-                if (!window.LiveKit.Track.Kind) {
-                    window.LiveKit.Track.Kind = {
-                        Video: 'video',
-                        Audio: 'audio'
-                    };
-                    console.log('✅ FIXED: Added missing LiveKit.Track.Kind');
-                }
-                
-                console.log('✅ LiveKit constants verified/fixed:', {
-                    TrackSource: window.LiveKit.TrackSource,
-                    'Track.Source': window.LiveKit.Track.Source,
-                    'Track.Kind': window.LiveKit.Track.Kind
-                });
-                
-                return true;
-            }
-            return false;
-        }
-        
-        // Try immediately
-        if (!ensureLiveKitConstants()) {
-            // If LiveKit not ready, wait for it
-            let attempts = 0;
-            const waitForLiveKit = setInterval(() => {
-                attempts++;
-                if (ensureLiveKitConstants() || attempts > 50) {
-                    clearInterval(waitForLiveKit);
-                    if (attempts > 50) {
-                        console.error('❌ FAILED: LiveKit constants could not be fixed');
-                    }
-                }
-            }, 100);
-        }
-    </script>
-    <!-- App.js - Main application logic -->
-    <script src="/frontend/app.js"></script>
-    <!-- Critical fix for meeting initialization -->
-    <script src="/frontend/meeting-fix.js"></script>
-    <script>
-        // AGGRESSIVE: Initialize meeting as soon as possible
-        console.log('🚀 STARTING AGGRESSIVE MEETING INITIALIZATION...');
-        
-        // Verify LiveKit is loaded
-        const LiveKit = typeof window.LiveKit !== 'undefined' ? window.LiveKit : 
-                       typeof window.LivekitClient !== 'undefined' ? window.LivekitClient : undefined;
-        
-        if (typeof LiveKit === 'undefined') {
-            console.error('❌ LiveKit SDK failed to load');
-            alert('LiveKit SDK konnte nicht geladen werden. Bitte Seite neu laden.');
-            location.reload();
-        } else {
-            // Make LiveKit globally available
-            if (typeof window.LiveKit === 'undefined' && typeof window.LivekitClient !== 'undefined') {
+        if (typeof window.LiveKit === 'undefined') {
+            console.error('❌ LiveKit not loaded, trying fallback...');
+            
+            // Try alternative LiveKit reference
+            if (typeof window.LivekitClient !== 'undefined') {
                 window.LiveKit = window.LivekitClient;
-            }
-            
-            console.log('✅ LiveKit SDK loaded successfully');
-            console.log('LiveKit version:', LiveKit.version || 'Unknown');
-            
-            // IMMEDIATE: Start meeting initialization
-            function startMeeting() {
-                console.log('🎬 Starting meeting initialization...');
-                
-                if (typeof initializeMeeting === 'function') {
-                    console.log('✅ initializeMeeting function found, calling now...');
-                    initializeMeeting().catch(error => {
-                        console.error('❌ Meeting initialization failed:', error);
-                        alert('Meeting-Initialisierung fehlgeschlagen: ' + error.message);
-                    });
-                } else {
-                    console.error('❌ initializeMeeting function not found');
-                    setTimeout(() => {
-                        if (typeof initializeMeeting === 'function') {
-                            console.log('🔄 Retry: initializeMeeting function found');
-                            initializeMeeting();
-                        } else {
-                            console.error('❌ initializeMeeting still not found');
-                            alert('App-Initialisierung fehlgeschlagen. Bitte Seite neu laden.');
-                        }
-                    }, 2000);
-                }
-            }
-            
-            // Start immediately if DOM is ready, otherwise wait
-            if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', startMeeting);
+                console.log('✅ LiveKit loaded via fallback');
             } else {
-                startMeeting();
+                console.error('❌ LiveKit completely unavailable');
+                alert('Video-System konnte nicht geladen werden. Bitte Seite neu laden.');
+                location.reload();
             }
+        } else {
+            console.log('✅ LiveKit loaded successfully');
         }
     </script>
 </body>
