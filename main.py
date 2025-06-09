@@ -2051,6 +2051,19 @@ async def simple_meeting_room(meeting_id: str, meeting_service: MeetingService =
             status_code=500
         )
 
+@app.get("/frontend/stable-meeting.js")
+async def get_stable_meeting_js():
+    """Serve the stable meeting JavaScript file"""
+    try:
+        with open("frontend/stable-meeting.js", "r", encoding="utf-8") as f:
+            content = f.read()
+        
+        return Response(content, media_type="application/javascript")
+    
+    except FileNotFoundError:
+        logger.error("Stable meeting JS file not found")
+        return Response("// Stable meeting JS file not found", status_code=404, media_type="application/javascript")
+
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
     logger.info(f"Starting HeyDok Video on port {port}")
