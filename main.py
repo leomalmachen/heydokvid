@@ -696,6 +696,8 @@ async def join_meeting(
 @app.get("/meeting/{meeting_id}", response_class=HTMLResponse)
 async def meeting_room(meeting_id: str, role: Optional[str] = None, meeting_service: MeetingService = Depends(get_meeting_service)):
     """Serve the meeting room page with role-based interface"""
+    logger.info(f"Meeting room access: {meeting_id}, role parameter: {role}")
+    
     # Check if meeting exists, create if not (handles Heroku memory loss)
     meeting = meeting_service.get_meeting(meeting_id)
     
@@ -707,20 +709,33 @@ async def meeting_room(meeting_id: str, role: Optional[str] = None, meeting_serv
             host_role="doctor"
         )
     
-    # Determine user role (default to patient if not specified - doctors must explicitly specify role=doctor)
-    user_role = role or "patient"
+    # IMPROVED: Better role detection logic
+    user_role = role or "doctor"  # CHANGED: Default to doctor instead of patient
+    
+    # Special handling: If no role specified and this looks like a doctor joining their own meeting
+    if role is None:
+        # Check if this meeting was created recently and has no patient activity
+        # This suggests it's the doctor joining their own meeting
+        if not meeting.patient_joined and not meeting.patient_setup_completed:
+            user_role = "doctor"
+            logger.info(f"Auto-detected doctor role for meeting {meeting_id} (no patient activity)")
+    
+    logger.info(f"Determined user_role: {user_role} for meeting {meeting_id}")
     
     # For patients, check if they have completed setup
     if user_role == "patient":
         patient_setup_completed = meeting.patient_setup_completed
         media_test_completed = meeting.media_test_completed
         
+        logger.info(f"Patient setup check: setup_completed={patient_setup_completed}, media_test_completed={media_test_completed}")
+        
         # If role=patient parameter is present, assume they completed setup via patient-join endpoint
         # This handles the case where meeting data was lost due to Heroku restarts
         if not patient_setup_completed or not media_test_completed:
             # Only redirect to setup if they don't have the role parameter 
             # (meaning they're accessing the link without having gone through patient setup)
-            if role is None:
+            if role != "patient":  # FIXED: Only redirect if role wasn't explicitly set to patient
+                logger.info(f"Redirecting to patient setup for meeting {meeting_id}")
                 # Redirect patient to setup page
                 setup_url = f"{get_base_url()}/patient-setup?meeting={meeting_id}"
                 return HTMLResponse(
