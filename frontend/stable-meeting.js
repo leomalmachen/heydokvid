@@ -267,28 +267,26 @@ async function enableLocalMedia() {
             console.log('🎬 Enabling camera via LiveKit setCameraEnabled...');
             try {
                 await room.localParticipant.setCameraEnabled(true);
-                console.log('✅ LiveKit setCameraEnabled(true) successful!');
+                console.log('✅ LiveKit setCameraEnabled(true) completed!');
                 
-                // CORRECT: Wait for track to be published and use proper API
+                // CRITICAL FIX: Wait for track to be published and then use proper attachment
+                console.log('⏳ Waiting for camera track to be published...');
                 await new Promise(resolve => setTimeout(resolve, 2000));
                 
-                // CORRECT: Use videoTrackPublications instead of getTrackPublication
-                console.log('🔍 Looking for published video tracks...');
-                console.log('📊 Video track publications:', room.localParticipant.videoTrackPublications.size);
-                
                 let videoTrack = null;
+                
+                // CORRECTED: Use the right way to find video track
                 room.localParticipant.videoTrackPublications.forEach((publication) => {
-                    console.log('📹 Found video publication:', {
+                    console.log('🔍 Checking publication:', {
                         source: publication.source,
                         kind: publication.kind,
-                        trackSid: publication.trackSid,
                         hasTrack: !!publication.track
                     });
                     
-                    // SAFE: Check for camera source using multiple methods
+                    // SAFE: Multiple detection methods for camera
                     const isCamera = publication.source === 'camera' || 
-                                   (window.LiveKit && window.LiveKit.TrackSource && publication.source === window.LiveKit.TrackSource.Camera) ||
-                                   publication.kind === 'video';  // Fallback: any video is likely camera
+                                     (window.LiveKit && window.LiveKit.TrackSource && publication.source === window.LiveKit.TrackSource.Camera) ||
+                                     publication.kind === 'video';  // Fallback: any video is likely camera
                     
                     if (isCamera && publication.track) {
                         videoTrack = publication.track;
@@ -297,38 +295,15 @@ async function enableLocalMedia() {
                 });
                 
                 if (videoTrack) {
-                    console.log('🎯 Attaching video track to local element...');
+                    console.log('🎯 Using attachVideoTrack function for proper setup...');
                     
-                    // Find local video element
-                    const localVideo = document.querySelector('.participant-container.local video');
-                    if (localVideo) {
-                        // CORRECT: Use LiveKit's attach method
-                        videoTrack.attach(localVideo);
-                        localVideo.muted = true;
-                        
-                        // Force play with error handling
-                        try {
-                            await localVideo.play();
-                            console.log('✅ Video playing successfully!');
-                        } catch (playError) {
-                            console.log('⚠️ Video autoplay blocked, user interaction needed:', playError);
-                            // Add click handler to start video
-                            localVideo.addEventListener('click', () => {
-                                localVideo.play().catch(e => console.log('Manual play failed:', e));
-                            });
-                        }
-                        
-                        // Remove placeholder
-                        const placeholder = localVideo.closest('.participant-container').querySelector('.video-placeholder');
-                        if (placeholder) {
-                            placeholder.remove();
-                            console.log('✅ Video placeholder removed');
-                        }
-                        
-                        console.log('✅ Video track attached and playing!');
-                    } else {
-                        console.error('❌ No local video element found');
-                    }
+                    // CRITICAL FIX: Get or create the local participant container first
+                    const localContainer = getOrCreateParticipantContainer(room.localParticipant);
+                    
+                    // Use the existing attachVideoTrack function that handles everything properly
+                    attachVideoTrack(videoTrack, localContainer, room.localParticipant);
+                    
+                    console.log('✅ Video track attached using proper function!');
                 } else {
                     console.warn('⚠️ No camera track found after setCameraEnabled');
                     console.log('🔍 Available video publications:');
@@ -341,21 +316,9 @@ async function enableLocalMedia() {
                         const firstPublication = Array.from(room.localParticipant.videoTrackPublications.values())[0];
                         if (firstPublication && firstPublication.track) {
                             console.log('🔄 Using first available video track as fallback');
-                            videoTrack = firstPublication.track;
-                            
-                            const localVideo = document.querySelector('.participant-container.local video');
-                            if (localVideo) {
-                                videoTrack.attach(localVideo);
-                                localVideo.muted = true;
-                                localVideo.play().catch(e => console.log('Fallback video play failed:', e));
-                                
-                                // Remove placeholder
-                                const placeholder = localVideo.closest('.participant-container').querySelector('.video-placeholder');
-                                if (placeholder) {
-                                    placeholder.remove();
-                                }
-                                console.log('✅ Fallback video track attached!');
-                            }
+                            const localContainer = getOrCreateParticipantContainer(room.localParticipant);
+                            attachVideoTrack(firstPublication.track, localContainer, room.localParticipant);
+                            console.log('✅ Fallback video track attached!');
                         }
                     }
                 }
