@@ -410,7 +410,7 @@
                     <p style="margin: 1rem 0; color: #666;">
                         Sie haben alle Schritte erfolgreich abgeschlossen und können nun der Sprechstunde beitreten.
                     </p>
-                    <button class="btn btn-success" id="joinMeetingBtn">
+                    <button class="btn btn-success" id="joinMeetingBtn" type="button">
                         Der Sprechstunde beitreten
                     </button>
                 </div>
@@ -461,34 +461,55 @@
             const joinBtn = document.getElementById('joinMeetingBtn');
             if (!joinBtn) return;
             
-            // Simple click handler with debouncing
-            joinBtn.addEventListener('click', function(event) {
+            // Remove any existing event listeners
+            joinBtn.replaceWith(joinBtn.cloneNode(true));
+            const newJoinBtn = document.getElementById('joinMeetingBtn');
+            
+            // Single click handler with aggressive debouncing
+            let clickTimeout = null;
+            newJoinBtn.addEventListener('click', function(event) {
                 event.preventDefault();
+                event.stopPropagation();
                 
-                // Simple check to prevent multiple clicks
-                if (isJoining) {
-                    console.log('⚠️ Click ignored - already joining');
-                    return;
+                // Clear any pending clicks
+                if (clickTimeout) {
+                    clearTimeout(clickTimeout);
                 }
                 
-                console.log('🔘 Join button clicked');
-                joinMeeting();
-            });
+                // Debounce: Only execute after 200ms of no additional clicks
+                clickTimeout = setTimeout(() => {
+                    // Final check to prevent multiple execution
+                    if (isJoining) {
+                        console.log('⚠️ Click ignored - already joining');
+                        return;
+                    }
+                    
+                    console.log('🔘 Join button clicked (debounced)');
+                    joinMeeting();
+                }, 200);
+            }, { once: false });
             
-            console.log('✅ Join button setup completed');
+            console.log('✅ Join button setup completed with debouncing');
         }
 
         async function joinMeeting() {
             console.log('🚀 joinMeeting() called');
             
-            // Prevent multiple calls
+            // AGGRESSIVE: Check multiple times to prevent race conditions
             if (isJoining) {
                 console.log('❌ Already joining, aborting');
                 return;
             }
             
-            // Set flag immediately
+            // Set flag immediately with double-check
             isJoining = true;
+            
+            // Additional check after setting flag
+            if (!isJoining) {
+                console.log('❌ Race condition detected, aborting');
+                return;
+            }
+            
             console.log('🔒 isJoining set to true');
             
             try {
@@ -499,12 +520,22 @@
                     return;
                 }
                 
-                // Disable button immediately with visual feedback
+                // Immediately disable button to prevent any further clicks
                 joinBtn.disabled = true;
+                joinBtn.style.pointerEvents = 'none';
                 joinBtn.style.opacity = '0.6';
-                joinBtn.innerHTML = '⏳ Beitritt läuft...';
+                joinBtn.innerHTML = '<span class="loading"></span>Beitritt läuft...';
                 
                 console.log('🔄 Button disabled and loading state set');
+
+                // Validate required data
+                if (!patientName) {
+                    throw new Error('Patient-Name fehlt');
+                }
+                
+                if (!meetingId) {
+                    throw new Error('Meeting-ID fehlt');
+                }
 
                 // Update status: Patient is joining meeting
                 updatePatientStatus('in_meeting', 'Patient tritt Meeting bei');
@@ -546,8 +577,9 @@
                 
                 // Redirect after brief delay to show success state
                 setTimeout(() => {
+                    console.log('🚀 Redirecting to:', result.meeting_url);
                     window.location.href = result.meeting_url;
-                }, 1000);
+                }, 1500);
 
             } catch (error) {
                 console.error('❌ Join error:', error);
@@ -557,12 +589,14 @@
                 const joinBtn = document.getElementById('joinMeetingBtn');
                 if (joinBtn) {
                     joinBtn.disabled = false;
+                    joinBtn.style.pointerEvents = 'auto';
                     joinBtn.style.opacity = '1';
                     joinBtn.innerHTML = 'Der Sprechstunde beitreten';
                 }
                 
                 // Reset joining flag
                 isJoining = false;
+                console.log('🔓 isJoining reset to false after error');
             }
         }
 
