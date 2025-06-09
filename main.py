@@ -613,7 +613,13 @@ async def create_meeting(
     """Create a new meeting - typically called by doctors"""
     cleanup_old_meetings()
     
-    meeting_id = generate_meeting_id()
+    # Store meeting with correct parameters
+    meeting = meeting_service.create_meeting(
+        host_name=request.host_name,
+        host_role=request.host_role
+    )
+    
+    meeting_id = meeting.meeting_id
     room_name = livekit_client.get_room_name(meeting_id)
     
     # Generate doctor token with admin permissions
@@ -622,15 +628,6 @@ async def create_meeting(
         room_name=room_name,
         participant_name=doctor_display_name,
         is_host=True
-    )
-    
-    # Store meeting with role-based structure
-    meeting = meeting_service.create_meeting(
-        meeting_id=meeting_id,
-        room_name=room_name,
-        doctor_name=request.host_name,
-        doctor_display_name=doctor_display_name,
-        doctor_role=request.host_role
     )
     
     base_url = get_base_url()
@@ -714,10 +711,8 @@ async def meeting_room(meeting_id: str, role: Optional[str] = None):
         logger.info(f"Meeting {meeting_id} not found in database, recreating entry for meeting room access")
         # Recreate meeting entry for this meeting ID (similar to get_meeting_info)
         meeting = meeting_service.create_meeting(
-            meeting_id=meeting_id,
-            room_name=f"meeting-{meeting_id}",
-            doctor_name="Doctor",  # Default doctor name
-            doctor_role="doctor"
+            host_name="Doctor",  # Default doctor name
+            host_role="doctor"
         )
     
     # Determine user role (default to patient if not specified - doctors must explicitly specify role=doctor)
@@ -1166,10 +1161,8 @@ async def get_meeting_info(meeting_id: str):
         logger.info(f"Meeting {meeting_id} not found in database, recreating entry for info request")
         # Recreate meeting entry for this meeting ID
         meeting = meeting_service.create_meeting(
-            meeting_id=meeting_id,
-            room_name=f"meeting-{meeting_id}",
-            doctor_name="Host",
-            doctor_role="doctor"
+            host_name="Host",
+            host_role="doctor"
         )
     
     return {
@@ -1440,10 +1433,8 @@ async def patient_join_meeting(
         # Create meeting if not exists (handle Heroku memory loss)
         logger.info(f"Meeting {meeting_id} not found, recreating for patient join")
         meeting = meeting_service.create_meeting(
-            meeting_id=meeting_id,
-            room_name=f"meeting-{meeting_id}",
-            doctor_name="Doctor",
-            doctor_role="doctor"
+            host_name="Doctor",
+            host_role="doctor"
         )
     
     # Check if patient already joined
@@ -1546,10 +1537,8 @@ async def get_meeting_status(meeting_id: str):
     if not meeting:
         logger.info(f"Meeting {meeting_id} not found in database, recreating entry for status request")
         meeting = meeting_service.create_meeting(
-            meeting_id=meeting_id,
-            room_name=f"meeting-{meeting_id}",
-            doctor_name="Doctor",  # Default doctor name
-            doctor_role="doctor"
+            host_name="Doctor",  # Default doctor name
+            host_role="doctor"
         )
     
     # Check if patient has completed setup
@@ -1773,18 +1762,14 @@ async def create_meeting_link(request: CreateMeetingLinkRequest, meeting_service
     - Ende-zu-Ende verschlüsselt über LiveKit
     """
     try:
-        # Generate unique meeting ID
-        meeting_id = generate_meeting_id()
-        
         # Create meeting using database service
         meeting = meeting_service.create_meeting(
-            meeting_id=meeting_id,
-            room_name=f"meeting-{meeting_id}",
-            doctor_name=request.doctor_name,
-            doctor_display_name=request.doctor_name,
-            doctor_role="doctor",
+            host_name=request.doctor_name,
+            host_role="doctor",
             external_id=request.external_id
         )
+        
+        meeting_id = meeting.meeting_id
         
         # Generate URLs
         base_url = get_base_url()
