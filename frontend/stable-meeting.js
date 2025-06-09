@@ -248,68 +248,102 @@ async function connectToMeeting(meetingData) {
 // STABLE: Enable local media with error handling
 async function enableLocalMedia() {
     try {
-        console.log('🎥 Enabling local media...');
+        console.log('🎥 DIRECT CAMERA ACCESS - Starting...');
         
-        if (!room || !room.localParticipant) {
-            console.error('❌ No room or local participant available');
-            return;
-        }
+        // NUCLEAR OPTION: Direct browser media access first
+        console.log('🔥 NUCLEAR: Getting camera directly from browser...');
         
-        // SIMPLE FIX: Just enable camera and microphone directly
-        console.log('🎬 Activating camera and microphone...');
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+            video: true, 
+            audio: true 
+        });
         
-        // BACKUP METHOD: If LiveKit fails, get media directly
-        let cameraWorked = false;
-        let micWorked = false;
+        console.log('✅ NUCLEAR: Got media stream directly!', stream);
         
-        if (videoEnabled) {
-            try {
-                await room.localParticipant.setCameraEnabled(true);
-                console.log('✅ Camera activated');
-                cameraWorked = true;
-            } catch (cameraError) {
-                console.error('❌ Camera failed:', cameraError.message);
+        // Find and attach video immediately
+        const localVideo = document.querySelector('.participant-container.local video');
+        if (localVideo) {
+            localVideo.srcObject = stream;
+            localVideo.muted = true;
+            localVideo.play();
+            console.log('✅ NUCLEAR: Video attached directly to element');
+        } else {
+            // Create video element if it doesn't exist
+            console.log('🎯 NUCLEAR: Creating video element...');
+            const localContainer = document.querySelector('.participant-container.local');
+            if (localContainer) {
+                const video = document.createElement('video');
+                video.srcObject = stream;
+                video.autoplay = true;
+                video.playsInline = true;
+                video.muted = true;
+                video.style.cssText = `
+                    width: 100%;
+                    height: 100%;
+                    object-fit: cover;
+                    background: #000;
+                `;
                 
-                // BACKUP: Get camera directly from browser
-                try {
-                    console.log('🔄 Trying direct camera access...');
-                    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-                    
-                    // Find local video element and attach stream directly
-                    const localVideo = document.querySelector('.participant-container.local video');
-                    if (localVideo) {
-                        localVideo.srcObject = stream;
-                        localVideo.muted = true;
-                        localVideo.play();
-                        console.log('✅ Camera attached directly');
-                        cameraWorked = true;
-                    }
-                } catch (directError) {
-                    console.error('❌ Direct camera access also failed:', directError.message);
+                // Remove placeholder
+                const placeholder = localContainer.querySelector('.video-placeholder');
+                if (placeholder) {
+                    placeholder.remove();
                 }
+                
+                localContainer.appendChild(video);
+                console.log('✅ NUCLEAR: Video element created and stream attached');
             }
         }
         
-        if (audioEnabled) {
+        // Now try to also enable in LiveKit (secondary)
+        if (room && room.localParticipant) {
             try {
+                console.log('🔄 Trying LiveKit as backup...');
+                await room.localParticipant.setCameraEnabled(true);
                 await room.localParticipant.setMicrophoneEnabled(true);
-                console.log('✅ Microphone activated');
-                micWorked = true;
-            } catch (micError) {
-                console.error('❌ Microphone failed:', micError.message);
+                console.log('✅ LiveKit also enabled');
+            } catch (livekitError) {
+                console.log('⚠️ LiveKit failed, but direct camera works:', livekitError.message);
             }
         }
-        
-        console.log('✅ Media setup completed');
         
         // Remove loading state immediately
         const loadingState = document.getElementById('loadingState');
         if (loadingState) {
             loadingState.remove();
+            console.log('✅ NUCLEAR: Loading state removed');
         }
         
+        console.log('🎉 NUCLEAR SUCCESS: Camera should be working now!');
+        
     } catch (error) {
-        console.error('❌ Media setup failed:', error);
+        console.error('❌ NUCLEAR FAILED:', error);
+        
+        // Last resort: Show error and instructions
+        const localContainer = document.querySelector('.participant-container.local');
+        if (localContainer) {
+            localContainer.innerHTML = `
+                <div style="color: white; text-align: center; padding: 20px;">
+                    <h3>🚨 Kamera-Problem</h3>
+                    <p>Fehler: ${error.message}</p>
+                    <p><strong>Lösung:</strong></p>
+                    <ol style="text-align: left; display: inline-block;">
+                        <li>Klicken Sie auf das 🔒 Symbol in der Adressleiste</li>
+                        <li>Wählen Sie "Zulassen" für Kamera</li>
+                        <li>Laden Sie die Seite neu (F5)</li>
+                    </ol>
+                    <button onclick="location.reload()" style="
+                        margin-top: 15px;
+                        padding: 10px 20px;
+                        background: #4285f4;
+                        color: white;
+                        border: none;
+                        border-radius: 4px;
+                        cursor: pointer;
+                    ">🔄 Seite neu laden</button>
+                </div>
+            `;
+        }
         
         // Remove loading state even on error
         const loadingState = document.getElementById('loadingState');
