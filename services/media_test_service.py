@@ -31,15 +31,14 @@ class MediaTestService:
         """Create a new media test"""
         try:
             media_test = MediaTest(
-                id=test_id,
+                test_id=test_id,
                 meeting_id=meeting_id,
                 has_camera=has_camera,
                 has_microphone=has_microphone,
                 camera_working=camera_working,
                 microphone_working=microphone_working,
                 patient_confirmed=patient_confirmed,
-                allowed_to_join=allowed_to_join,
-                tested_at=datetime.utcnow()
+                allowed_to_join=allowed_to_join
             )
             
             self.db.add(media_test)
@@ -58,7 +57,7 @@ class MediaTestService:
         """Get a media test by ID"""
         try:
             return self.db.query(MediaTest).filter(
-                MediaTest.id == test_id
+                MediaTest.test_id == test_id
             ).first()
         except Exception as e:
             logger.error(f"Error getting media test {test_id}: {e}")
@@ -79,7 +78,7 @@ class MediaTestService:
         try:
             return self.db.query(MediaTest).filter(
                 MediaTest.meeting_id == meeting_id
-            ).order_by(MediaTest.tested_at.desc()).first()
+            ).order_by(MediaTest.timestamp.desc()).first()
         except Exception as e:
             logger.error(f"Error getting latest media test for meeting {meeting_id}: {e}")
             return None
@@ -144,7 +143,7 @@ class MediaTestService:
             cutoff_date = datetime.utcnow() - timedelta(days=days)
             
             expired_tests = self.db.query(MediaTest).filter(
-                MediaTest.tested_at < cutoff_date
+                MediaTest.timestamp < cutoff_date
             ).all()
             
             count = len(expired_tests)
