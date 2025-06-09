@@ -709,80 +709,111 @@ async def meeting_room(meeting_id: str, role: Optional[str] = None, meeting_serv
             host_role="doctor"
         )
     
-    # IMPROVED: Better role detection logic
-    user_role = role or "doctor"  # CHANGED: Default to doctor instead of patient
+    # CRITICAL FIX: ALWAYS redirect patients to setup unless they have explicit permission
+    # Only allow direct access if:
+    # 1. role=doctor (doctor direct access)
+    # 2. role=patient AND setup completed (patient after setup)
     
-    # Special handling: If no role specified and this looks like a doctor joining their own meeting
-    if role is None:
-        # Check if this meeting was created recently and has no patient activity
-        # This suggests it's the doctor joining their own meeting
-        if not meeting.patient_joined and not meeting.patient_setup_completed:
-            user_role = "doctor"
-            logger.info(f"Auto-detected doctor role for meeting {meeting_id} (no patient activity)")
-    
-    logger.info(f"Determined user_role: {user_role} for meeting {meeting_id}")
-    
-    # For patients, check if they have completed setup
-    if user_role == "patient":
+    if role == "doctor":
+        # Doctor can always access directly
+        user_role = "doctor"
+        logger.info(f"Doctor direct access granted for meeting {meeting_id}")
+    elif role == "patient":
+        # Patient with role=patient parameter - check if setup completed
         patient_setup_completed = meeting.patient_setup_completed
         media_test_completed = meeting.media_test_completed
         
-        logger.info(f"Patient setup check: setup_completed={patient_setup_completed}, media_test_completed={media_test_completed}")
-        
-        # If role=patient parameter is present, assume they completed setup via patient-join endpoint
-        # This handles the case where meeting data was lost due to Heroku restarts
-        if not patient_setup_completed or not media_test_completed:
-            # Only redirect to setup if they don't have the role parameter 
-            # (meaning they're accessing the link without having gone through patient setup)
-            if role != "patient":  # FIXED: Only redirect if role wasn't explicitly set to patient
-                logger.info(f"Redirecting to patient setup for meeting {meeting_id}")
-                # Redirect patient to setup page
-                setup_url = f"{get_base_url()}/patient-setup?meeting={meeting_id}"
-                return HTMLResponse(
-                    content=f"""
-                    <!DOCTYPE html>
-                    <html>
-                    <head>
-                        <title>Setup erforderlich - HeyDok Video</title>
-                        <meta charset="utf-8">
-                        <meta name="viewport" content="width=device-width, initial-scale=1">
-                        <style>
-                            body {{ font-family: Arial, sans-serif; margin: 20px; background: #f8f9fa; text-align: center; }}
-                            .container {{ max-width: 600px; margin: 50px auto; background: white; padding: 40px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
-                            h1 {{ color: #007bff; }}
-                            .button {{ background: #007bff; color: white; padding: 15px 30px; border: none; border-radius: 5px; font-size: 18px; text-decoration: none; display: inline-block; margin: 20px 0; }}
-                            .button:hover {{ background: #0056b3; }}
-                        </style>
-                        <script>
-                            // Auto-redirect after 3 seconds
-                            setTimeout(function() {{
-                                window.location.href = '{setup_url}';
-                            }}, 3000);
-                        </script>
-                    </head>
-                    <body>
-                        <div class="container">
-                            <h1>🏥 Patient Setup erforderlich</h1>
-                            <p>Bevor Sie dem Meeting beitreten können, müssen Sie die folgenden Schritte abschließen:</p>
-                            <ul style="text-align: left; display: inline-block;">
-                                <li>✍️ Namenseingabe</li>
-                                <li>📄 Dokument hochladen (z.B. Krankenkassenschein)</li>
-                                <li>🎥 Kamera und Mikrofon testen</li>
-                            </ul>
-                            <p>Sie werden automatisch weitergeleitet...</p>
-                            <a href="{setup_url}" class="button">Jetzt Setup starten</a>
-                        </div>
-                    </body>
-                    </html>
-                    """,
-                    status_code=200
-                )
-            else:
-                # Patient has role=patient parameter, so they completed setup
-                # Update meeting data to reflect this (in case data was lost)
-                meeting_service.mark_patient_setup_completed(meeting_id)
-                meeting_service.mark_media_test_completed(meeting_id)
-                logger.info(f"Updated meeting {meeting_id} patient setup status after database loss")
+        if patient_setup_completed and media_test_completed:
+            user_role = "patient"
+            logger.info(f"Patient access granted after setup completion for meeting {meeting_id}")
+        else:
+            # Even with role=patient, if setup not completed, redirect to setup
+            logger.info(f"Patient with role=patient but setup incomplete, redirecting to setup for meeting {meeting_id}")
+            setup_url = f"{get_base_url()}/patient-setup?meeting={meeting_id}"
+            return HTMLResponse(
+                content=f"""
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>Setup erforderlich - HeyDok Video</title>
+                    <meta charset="utf-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1">
+                    <style>
+                        body {{ font-family: Arial, sans-serif; margin: 20px; background: #f8f9fa; text-align: center; }}
+                        .container {{ max-width: 600px; margin: 50px auto; background: white; padding: 40px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
+                        h1 {{ color: #007bff; }}
+                        .button {{ background: #007bff; color: white; padding: 15px 30px; border: none; border-radius: 5px; font-size: 18px; text-decoration: none; display: inline-block; margin: 20px 0; }}
+                        .button:hover {{ background: #0056b3; }}
+                    </style>
+                    <script>
+                        // Auto-redirect after 2 seconds
+                        setTimeout(function() {{
+                            window.location.href = '{setup_url}';
+                        }}, 2000);
+                    </script>
+                </head>
+                <body>
+                    <div class="container">
+                        <h1>🏥 Patient Setup erforderlich</h1>
+                        <p><strong>Bevor Sie dem Meeting beitreten können, müssen Sie die folgenden Schritte abschließen:</strong></p>
+                        <ul style="text-align: left; display: inline-block; margin: 20px 0;">
+                            <li>✍️ Namenseingabe</li>
+                            <li>📄 Dokument hochladen (optional)</li>
+                            <li>🎥 Kamera und Mikrofon testen</li>
+                        </ul>
+                        <p><em>Sie werden automatisch weitergeleitet...</em></p>
+                        <a href="{setup_url}" class="button">Jetzt Setup starten</a>
+                    </div>
+                </body>
+                </html>
+                """,
+                status_code=200
+            )
+    else:
+        # NO role parameter OR unknown role - ALWAYS redirect to patient setup
+        logger.info(f"No role or unknown role, redirecting to patient setup for meeting {meeting_id}")
+        setup_url = f"{get_base_url()}/patient-setup?meeting={meeting_id}"
+        return HTMLResponse(
+            content=f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Patient Setup - HeyDok Video</title>
+                <meta charset="utf-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1">
+                <style>
+                    body {{ font-family: Arial, sans-serif; margin: 20px; background: #f8f9fa; text-align: center; }}
+                    .container {{ max-width: 600px; margin: 50px auto; background: white; padding: 40px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
+                    h1 {{ color: #4a90e2; }}
+                    .button {{ background: #4a90e2; color: white; padding: 15px 30px; border: none; border-radius: 5px; font-size: 18px; text-decoration: none; display: inline-block; margin: 20px 0; }}
+                    .button:hover {{ background: #357abd; }}
+                </style>
+                <script>
+                    // Auto-redirect after 1 second
+                    setTimeout(function() {{
+                        window.location.href = '{setup_url}';
+                    }}, 1000);
+                </script>
+            </head>
+            <body>
+                <div class="container">
+                    <h1>🏥 Willkommen bei HeyDok Video</h1>
+                    <p><strong>Bitte durchlaufen Sie den Patient-Setup-Prozess:</strong></p>
+                    <ul style="text-align: left; display: inline-block; margin: 20px 0;">
+                        <li>✍️ Ihre Daten eingeben</li>
+                        <li>📄 Dokument hochladen (optional)</li>
+                        <li>🎥 Kamera und Mikrofon testen</li>
+                    </ul>
+                    <p><em>Sie werden weitergeleitet...</em></p>
+                    <a href="{setup_url}" class="button">Setup starten</a>
+                </div>
+            </body>
+            </html>
+            """,
+            status_code=200
+        )
+    
+    logger.info(f"Determined user_role: {user_role} for meeting {meeting_id}")
     
     try:
         # Choose appropriate template based on role
