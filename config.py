@@ -1,102 +1,61 @@
 import os
 from typing import Optional, List
-from pydantic import BaseSettings, validator, Field
-from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
-
-class Settings(BaseSettings):
+# Simple configuration class without Pydantic Settings
+class Settings:
     """Application settings with validation"""
     
-    # App Configuration
-    app_name: str = Field(default="HeyDok Video API", env="APP_NAME")
-    version: str = Field(default="1.0.0", env="APP_VERSION")
-    environment: str = Field(default="development", env="ENVIRONMENT")
-    debug: bool = Field(default=False, env="DEBUG")
+    def __init__(self):
+        # App Configuration
+        self.app_name = "HeyDok Video API"
+        self.version = "1.0.0"
+        self.environment = "development"
+        self.debug = False
+        
+        # Server Configuration
+        self.host = "0.0.0.0"
+        self.port = 8000
+        self.app_url = None
+        
+        # Database Configuration
+        self.database_url = "sqlite:///./heydok.db"
+        
+        # LiveKit Configuration - HARDCODED FOR TESTING
+        self.livekit_url = "wss://heydok-5pbd24sq.livekit.cloud"
+        self.livekit_api_key = "APIysK82G8HGmFr"
+        self.livekit_api_secret = "ytVhapnJwHIzfQzzqZL3sPbSJfelfdBcCtD2vCwm0bbA"
+        
+        # Security Configuration
+        self.allowed_origins = ["*"]
+        self.api_key = None
+        self.secret_key = "your-secret-key-change-in-production"
+        
+        # File Upload Configuration
+        self.max_file_size = 10 * 1024 * 1024  # 10MB
+        self.allowed_file_types = ["pdf", "jpg", "jpeg", "png", "doc", "docx"]
+        self.upload_dir = "uploads"
+        
+        # Meeting Configuration
+        self.max_participants_per_meeting = 10
+        self.meeting_duration_hours = 24
+        self.cleanup_interval_minutes = 60
+        
+        # Logging Configuration
+        self.log_level = "INFO"
+        
+        # External API Configuration
+        self.rate_limit_per_minute = 60
+        
+        # Validate settings
+        self._validate()
     
-    # Server Configuration
-    host: str = Field(default="0.0.0.0", env="HOST")
-    port: int = Field(default=8000, env="PORT")
-    app_url: Optional[str] = Field(default=None, env="APP_URL")
-    
-    # Database Configuration
-    database_url: str = Field(default="sqlite:///./heydok.db", env="DATABASE_URL")
-    
-    # LiveKit Configuration
-    livekit_url: str = Field(..., env="LIVEKIT_URL")  # Required
-    livekit_api_key: str = Field(..., env="LIVEKIT_API_KEY")  # Required
-    livekit_api_secret: str = Field(..., env="LIVEKIT_API_SECRET")  # Required
-    
-    # Security Configuration
-    allowed_origins: List[str] = Field(default=["*"], env="ALLOWED_ORIGINS")
-    api_key: Optional[str] = Field(default=None, env="API_KEY")
-    secret_key: str = Field(default="your-secret-key-change-in-production", env="SECRET_KEY")
-    
-    # File Upload Configuration
-    max_file_size: int = Field(default=10 * 1024 * 1024, env="MAX_FILE_SIZE")  # 10MB
-    allowed_file_types: List[str] = Field(
-        default=["pdf", "jpg", "jpeg", "png", "doc", "docx"], 
-        env="ALLOWED_FILE_TYPES"
-    )
-    upload_dir: str = Field(default="uploads", env="UPLOAD_DIR")
-    
-    # Meeting Configuration
-    max_participants_per_meeting: int = Field(default=10, env="MAX_PARTICIPANTS_PER_MEETING")
-    meeting_duration_hours: int = Field(default=24, env="MEETING_DURATION_HOURS")
-    cleanup_interval_minutes: int = Field(default=60, env="CLEANUP_INTERVAL_MINUTES")
-    
-    # Logging Configuration
-    log_level: str = Field(default="INFO", env="LOG_LEVEL")
-    
-    # External API Configuration
-    rate_limit_per_minute: int = Field(default=60, env="RATE_LIMIT_PER_MINUTE")
-    
-    @validator("database_url")
-    def fix_postgres_url(cls, v):
-        """Fix Heroku Postgres URL if needed"""
-        if v and v.startswith("postgres://"):
-            return v.replace("postgres://", "postgresql://", 1)
-        return v
-    
-    @validator("livekit_url")
-    def validate_livekit_url(cls, v):
-        """Validate LiveKit URL format"""
-        if not v:
-            raise ValueError("LIVEKIT_URL is required")
-        if not (v.startswith("ws://") or v.startswith("wss://")):
+    def _validate(self):
+        """Validate settings"""
+        if not self.livekit_url.startswith(("ws://", "wss://")):
             raise ValueError("LIVEKIT_URL must start with ws:// or wss://")
-        return v
-    
-    @validator("environment")
-    def validate_environment(cls, v):
-        """Validate environment value"""
-        valid_envs = ["development", "staging", "production"]
-        if v not in valid_envs:
-            raise ValueError(f"Environment must be one of: {valid_envs}")
-        return v
-    
-    @validator("log_level")
-    def validate_log_level(cls, v):
-        """Validate log level"""
-        valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
-        if v.upper() not in valid_levels:
-            raise ValueError(f"Log level must be one of: {valid_levels}")
-        return v.upper()
-    
-    @validator("allowed_origins", pre=True)
-    def parse_allowed_origins(cls, v):
-        """Parse comma-separated origins"""
-        if isinstance(v, str):
-            return [origin.strip() for origin in v.split(",")]
-        return v
-    
-    @validator("allowed_file_types", pre=True) 
-    def parse_allowed_file_types(cls, v):
-        """Parse comma-separated file types"""
-        if isinstance(v, str):
-            return [ft.strip().lower() for ft in v.split(",")]
-        return [ft.lower() for ft in v] if isinstance(v, list) else v
+        
+        if self.environment not in ["development", "staging", "production"]:
+            raise ValueError("Environment must be one of: development, staging, production")
     
     @property
     def is_production(self) -> bool:
@@ -132,14 +91,11 @@ class Settings(BaseSettings):
                     origins.append(origin)
         
         return origins
-    
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
 
 # Create global settings instance
 try:
     settings = Settings()
+    print("✅ Configuration loaded successfully")
 except Exception as e:
     print(f"❌ Configuration Error: {e}")
     print("Please check your environment variables and .env file")

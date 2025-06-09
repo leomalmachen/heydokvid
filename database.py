@@ -34,7 +34,7 @@ class Meeting(Base):
     expires_at = Column(DateTime, default=lambda: datetime.utcnow() + timedelta(hours=24))
     last_patient_status = Column(String, nullable=True)
     last_status_update = Column(DateTime, nullable=True)
-    metadata = Column(JSON, default=dict)
+    meeting_metadata = Column(JSON, default=dict)
 
 class PatientDocument(Base):
     __tablename__ = "patient_documents"

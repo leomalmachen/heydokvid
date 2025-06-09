@@ -98,6 +98,26 @@ class DocumentUploadError(PatientError):
             extra_data={"filename": filename, "reason": reason}
         )
 
+class DocumentNotFoundError(PatientError):
+    """Raised when a document cannot be found"""
+    
+    def __init__(self, document_id: str):
+        super().__init__(
+            f"Dokument mit ID '{document_id}' nicht gefunden",
+            error_code="DOCUMENT_NOT_FOUND",
+            extra_data={"document_id": document_id}
+        )
+
+class DocumentProcessingError(PatientError):
+    """Raised when document processing fails"""
+    
+    def __init__(self, reason: str):
+        super().__init__(
+            f"Dokument-Verarbeitung fehlgeschlagen: {reason}",
+            error_code="DOCUMENT_PROCESSING_ERROR",
+            extra_data={"reason": reason}
+        )
+
 class MediaTestError(PatientError):
     """Raised when media test fails"""
     
@@ -106,6 +126,26 @@ class MediaTestError(PatientError):
             f"Media-Test für Meeting '{meeting_id}' fehlgeschlagen: {reason}",
             error_code="MEDIA_TEST_ERROR",
             extra_data={"meeting_id": meeting_id, "reason": reason}
+        )
+
+class MediaTestNotFoundError(PatientError):
+    """Raised when a media test cannot be found"""
+    
+    def __init__(self, test_id: str):
+        super().__init__(
+            f"Media-Test mit ID '{test_id}' nicht gefunden",
+            error_code="MEDIA_TEST_NOT_FOUND",
+            extra_data={"test_id": test_id}
+        )
+
+class MediaTestProcessingError(PatientError):
+    """Raised when media test processing fails"""
+    
+    def __init__(self, reason: str):
+        super().__init__(
+            f"Media-Test-Verarbeitung fehlgeschlagen: {reason}",
+            error_code="MEDIA_TEST_PROCESSING_ERROR",
+            extra_data={"reason": reason}
         )
 
 class ConfigurationError(HeyDokException):
