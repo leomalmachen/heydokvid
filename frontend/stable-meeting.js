@@ -247,108 +247,155 @@ async function connectToMeeting(meetingData) {
 
 // STABLE: Enable local media with error handling
 async function enableLocalMedia() {
+    console.log('🎥 ENABLING LOCAL MEDIA - LiveKit Primary Method');
+    
+    if (!room || !room.localParticipant) {
+        console.error('❌ No room or local participant available');
+        return;
+    }
+    
+    console.log('🎯 Room state:', room.state);
+    console.log('🎯 Local participant state:', room.localParticipant.identity);
+    
     try {
-        console.log('🎥 DIRECT CAMERA ACCESS - Starting...');
+        // STEP 1: Wait for proper connection state
+        if (room.state !== 'connected') {
+            console.log('⏳ Waiting for room to be fully connected...');
+            await new Promise((resolve) => {
+                const checkConnection = () => {
+                    if (room.state === 'connected') {
+                        resolve();
+                    } else {
+                        setTimeout(checkConnection, 100);
+                    }
+                };
+                checkConnection();
+            });
+        }
         
-        // NUCLEAR OPTION: Direct browser media access first
-        console.log('🔥 NUCLEAR: Getting camera directly from browser...');
+        console.log('✅ Room is connected, proceeding with media enablement...');
         
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-            video: true, 
-            audio: true 
-        });
-        
-        console.log('✅ NUCLEAR: Got media stream directly!', stream);
-        
-        // Find and attach video immediately
-        const localVideo = document.querySelector('.participant-container.local video');
-        if (localVideo) {
-            localVideo.srcObject = stream;
-            localVideo.muted = true;
-            localVideo.play();
-            console.log('✅ NUCLEAR: Video attached directly to element');
-        } else {
-            // Create video element if it doesn't exist
-            console.log('🎯 NUCLEAR: Creating video element...');
-            const localContainer = document.querySelector('.participant-container.local');
-            if (localContainer) {
-                const video = document.createElement('video');
-                video.srcObject = stream;
-                video.autoplay = true;
-                video.playsInline = true;
-                video.muted = true;
-                video.style.cssText = `
-                    width: 100%;
-                    height: 100%;
-                    object-fit: cover;
-                    background: #000;
-                `;
+        // STEP 2: Enable camera first (LiveKit primary method)
+        if (videoEnabled) {
+            console.log('🎬 Enabling camera via LiveKit...');
+            try {
+                await room.localParticipant.setCameraEnabled(true);
+                console.log('✅ LiveKit camera enabled successfully!');
                 
-                // Remove placeholder
-                const placeholder = localContainer.querySelector('.video-placeholder');
-                if (placeholder) {
-                    placeholder.remove();
+                // Wait a moment for track to be published
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                // Check if video track was published
+                const videoTrack = room.localParticipant.getTrackPublication('camera')?.track;
+                if (videoTrack) {
+                    console.log('✅ Video track found and published');
+                    
+                    // Attach to local video element
+                    const localVideo = document.querySelector('.participant-container.local video');
+                    if (localVideo) {
+                        videoTrack.attach(localVideo);
+                        localVideo.muted = true;
+                        localVideo.play().catch(e => console.log('Video play caught:', e));
+                        console.log('✅ Video track attached to local element');
+                        
+                        // Remove placeholder
+                        const placeholder = localVideo.closest('.participant-container').querySelector('.video-placeholder');
+                        if (placeholder) {
+                            placeholder.remove();
+                            console.log('✅ Video placeholder removed');
+                        }
+                    }
+                } else {
+                    console.warn('⚠️ Video track not found after enabling camera');
                 }
                 
-                localContainer.appendChild(video);
-                console.log('✅ NUCLEAR: Video element created and stream attached');
+            } catch (cameraError) {
+                console.error('❌ LiveKit camera enable failed:', cameraError);
+                throw cameraError;
             }
         }
         
-        // Now try to also enable in LiveKit (secondary)
-        if (room && room.localParticipant) {
+        // STEP 3: Enable microphone (LiveKit method)
+        if (audioEnabled) {
+            console.log('🎤 Enabling microphone via LiveKit...');
             try {
-                console.log('🔄 Trying LiveKit as backup...');
-                await room.localParticipant.setCameraEnabled(true);
                 await room.localParticipant.setMicrophoneEnabled(true);
-                console.log('✅ LiveKit also enabled');
-            } catch (livekitError) {
-                console.log('⚠️ LiveKit failed, but direct camera works:', livekitError.message);
+                console.log('✅ LiveKit microphone enabled successfully!');
+            } catch (micError) {
+                console.error('❌ LiveKit microphone enable failed:', micError);
+                // Don't throw here, camera is more important
             }
         }
         
-        // Remove loading state immediately
+        // STEP 4: Update UI state
+        console.log('🎯 Updating UI state...');
+        
+        // Remove loading state
         const loadingState = document.getElementById('loadingState');
         if (loadingState) {
             loadingState.remove();
-            console.log('✅ NUCLEAR: Loading state removed');
+            console.log('✅ Loading state removed');
         }
         
-        console.log('🎉 NUCLEAR SUCCESS: Camera should be working now!');
+        // Update button states
+        const toggleVideo = document.getElementById('toggleVideo');
+        const toggleMic = document.getElementById('toggleMic');
+        if (toggleVideo) {
+            toggleVideo.classList.toggle('active', videoEnabled);
+        }
+        if (toggleMic) {
+            toggleMic.classList.toggle('active', audioEnabled);
+        }
+        
+        console.log('🎉 LOCAL MEDIA SETUP COMPLETED SUCCESSFULLY!');
         
     } catch (error) {
-        console.error('❌ NUCLEAR FAILED:', error);
+        console.error('❌ LOCAL MEDIA SETUP FAILED:', error);
         
-        // Last resort: Show error and instructions
+        // Show user-friendly error
         const localContainer = document.querySelector('.participant-container.local');
         if (localContainer) {
-            localContainer.innerHTML = `
-                <div style="color: white; text-align: center; padding: 20px;">
-                    <h3>🚨 Kamera-Problem</h3>
-                    <p>Fehler: ${error.message}</p>
-                    <p><strong>Lösung:</strong></p>
-                    <ol style="text-align: left; display: inline-block;">
-                        <li>Klicken Sie auf das 🔒 Symbol in der Adressleiste</li>
-                        <li>Wählen Sie "Zulassen" für Kamera</li>
-                        <li>Laden Sie die Seite neu (F5)</li>
-                    </ol>
-                    <button onclick="location.reload()" style="
-                        margin-top: 15px;
-                        padding: 10px 20px;
-                        background: #4285f4;
-                        color: white;
-                        border: none;
-                        border-radius: 4px;
-                        cursor: pointer;
-                    ">🔄 Seite neu laden</button>
-                </div>
-            `;
+            const placeholder = localContainer.querySelector('.video-placeholder') || 
+                               localContainer.querySelector('div[style*="text-align: center"]');
+            
+            if (placeholder) {
+                placeholder.innerHTML = `
+                    <div style="color: white; text-align: center; padding: 20px;">
+                        <div style="font-size: 32px; margin-bottom: 10px;">📷❌</div>
+                        <div style="font-weight: bold; margin-bottom: 10px;">Kamera Problem</div>
+                        <div style="font-size: 14px; margin-bottom: 15px;">${error.message}</div>
+                        <div style="font-size: 12px; color: #ccc; margin-bottom: 15px;">
+                            Klicken Sie auf das 🔒 in der Adressleiste<br>
+                            und erlauben Sie Kamera-Zugriff
+                        </div>
+                        <button onclick="location.reload()" style="
+                            padding: 8px 16px;
+                            background: #4285f4;
+                            color: white;
+                            border: none;
+                            border-radius: 4px;
+                            cursor: pointer;
+                            font-size: 12px;
+                        ">Seite neu laden</button>
+                    </div>
+                `;
+            }
         }
         
         // Remove loading state even on error
         const loadingState = document.getElementById('loadingState');
         if (loadingState) {
             loadingState.remove();
+        }
+        
+        // DOCTOR FIX: Show help for doctors
+        if (userRole === 'doctor') {
+            const helpButton = document.getElementById('cameraHelp');
+            if (helpButton) {
+                helpButton.style.display = 'block';
+                helpButton.style.background = '#ea4335';
+                helpButton.style.animation = 'pulse 2s infinite';
+            }
         }
     }
 }
