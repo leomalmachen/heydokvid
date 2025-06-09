@@ -301,8 +301,22 @@ async function enableLocalMedia() {
         // Try to enable media step by step
         if (audioEnabled && videoEnabled) {
             console.log('🎬 Enabling camera and microphone...');
-            await room.localParticipant.enableCameraAndMicrophone();
-            console.log('✅ Camera and microphone enabled successfully');
+            
+            // CRITICAL FIX: Use individual methods instead of combined method
+            try {
+                await room.localParticipant.setCameraEnabled(true);
+                console.log('✅ Camera enabled successfully');
+            } catch (cameraError) {
+                console.error('❌ Camera enable failed:', cameraError);
+            }
+            
+            try {
+                await room.localParticipant.setMicrophoneEnabled(true);
+                console.log('✅ Microphone enabled successfully');
+            } catch (micError) {
+                console.error('❌ Microphone enable failed:', micError);
+            }
+            
         } else if (audioEnabled) {
             console.log('🎤 Enabling microphone only...');
             await room.localParticipant.setMicrophoneEnabled(true);
