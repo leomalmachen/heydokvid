@@ -194,4 +194,14 @@ window.getLiveKitSource = function(sourceType) {
     }
 };
 
+// COMPATIBILITY FIX: Add missing updateParticipantGrid function
+window.updateParticipantGrid = function() {
+    console.log('🔄 updateParticipantGrid called - redirecting to updateConsistentGrid');
+    if (typeof window.updateConsistentGrid === 'function') {
+        window.updateConsistentGrid();
+    } else {
+        console.warn('⚠️ updateConsistentGrid also not available');
+    }
+};
+
 console.log('✅ Meeting initialization fix applied!'); 

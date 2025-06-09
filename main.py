@@ -1195,18 +1195,16 @@ async def get_simple_meeting_js(request: Request):
         return Response("// Simple meeting JS file not found", status_code=404, media_type="application/javascript")
 
 @app.get("/frontend/meeting-fix.js")
-async def get_meeting_fix_js(request: Request):
-    logger.info(f"Incoming request: GET /frontend/meeting-fix.js")
+async def get_meeting_fix_js():
+    """Serve the meeting fix JavaScript file"""
     try:
         with open("frontend/meeting-fix.js", "r", encoding="utf-8") as f:
             content = f.read()
         
-        logger.info(f"Request completed: GET /frontend/meeting-fix.js - 200 - {time.time() - request.state.start_time:.3f}s")
         return Response(content, media_type="application/javascript")
     
     except FileNotFoundError:
         logger.error("Meeting fix JS file not found")
-        logger.info(f"Request completed: GET /frontend/meeting-fix.js - 404 - {time.time() - request.state.start_time:.3f}s")
         return Response("// Meeting fix JS file not found", status_code=404, media_type="application/javascript")
 
 @app.get("/api/meetings/{meeting_id}/info")
