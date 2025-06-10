@@ -1323,8 +1323,10 @@ async def upload_patient_document(
     """Upload patient document (Krankenkassenschein etc.) before joining meeting"""
     
     # Validate meeting exists
-    meeting = meeting_service.get_meeting(meeting_id)
-    if not meeting:
+    try:
+        meeting = meeting_service.get_meeting(meeting_id)
+    except Exception as e:
+        logger.error(f"Meeting {meeting_id} not found for document upload. Error: {e}")
         raise HTTPException(status_code=404, detail="Meeting not found")
     
     # Validate file size (10MB limit)
@@ -1412,8 +1414,10 @@ async def submit_media_test(
     """Submit patient media test results"""
     
     # Validate meeting exists
-    meeting = meeting_service.get_meeting(meeting_id)
-    if not meeting:
+    try:
+        meeting = meeting_service.get_meeting(meeting_id)
+    except Exception as e:
+        logger.error(f"Meeting {meeting_id} not found for media test. Error: {e}")
         raise HTTPException(status_code=404, detail="Meeting not found")
     
     if request.meeting_id != meeting_id:
@@ -1589,10 +1593,10 @@ async def patient_join_meeting(
 async def get_meeting_status(meeting_id: str, meeting_service: MeetingService = Depends(get_meeting_service), document_service: DocumentService = Depends(get_document_service)):
     """Get detailed meeting status for role-based UI updates"""
     # Check if meeting exists, create if not (handles Heroku memory loss)
-    meeting = meeting_service.get_meeting(meeting_id)
-    
-    if not meeting:
-        logger.info(f"Meeting {meeting_id} not found in database, recreating entry for status request")
+    try:
+        meeting = meeting_service.get_meeting(meeting_id)
+    except Exception as e:
+        logger.info(f"Meeting {meeting_id} not found in database, recreating entry for status request. Error: {e}")
         meeting = meeting_service.create_meeting(
             host_name="Doctor",  # Default doctor name
             host_role="doctor"
@@ -1633,9 +1637,10 @@ async def doctor_join_meeting(
     logger.info(f"🩺 DOCTOR JOIN REQUEST: meeting_id={meeting_id}, participant_name={request.participant_name}, role={request.participant_role}")
     
     # Validate meeting exists using database service
-    meeting = meeting_service.get_meeting(meeting_id)
-    if not meeting:
-        logger.error(f"❌ Meeting {meeting_id} not found for doctor join")
+    try:
+        meeting = meeting_service.get_meeting(meeting_id)
+    except Exception as e:
+        logger.error(f"❌ Meeting {meeting_id} not found for doctor join. Error: {e}")
         raise HTTPException(status_code=404, detail="Meeting not found")
     
     logger.info(f"🩺 Meeting data found: doctor_name={meeting.host_name}")
@@ -1719,8 +1724,10 @@ async def doctor_dashboard(meeting_id: str, meeting_service: MeetingService = De
     - 🟢 Im Meeting (bereit für Sprechstunde)
     """
     # Check if meeting exists using database service
-    meeting = meeting_service.get_meeting(meeting_id)
-    if not meeting:
+    try:
+        meeting = meeting_service.get_meeting(meeting_id)
+    except Exception as e:
+        logger.error(f"Meeting {meeting_id} not found for doctor dashboard. Error: {e}")
         raise HTTPException(status_code=404, detail="Meeting nicht gefunden")
     
     # Read dashboard template
