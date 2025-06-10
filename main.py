@@ -1468,9 +1468,11 @@ async def patient_join_meeting(
     """Patient join meeting with document and media test validation"""
     
     # Validate meeting exists - create simple fallback if not found  
-    meeting = meeting_service.get_meeting(meeting_id)
-    if not meeting:
-        logger.info(f"Meeting {meeting_id} not found, creating basic fallback meeting")
+    try:
+        meeting = meeting_service.get_meeting(meeting_id)
+        actual_meeting_id = meeting_id
+    except Exception as e:
+        logger.info(f"Meeting {meeting_id} not found, creating basic fallback meeting. Error: {e}")
         
         # Simply create a new meeting - patient join will work regardless
         meeting = meeting_service.create_meeting(
@@ -1481,8 +1483,6 @@ async def patient_join_meeting(
         
         # Use the created meeting_id for the rest of the process
         actual_meeting_id = meeting.meeting_id
-    else:
-        actual_meeting_id = meeting_id
     
     # Check if patient already joined
     if meeting.patient_joined:
