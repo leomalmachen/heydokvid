@@ -14,10 +14,9 @@ import structlog
 from urllib.parse import quote_plus
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
-
 from fastapi import FastAPI, HTTPException, Depends, Request, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, Response, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 import uvicorn
@@ -137,10 +136,7 @@ if app_url and app_url.startswith('https://'):
         """Redirect HTTP to HTTPS in production"""
         if request.url.scheme == "http":
             url = request.url.replace(scheme="https")
-            return JSONResponse(
-                status_code=301,
-                headers={"Location": str(url)}
-            )
+            return RedirectResponse(url=str(url), status_code=301)
         return await call_next(request)
 
 app.add_middleware(
@@ -714,26 +710,26 @@ async def meeting_room(meeting_id: str, role: Optional[str] = None, meeting_serv
         # For patient join, we'll use the created meeting regardless of ID mismatch
         # This handles Heroku database resets gracefully
     
-    # CRITICAL FIX: ALWAYS redirect patients to setup unless they have explicit permission
-    # Only allow direct access if:
-    # 1. role=doctor (doctor direct access)
-    # 2. role=patient AND setup completed (patient after setup)
-    
+    # IMPROVED LOGIC: Handle role-based access with better patient setup validation
     if role == "doctor":
         # Doctor can always access directly
         user_role = "doctor"
         logger.info(f"Doctor direct access granted for meeting {meeting_id}")
     elif role == "patient":
-        # Patient with role=patient parameter - check if setup completed
+        # Patient with role=patient parameter - this usually means they completed setup
+        # Check setup status but be more permissive for patients coming from the API
         patient_setup_completed = meeting.patient_setup_completed
         media_test_completed = meeting.media_test_completed
+        has_patient_name = meeting.patient_name is not None
         
-        if patient_setup_completed and media_test_completed:
+        # If patient has setup completed OR patient has been through the API flow
+        # (indicated by patient_name being set), allow access
+        if (patient_setup_completed and media_test_completed) or has_patient_name:
             user_role = "patient"
-            logger.info(f"Patient access granted after setup completion for meeting {meeting_id}")
+            logger.info(f"Patient access granted - setup_completed: {patient_setup_completed}, media_test: {media_test_completed}, has_name: {has_patient_name}")
         else:
-            # Even with role=patient, if setup not completed, redirect to setup
-            logger.info(f"Patient with role=patient but setup incomplete, redirecting to setup for meeting {meeting_id}")
+            # Setup genuinely not complete, redirect to setup
+            logger.info(f"Patient setup incomplete, redirecting to setup for meeting {meeting_id}")
             setup_url = f"{get_base_url()}/patient-setup?meeting={meeting_id}"
             return HTMLResponse(
                 content=f"""
