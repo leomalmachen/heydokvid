@@ -1275,7 +1275,7 @@
             try {
                 const video = document.getElementById(`${side}SideCamera`);
                 if (video.readyState !== video.HAVE_ENOUGH_DATA) {
-                    return { cardDetected: false, side: side };
+                    return { cardDetected: false, hasCardLikeObject: false, side: side };
                 }
 
                 const canvas = side === 'front' ? frontDetectionCanvas : backDetectionCanvas;
@@ -1305,6 +1305,7 @@
                 cv.findContours(edges, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
                 
                 let cardDetected = false;
+                let hasCardLikeObject = false;
                 let bestContour = null;
                 let maxArea = 0;
                 
@@ -1314,7 +1315,7 @@
                     let area = cv.contourArea(contour);
                     
                     // Filter by minimum size (card should be reasonably large)
-                    if (area < 8000) continue; // Increased from 2000 to 8000 - cards need to be large enough to be readable
+                    if (area < 5000) continue; // Lower threshold to detect card-like objects earlier
                     
                     // Approximate contour to polygon
                     let epsilon = 0.02 * cv.arcLength(contour, true);
@@ -1322,23 +1323,27 @@
                     cv.approxPolyDP(contour, approx, epsilon, true);
                     
                     // Check if it's roughly rectangular (4 corners) with proper aspect ratio
-                    if (approx.rows === 4 && area > maxArea) {
-                        // Additional aspect ratio check for card-like proportions
-                        let rect = cv.boundingRect(contour);
-                        let aspectRatio = rect.width / rect.height;
+                    if (approx.rows === 4) {
+                        hasCardLikeObject = true; // Found a rectangular object
                         
-                        // German insurance cards have roughly 1.6:1 aspect ratio (credit card format)
-                        if (aspectRatio > 1.3 && aspectRatio < 2.0) {
-                            maxArea = area;
-                            bestContour = contour.clone();
-                            cardDetected = true;
+                        if (area > maxArea) {
+                            // Additional aspect ratio check for card-like proportions
+                            let rect = cv.boundingRect(contour);
+                            let aspectRatio = rect.width / rect.height;
+                            
+                            // German insurance cards have roughly 1.6:1 aspect ratio (credit card format)
+                            if (aspectRatio > 1.3 && aspectRatio < 2.0 && area > 8000) { // Higher area threshold for actual detection
+                                maxArea = area;
+                                bestContour = contour.clone();
+                                cardDetected = true;
+                            }
                         }
                     }
                     
                     approx.delete();
                 }
                 
-                let result = { cardDetected: false, side: side };
+                let result = { cardDetected: false, hasCardLikeObject: hasCardLikeObject, side: side };
                 
                 if (cardDetected && bestContour) {
                     // Additional quality checks
@@ -1352,6 +1357,7 @@
                         if (stableFrameCount >= 5) { // Increased from 2 to 5 stable frames for more reliable detection
                             result = {
                                 cardDetected: true,
+                                hasCardLikeObject: true,
                                 isInsuranceCard: cardType.isInsuranceCard,
                                 cardType: cardType.type,
                                 confidence: cardType.confidence,
@@ -1365,6 +1371,7 @@
                         stableFrameCount = 0; // Reset if quality is poor
                         result = {
                             cardDetected: true,
+                            hasCardLikeObject: true,
                             isInsuranceCard: false,
                             cardType: 'poor_quality',
                             confidence: 0.3,
@@ -1522,6 +1529,7 @@
                 
                 return {
                     cardDetected: true,
+                    hasCardLikeObject: true,
                     isInsuranceCard: detectedCard.isInsuranceCard,
                     cardType: detectedCard.type,
                     confidence: detectedCard.confidence,
@@ -1531,7 +1539,7 @@
             
             // REMOVE instant detection - it causes false positives
             // Only return no detection to let real OpenCV detection work
-            return { cardDetected: false, side: side };
+            return { cardDetected: false, hasCardLikeObject: false, side: side };
         }
 
         // Initialize
@@ -2029,7 +2037,7 @@
                 await setupCameraForSide('front');
                 
                 // Update status
-                updateScanStatus('front', 'ready', 'Bereit für Vorderseite-Scan');
+                updateScanStatus('front', 'ready', 'Halten Sie Ihre Krankenkassenkarte (Vorderseite) in den Rahmen');
                 
                 // Start automatic detection
                 startAutomaticDetection('front');
@@ -2064,7 +2072,7 @@
                 }
                 
                 // Update status
-                updateScanStatus('back', 'ready', 'Bereit für Rückseite-Scan');
+                updateScanStatus('back', 'ready', 'Halten Sie Ihre Krankenkassenkarte (Rückseite) in den Rahmen');
                 
                 // Start automatic detection for back side
                 startAutomaticDetection('back');
@@ -2223,14 +2231,13 @@
             detectionAttempts = 0;
             currentScanStep = side;
             
-            updateScanStatus(side, 'detecting', `Suche nach ${side === 'front' ? 'Vorderseite' : 'Rückseite'}...`);
+            updateScanStatus(side, 'ready', `Zeigen Sie Ihre Krankenkassenkarte (${side === 'front' ? 'Vorderseite' : 'Rückseite'}) vor die Kamera`);
             updateCardFrame(side, 'detecting');
             
-            // Start detection loop
-            detectionInterval = setInterval(() => processVideoFrame(side), 200); // Reduced from 500ms to 200ms
+            // Start detection loop - but only look for card presence, don't count failures yet
+            detectionInterval = setInterval(() => processVideoFrame(side), 200);
             
-            // REMOVE EMERGENCY FALLBACK - Let real detection work without fake triggering
-            console.log(`🔍 Started patient automatic detection for ${side} side - waiting for real card`);
+            console.log(`🔍 Started passive detection for ${side} side - waiting for card to appear`);
         }
 
         function processVideoFrame(side) {
@@ -2253,13 +2260,19 @@
                     if (detectionResult.isInsuranceCard) {
                         onCardDetected(side, detectionResult);
                     } else {
+                        // Wrong card type - show specific error
                         showCardTypeError(side, detectionResult.cardType);
                     }
                 } else {
-                    detectionAttempts++;
-                    if (detectionAttempts >= maxDetectionAttempts) {
-                        onDetectionTimeout(side);
+                    // CHANGED: Only count attempts if we detected something that could be a card but isn't valid
+                    // Don't count attempts for empty frames or faces
+                    if (detectionResult.hasCardLikeObject) {
+                        detectionAttempts++;
+                        if (detectionAttempts >= maxDetectionAttempts) {
+                            onDetectionTimeout(side);
+                        }
                     }
+                    // If no card-like object at all, just continue waiting silently
                 }
                         
             } catch (error) {
