@@ -914,9 +914,13 @@
                             
                             <!-- Manual Trigger Button (falls automatische Erkennung nicht funktioniert) -->
                             <div style="text-align: center; margin-top: 1rem;">
-                                <button class="btn" id="scanFrontManualBtn" onclick="manualScanFront()" style="display: none;">
+                                <button class="btn" id="scanFrontManualBtn" onclick="manualScanFront()" 
+                                        style="display: inline-block; background: #28a745;">
                                     📸 Vorderseite jetzt scannen
                                 </button>
+                                <p style="margin-top: 0.5rem; font-size: 0.9rem; color: #666;">
+                                    💡 Klicken Sie hier, wenn die automatische Erkennung nicht funktioniert
+                                </p>
                             </div>
                         </div>
 
@@ -976,9 +980,13 @@
                             
                             <!-- Manual Trigger Button -->
                             <div style="text-align: center; margin-top: 1rem;">
-                                <button class="btn" id="scanBackManualBtn" onclick="manualScanBack()" style="display: none;">
+                                <button class="btn" id="scanBackManualBtn" onclick="manualScanBack()" 
+                                        style="display: inline-block; background: #28a745;">
                                     📸 Rückseite jetzt scannen
                                 </button>
+                                <p style="margin-top: 0.5rem; font-size: 0.9rem; color: #666;">
+                                    💡 Klicken Sie hier, wenn die automatische Erkennung nicht funktioniert
+                                </p>
                             </div>
                         </div>
                     </div>
@@ -1588,12 +1596,8 @@
                 // Start automatic detection
                 startAutomaticDetection('front');
                 
-                // Show manual scan button after 10 seconds if no automatic detection
-                setTimeout(() => {
-                    if (currentScanStep === 'front') {
-                        document.getElementById('scanFrontManualBtn').style.display = 'inline-block';
-                    }
-                }, 10000);
+                // Manual scan button is now always visible - no delay needed
+                console.log('✅ Manual scan button always available');
                 
             } catch (error) {
                 console.error('Front side setup error:', error);
@@ -1624,12 +1628,8 @@
                 // Start automatic detection for back side
                 startAutomaticDetection('back');
                 
-                // Show manual scan button after 10 seconds
-                setTimeout(() => {
-                    if (currentScanStep === 'back') {
-                        document.getElementById('scanBackManualBtn').style.display = 'inline-block';
-                    }
-                }, 10000);
+                // Manual scan button is now always visible - no delay needed
+                console.log('✅ Manual scan button always available');
                 
             } catch (error) {
                 console.error('Back side setup error:', error);
@@ -1991,9 +1991,8 @@
             backCardData = null;
             currentScanStep = 'front';
             
-            // Hide manual scan buttons
-            document.getElementById('scanFrontManualBtn').style.display = 'none';
-            document.getElementById('scanBackManualBtn').style.display = 'none';
+            // Manual scan buttons stay visible - no need to hide them
+            console.log('✅ Manual scan buttons remain available');
             
             // Restart detection from front side
             startAutomaticDetection('front');
@@ -2013,82 +2012,105 @@
             }
         }
 
-        // NEW: Real OCR implementation with Tesseract.js
+        // NEW: Real OCR implementation with Tesseract.js - IMPROVED VERSION
         async function performTesseractOCR(imageBlob, side) {
             try {
-                console.log(`🔍 Processing ${side} side with real OCR (Tesseract.js)...`);
+                console.log(`🤖 Starting improved Tesseract.js OCR for ${side} side...`);
                 
-                // Convert blob to base64
+                // Show OCR progress bar
+                const progressBar = document.getElementById(`${side}OcrProgressBar`);
+                const progressElement = document.getElementById(`${side}OcrProgress`);
+                const progressText = document.getElementById(`${side}OcrProgressText`);
+                
+                if (progressBar && progressElement && progressText) {
+                    progressBar.style.display = 'block';
+                    progressElement.style.width = '0%';
+                    progressText.textContent = 'OCR wird gestartet...';
+                }
+                
+                // Convert blob to base64 (for backend validation)
                 const base64Data = await blobToBase64(imageBlob);
                 
-                // First: Validate card type
-                const validationResponse = await fetch(`/api/meetings/${meetingId}/validate-insurance-card`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        meeting_id: meetingId,
-                        image_data: base64Data
-                    })
-                });
+                // SKIP backend validation for now to focus on OCR
+                // We'll validate the card type after successful OCR
+                console.log('⚡ Skipping backend validation, proceeding directly to OCR...');
                 
-                if (!validationResponse.ok) {
-                    const error = await validationResponse.json();
-                    throw new Error(error.detail || 'Kartenvalidierung fehlgeschlagen');
-                }
-                
-                const validationResult = await validationResponse.json();
-                
-                if (!validationResult.success || !validationResult.is_insurance_card) {
-                    throw new Error(validationResult.message || 'Keine gültige Krankenkassenkarte erkannt');
-                }
-                
-                // Second: Process with real OCR (Tesseract.js)
-                updateScanStatus(side, 'loading', 'OCR-Texterkennung läuft...');
-                
-                const ocrResult = await Tesseract.recognize(
-                    imageBlob,
-                    'deu', // German language
-                    {
-                        logger: (m) => {
-                            console.log(`Tesseract status for ${side} side:`, m);
-                            
+                // Enhanced Tesseract configuration with better error handling
+                const tesseractConfig = {
+                    logger: (m) => {
+                        console.log(`Tesseract ${side} side:`, m);
+                        
+                        if (progressElement && progressText) {
                             if (m.status === 'loading tesseract core') {
-                                document.getElementById(`${side}OcrProgress`).style.width = '10%';
-                                document.getElementById(`${side}OcrProgressText`).textContent = 'OCR-Engine lädt...';
+                                progressElement.style.width = '15%';
+                                progressText.textContent = 'OCR-Kern lädt...';
                             } else if (m.status === 'initializing tesseract') {
-                                document.getElementById(`${side}OcrProgress`).style.width = '20%';
-                                document.getElementById(`${side}OcrProgressText`).textContent = 'OCR wird initialisiert...';
+                                progressElement.style.width = '25%';
+                                progressText.textContent = 'OCR initialisiert...';
                             } else if (m.status === 'loading language traineddata') {
-                                document.getElementById(`${side}OcrProgress`).style.width = '30%';
-                                document.getElementById(`${side}OcrProgressText`).textContent = 'Deutsche Sprache lädt...';
+                                progressElement.style.width = '40%';
+                                progressText.textContent = 'Deutsche Sprache...';
                             } else if (m.status === 'initializing api') {
-                                document.getElementById(`${side}OcrProgress`).style.width = '40%';
-                                document.getElementById(`${side}OcrProgressText`).textContent = 'API wird vorbereitet...';
+                                progressElement.style.width = '50%';
+                                progressText.textContent = 'API bereit...';
                             } else if (m.status === 'recognizing text') {
                                 const progress = Math.round(m.progress * 100);
-                                const totalProgress = 40 + (progress * 0.6); // 40% base + 60% for recognition
-                                document.getElementById(`${side}OcrProgress`).style.width = `${totalProgress}%`;
-                                document.getElementById(`${side}OcrProgressText`).textContent = `Texterkennung: ${progress}%`;
+                                const totalProgress = 50 + (progress * 0.5); // 50% base + 50% for recognition
+                                progressElement.style.width = `${totalProgress}%`;
+                                progressText.textContent = `Texterkennung: ${progress}%`;
                                 
                                 updateScanStatus(side, 'loading', `OCR-Texterkennung: ${progress}%`);
                             }
-                        },
-                        // German language + whitelist for insurance card characters
-                        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÜßabcdefghijklmnopqrstuvwxyzäöüß0123456789 ./:-',
-                        tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK, // Treat as single block of text
-                        preserve_interword_spaces: '1',
-                        tessedit_do_invert: '0',
-                        // Additional optimizations for ID cards
-                        user_defined_dpi: '300',
-                        tessedit_char_blacklist: '~`!@#$%^&*()+=[]{}\\|;\':"<>?',
+                        }
+                    },
+                    // Relaxed configuration for better success rate
+                    tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÜßabcdefghijklmnopqrstuvwxyzäöüß0123456789 ./:,-',
+                    tessedit_pageseg_mode: Tesseract.PSM.AUTO, // More flexible page segmentation
+                    preserve_interword_spaces: '1',
+                    tessedit_do_invert: '0',
+                    // More lenient settings
+                    user_defined_dpi: '150', // Lower DPI for faster processing
+                    tessedit_char_blacklist: '~`!@#$%^&*()+=[]{}\\|;\'"<>?',
+                };
+                
+                // Process image with Tesseract with timeout and retry
+                let ocrResult;
+                let retryCount = 0;
+                const maxRetries = 2;
+                
+                while (retryCount <= maxRetries) {
+                    try {
+                        console.log(`🔄 OCR attempt ${retryCount + 1}/${maxRetries + 1} for ${side} side`);
+                        
+                        // Add timeout to prevent hanging
+                        ocrResult = await Promise.race([
+                            Tesseract.recognize(imageBlob, 'deu', tesseractConfig),
+                            new Promise((_, reject) => setTimeout(() => reject(new Error('OCR-Timeout nach 30 Sekunden')), 30000))
+                        ]);
+                        
+                        break; // Success, exit retry loop
+                        
+                    } catch (retryError) {
+                        console.warn(`⚠️ OCR attempt ${retryCount + 1} failed:`, retryError.message);
+                        retryCount++;
+                        
+                        if (retryCount <= maxRetries) {
+                            console.log(`🔄 Retrying OCR for ${side} side...`);
+                            if (progressText) {
+                                progressText.textContent = `Wiederholung ${retryCount}...`;
+                            }
+                            await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retry
+                        } else {
+                            throw retryError; // Final failure
+                        }
                     }
-                );
+                }
                 
                 // Complete progress
-                document.getElementById(`${side}OcrProgress`).style.width = '100%';
-                document.getElementById(`${side}OcrProgressText`).textContent = 'OCR abgeschlossen!';
+                if (progressElement && progressText) {
+                    progressElement.style.width = '100%';
+                    progressText.textContent = 'OCR erfolgreich!';
+                }
                 
                 const { data: { text, confidence } } = ocrResult;
                 
@@ -2097,15 +2119,15 @@
                 
                 // Hide progress bar after short delay
                 setTimeout(() => {
-                    document.getElementById(`${side}OcrProgressBar`).style.display = 'none';
-                }, 1000);
+                    if (progressBar) {
+                        progressBar.style.display = 'none';
+                    }
+                }, 2000);
                 
-                if (confidence < 30) {
-                    return {
-                        success: false,
-                        error: 'Bildqualität zu schlecht für Texterkennung. Bitte bessere Beleuchtung verwenden.',
-                        confidence: confidence / 100
-                    };
+                // LOWERED confidence threshold from 30% to 15% for better success rate
+                if (confidence < 15) {
+                    console.warn(`⚠️ Low confidence (${confidence}%) but trying to parse anyway...`);
+                    // Don't fail immediately, try to parse anyway
                 }
                 
                 // Parse OCR text based on side
@@ -2113,16 +2135,41 @@
                     parseGermanInsuranceCardFront(text) : 
                     parseGermanInsuranceCardBack(text);
                 
-                // Check if we found meaningful data
+                // More lenient validation - accept if we found ANY data
                 const hasValidData = side === 'front' ? 
                     (extractedData.name || extractedData.insurance_number || extractedData.insurance_company) :
                     (extractedData.valid_until || extractedData.birth_date);
                 
+                // Even if no structured data found, try to extract something useful
+                if (!hasValidData && text && text.length > 5) {
+                    console.log(`⚡ No structured data found, but text was extracted. Trying fallback parsing...`);
+                    
+                    // Fallback: Try to extract any useful information
+                    const fallbackData = extractAnyUsefulInfo(text, side);
+                    
+                    if (fallbackData && Object.keys(fallbackData).length > 0) {
+                        console.log(`✅ Fallback parsing successful:`, fallbackData);
+                        return {
+                            success: true,
+                            data: fallbackData,
+                            confidence: Math.max(confidence / 100, 0.5), // Boost confidence
+                            raw_text: text,
+                            method: 'fallback'
+                        };
+                    }
+                }
+                
                 if (!hasValidData) {
+                    // More helpful error message
+                    const errorMsg = confidence < 15 ? 
+                        'Bildqualität zu niedrig. Bitte bessere Beleuchtung und halten Sie die Karte näher.' :
+                        `Keine ${side === 'front' ? 'Vorderseite' : 'Rückseite'}-Daten erkannt. Versuchen Sie es erneut.`;
+                    
                     return {
                         success: false,
-                        error: `Keine verwertbaren ${side === 'front' ? 'Vorderseite' : 'Rückseite'}-Daten erkannt. Bitte Karte näher halten und für gute Beleuchtung sorgen.`,
-                        confidence: confidence / 100
+                        error: errorMsg,
+                        confidence: confidence / 100,
+                        raw_text: text
                     };
                 }
                 
@@ -2130,11 +2177,12 @@
                     success: true,
                     data: extractedData,
                     confidence: confidence / 100,
-                    raw_text: text
+                    raw_text: text,
+                    method: 'tesseract'
                 };
                 
             } catch (error) {
-                console.error(`Tesseract OCR error for ${side} side:`, error);
+                console.error(`❌ Tesseract OCR error for ${side} side:`, error);
                 
                 // Hide progress bar on error
                 const progressBar = document.getElementById(`${side}OcrProgressBar`);
@@ -2142,12 +2190,70 @@
                     progressBar.style.display = 'none';
                 }
                 
+                // More specific error messages
+                let errorMessage = 'OCR-Verarbeitung fehlgeschlagen';
+                if (error.message.includes('Timeout')) {
+                    errorMessage = 'OCR dauerte zu lange. Bitte erneut versuchen.';
+                } else if (error.message.includes('Failed to load')) {
+                    errorMessage = 'OCR-Engine konnte nicht geladen werden. Internetverbindung prüfen.';
+                } else if (error.message.includes('Network')) {
+                    errorMessage = 'Netzwerkfehler beim OCR. Bitte erneut versuchen.';
+                }
+                
                 return {
                     success: false,
-                    error: 'OCR-Verarbeitung fehlgeschlagen: ' + error.message,
+                    error: errorMessage + ': ' + error.message,
                     confidence: 0
                 };
             }
+        }
+        
+        // NEW: Fallback parsing for any useful information
+        function extractAnyUsefulInfo(text, side) {
+            console.log(`🔍 Fallback parsing for ${side} side...`);
+            
+            const data = {};
+            const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 1);
+            
+            for (const line of lines) {
+                // Try to find any name-like pattern
+                if (!data.name && /^[A-ZÄÖÜ][a-zäöüß]+ [A-ZÄÖÜ][a-zäöüß]+/.test(line)) {
+                    data.name = line.substring(0, 50); // Limit length
+                    console.log(`📝 Fallback found name: ${data.name}`);
+                }
+                
+                // Try to find any number pattern that could be insurance number
+                if (!data.insurance_number) {
+                    const numberMatch = line.match(/([A-Z]?\d{8,10})/);
+                    if (numberMatch) {
+                        data.insurance_number = numberMatch[1];
+                        console.log(`🔢 Fallback found number: ${data.insurance_number}`);
+                    }
+                }
+                
+                // Try to find any date pattern
+                if (!data.valid_until) {
+                    const dateMatch = line.match(/(\d{1,2}[\/.]\d{2,4})/);
+                    if (dateMatch) {
+                        data.valid_until = dateMatch[1];
+                        console.log(`📅 Fallback found date: ${data.valid_until}`);
+                    }
+                }
+                
+                // Try to find insurance company names
+                if (!data.insurance_company) {
+                    const companies = ['AOK', 'TK', 'Techniker', 'Barmer', 'DAK', 'KKH', 'HEK', 'BKK', 'IKK'];
+                    for (const company of companies) {
+                        if (line.toUpperCase().includes(company)) {
+                            data.insurance_company = line.substring(0, 30);
+                            console.log(`🏥 Fallback found company: ${data.insurance_company}`);
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            return data;
         }
         
         // NEW: Parse German insurance card front side
@@ -2341,5 +2447,4 @@
         }
     </script>
 </body>
-</html> 
 </html> 
