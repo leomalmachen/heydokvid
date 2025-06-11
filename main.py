@@ -661,9 +661,9 @@ async def join_meeting(
         raise HTTPException(status_code=404, detail="Meeting not found")
     
     # Check participant limit (simplified - max 2: doctor + patient)
+    # REMOVED STRICT LIMITATION: Allow join even if database thinks meeting is full
+    # This handles cases where database state is out of sync with actual LiveKit room
     participants_count = 1 + (1 if meeting.patient_joined else 0)
-    if participants_count >= 2:  # max 2 participants
-        raise HTTPException(status_code=429, detail="Meeting is full")
     
     participant_name = request.participant_name.strip()
     

@@ -703,17 +703,24 @@ async function initializeStableMeeting() {
             };
             
         } else {
-            // Patient flow (existing logic)
-            console.log('👤 Patient joining - requesting name');
-            participantName = sessionStorage.getItem('participantName') || 
-                              prompt('Ihr Name:') || 'Patient';
+            // Patient flow - FIX: Use the working join-patient API
+            console.log('👤 Patient joining via join-patient API');
             
-            sessionStorage.setItem('participantName', participantName);
+            // Try to get patient name from sessionStorage first (from patient setup)
+            participantName = sessionStorage.getItem('participantName');
             
-            apiEndpoint = `/api/meetings/${meetingId}/join`;
+            if (!participantName) {
+                // Fallback for direct patient join
+                participantName = prompt('Ihr Name:') || 'Patient';
+                sessionStorage.setItem('participantName', participantName);
+            }
+            
+            // Use the working join-patient endpoint (not the old join endpoint)
+            apiEndpoint = `/api/meetings/${meetingId}/join-patient`;
             requestBody = {
-                participant_name: participantName,
-                participant_role: 'patient'
+                patient_name: participantName,
+                document_id: sessionStorage.getItem('documentId') || null,
+                media_test_id: sessionStorage.getItem('mediaTestId') || null
             };
         }
         
