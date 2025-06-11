@@ -9,8 +9,11 @@ from datetime import datetime
 import logging
 import io
 import base64
-from PIL import Image
+from PIL import Image, ImageEnhance, ImageFilter
 import numpy as np
+import cv2
+import pytesseract
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -210,41 +213,122 @@ class InsuranceCardService:
     
     def _process_with_ocr(self, image_data: bytes) -> Dict[str, Any]:
         """
-        Process image with OCR
-        In production: integrate Tesseract or Google Vision API
+        Process image with OCR using pytesseract with image preprocessing
         """
         try:
-            # Simulate OCR processing
-            # In production: use pytesseract or Google Vision API
+            # Load image from bytes
+            image = Image.open(io.BytesIO(image_data))
             
-            # Mock extracted text for demonstration
-            mock_text = """
-            Krankenversichertenkarte
-            Max Mustermann
-            A123456789
-            Geb.: 01.01.1980
-            AOK Bayern
-            Gültig bis: 12/2025
-            """
+            # Preprocess image for better OCR
+            preprocessed_image = self._preprocess_for_ocr(image)
             
-            # Extract structured data from text
-            structured_data = self._parse_ocr_text(mock_text)
+            # Configure Tesseract for German insurance cards
+            custom_config = r'--oem 3 --psm 6 -l deu'
+            
+            # Extract text using pytesseract
+            try:
+                raw_text = pytesseract.image_to_string(
+                    preprocessed_image, 
+                    config=custom_config
+                )
+            except pytesseract.TesseractNotFoundError:
+                logger.error("Tesseract not found - OCR nicht verfügbar")
+                return {
+                    "success": False,
+                    "error": "OCR-Engine nicht installiert. Bitte Administrator kontaktieren."
+                }
+            except pytesseract.TesseractError as te:
+                logger.error(f"Tesseract error: {te}")
+                return {
+                    "success": False,
+                    "error": "OCR-Verarbeitung fehlgeschlagen. Bitte Bildqualität prüfen."
+                }
+            
+            logger.info(f"OCR extracted text: {raw_text[:200]}...")  # Log first 200 chars
+            
+            if not raw_text.strip():
+                return {
+                    "success": False,
+                    "error": "Kein Text erkannt - bitte Bildqualität prüfen"
+                }
+            
+            # Parse structured data from text
+            structured_data = self._parse_ocr_text(raw_text)
+            
+            # Calculate confidence based on extracted data quality
+            confidence = self._calculate_confidence(structured_data, raw_text)
             
             return {
                 "success": True,
                 "data": structured_data,
-                "raw_text": mock_text.strip()
+                "raw_text": raw_text.strip(),
+                "confidence": confidence
             }
             
         except Exception as e:
             logger.error(f"OCR processing error: {e}")
             return {
                 "success": False,
-                "error": str(e)
+                "error": f"OCR-Verarbeitung fehlgeschlagen: {str(e)}"
             }
     
+    def _preprocess_for_ocr(self, image: Image) -> Image:
+        """
+        Preprocess image for better OCR results
+        """
+        try:
+            # Convert to RGB if needed
+            if image.mode != 'RGB':
+                image = image.convert('RGB')
+            
+            # Resize if too small (insurance cards should be readable at decent size)
+            width, height = image.size
+            if width < 600:  # Minimum width for good OCR
+                scale_factor = 600 / width
+                new_width = int(width * scale_factor)
+                new_height = int(height * scale_factor)
+                image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+                logger.info(f"Resized image from {width}x{height} to {new_width}x{new_height}")
+            
+            # Convert to OpenCV format for advanced preprocessing
+            cv_image = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+            
+            # Apply denoising
+            cv_image = cv2.fastNlMeansDenoisingColored(cv_image, None, 10, 10, 7, 21)
+            
+            # Convert to grayscale for better text detection
+            gray = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
+            
+            # Apply adaptive thresholding for better text contrast
+            processed = cv2.adaptiveThreshold(
+                gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
+            )
+            
+            # Apply morphological operations to clean up text
+            kernel = np.ones((1, 1), np.uint8)
+            processed = cv2.morphologyEx(processed, cv2.MORPH_CLOSE, kernel)
+            
+            # Convert back to PIL Image
+            final_image = Image.fromarray(processed)
+            
+            # Additional PIL enhancements
+            # Sharpen text
+            final_image = final_image.filter(ImageFilter.SHARPEN)
+            
+            # Increase contrast
+            enhancer = ImageEnhance.Contrast(final_image)
+            final_image = enhancer.enhance(1.2)
+            
+            logger.info("Image preprocessing completed")
+            return final_image
+            
+        except Exception as e:
+            logger.error(f"Image preprocessing error: {e}")
+            # Return original image if preprocessing fails
+            return image
+    
     def _parse_ocr_text(self, text: str) -> Dict[str, str]:
-        """Parse OCR text to extract structured data"""
+        """Parse OCR text to extract structured data from German insurance cards"""
         try:
             lines = [line.strip() for line in text.split('\n') if line.strip()]
             
@@ -256,36 +340,150 @@ class InsuranceCardService:
                 "valid_until": ""
             }
             
-            # Simple parsing logic (in production: use regex patterns)
-            for line in lines:
-                line_lower = line.lower()
-                
-                # Name detection (usually after "Krankenversichertenkarte")
-                if len(line.split()) == 2 and not any(char.isdigit() for char in line):
-                    if not data["name"] and "kranken" not in line_lower:
-                        data["name"] = line
-                
-                # Insurance number (starts with letter, followed by numbers)
-                if len(line) >= 8 and line[0].isalpha() and line[1:].isdigit():
-                    data["insurance_number"] = line
-                
-                # Birth date
-                if "geb" in line_lower and ":" in line:
-                    data["birth_date"] = line.split(":")[-1].strip()
-                
-                # Valid until
-                if "gültig" in line_lower and "/" in line:
-                    data["valid_until"] = line.split(":")[-1].strip()
-                
-                # Insurance company (common names)
-                if any(company in line_lower for company in ["aok", "tk", "barmer", "dak", "kkh"]):
-                    data["insurance_company"] = line
+            logger.info(f"Parsing {len(lines)} lines of OCR text")
             
+            # Enhanced parsing logic for German insurance cards
+            for i, line in enumerate(lines):
+                line_clean = line.strip()
+                line_lower = line_clean.lower()
+                
+                # Skip header lines
+                if any(header in line_lower for header in [
+                    'krankenversichertenkarte', 'versichertenkarte', 'european health',
+                    'bundesrepublik', 'deutschland', 'germany'
+                ]):
+                    continue
+                
+                # Name detection - look for typical name patterns
+                if not data["name"] and self._is_likely_name(line_clean):
+                    data["name"] = line_clean
+                    logger.info(f"Found name: {data['name']}")
+                    continue
+                
+                # Insurance number - German format (letter + 9 digits or 10 digits)
+                if not data["insurance_number"]:
+                    ins_match = re.search(r'([A-Z]\d{9}|\d{10})', line_clean)
+                    if ins_match:
+                        data["insurance_number"] = ins_match.group(1)
+                        logger.info(f"Found insurance number: {data['insurance_number']}")
+                        continue
+                
+                # Birth date patterns
+                if not data["birth_date"]:
+                    birth_patterns = [
+                        r'(?:geb\.?:?\s*)?(\d{1,2}\.?\d{1,2}\.?\d{2,4})',
+                        r'(?:geboren:?\s*)?(\d{1,2}/\d{1,2}/\d{2,4})',
+                        r'(?:birth:?\s*)?(\d{1,2}-\d{1,2}-\d{2,4})'
+                    ]
+                    for pattern in birth_patterns:
+                        birth_match = re.search(pattern, line_clean, re.IGNORECASE)
+                        if birth_match:
+                            data["birth_date"] = birth_match.group(1)
+                            logger.info(f"Found birth date: {data['birth_date']}")
+                            break
+                
+                # Valid until patterns
+                if not data["valid_until"]:
+                    valid_patterns = [
+                        r'(?:gültig bis:?\s*)?(\d{1,2}/\d{2,4})',
+                        r'(?:bis:?\s*)?(\d{1,2}\.\d{2,4})',
+                        r'(?:valid until:?\s*)?(\d{1,2}-\d{2,4})'
+                    ]
+                    for pattern in valid_patterns:
+                        valid_match = re.search(pattern, line_clean, re.IGNORECASE)
+                        if valid_match:
+                            data["valid_until"] = valid_match.group(1)
+                            logger.info(f"Found valid until: {data['valid_until']}")
+                            break
+                
+                # Insurance company detection
+                if not data["insurance_company"] and self._is_likely_insurance_company(line_clean):
+                    data["insurance_company"] = line_clean
+                    logger.info(f"Found insurance company: {data['insurance_company']}")
+                    continue
+            
+            logger.info(f"OCR parsing result: {data}")
             return data
             
         except Exception as e:
             logger.error(f"OCR text parsing error: {e}")
-            return {}
+            return {
+                "name": "Parsing-Fehler",
+                "insurance_number": "Nicht erkannt",
+                "insurance_company": "Nicht erkannt",
+                "birth_date": "",
+                "valid_until": ""
+            }
+    
+    def _is_likely_name(self, text: str) -> bool:
+        """Check if text looks like a person's name"""
+        if not text or len(text) < 3 or len(text) > 50:
+            return False
+        
+        # Should contain only letters, spaces, common German characters, and hyphens
+        if not re.match(r'^[A-Za-zÄÖÜäöüß\s\-\.]+$', text):
+            return False
+        
+        words = text.split()
+        if len(words) < 2 or len(words) > 4:
+            return False
+        
+        # Each word should be reasonable name length
+        for word in words:
+            if len(word) < 2 or len(word) > 20:
+                return False
+        
+        # At least one word should start with uppercase (typical for names)
+        if not any(word[0].isupper() for word in words):
+            return False
+        
+        return True
+    
+    def _is_likely_insurance_company(self, text: str) -> bool:
+        """Check if text looks like an insurance company name"""
+        if not text or len(text) < 3 or len(text) > 50:
+            return False
+        
+        # Known German insurance company patterns
+        insurance_keywords = [
+            'aok', 'tk', 'techniker', 'barmer', 'dak', 'kkh', 'hek', 
+            'pronova', 'bkk', 'ikk', 'knappschaft', 'svlfg', 'continentale',
+            'debeka', 'signal', 'hansemerkur', 'bavaria', 'allianz'
+        ]
+        
+        text_lower = text.lower()
+        return any(keyword in text_lower for keyword in insurance_keywords)
+    
+    def _calculate_confidence(self, data: Dict[str, str], raw_text: str) -> float:
+        """Calculate confidence score based on extracted data quality"""
+        confidence = 0.0
+        
+        # Base confidence from text length and clarity
+        if len(raw_text.strip()) > 50:
+            confidence += 0.3
+        
+        # Confidence boost for each successfully extracted field
+        if data.get("name") and data["name"] != "Nicht erkannt":
+            confidence += 0.25
+        
+        if data.get("insurance_number") and data["insurance_number"] != "Nicht erkannt":
+            # Validate insurance number format
+            if re.match(r'^[A-Z]\d{9}$|^\d{10}$', data["insurance_number"]):
+                confidence += 0.25
+            else:
+                confidence += 0.1
+        
+        if data.get("insurance_company") and data["insurance_company"] != "Nicht erkannt":
+            confidence += 0.15
+        
+        if data.get("birth_date"):
+            confidence += 0.1
+        
+        if data.get("valid_until"):
+            confidence += 0.1
+        
+        # Cap confidence at reasonable maximum
+        return min(confidence, 0.95)
     
     def validate_extracted_data(self, data: Dict[str, str]) -> Dict[str, str]:
         """Validate and clean extracted data"""
