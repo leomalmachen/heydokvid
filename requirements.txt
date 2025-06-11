@@ -37,7 +37,7 @@ phonenumbers==8.13.26
 # Image Processing & OCR (NEW: for insurance card detection)
 Pillow==10.1.0
 numpy==1.24.4
-opencv-python==4.8.1.78
+opencv-python-headless==4.8.1.78
 # Real OCR processing for insurance cards
 pytesseract==0.3.10
 
