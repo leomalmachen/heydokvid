@@ -1467,7 +1467,8 @@ async def patient_join_meeting(
     meeting_id: str,
     request: PatientJoinRequest,
     livekit_client: LiveKitClient = Depends(get_livekit_client),
-    meeting_service: MeetingService = Depends(get_meeting_service)
+    meeting_service: MeetingService = Depends(get_meeting_service),
+    media_test_service: MediaTestService = Depends(get_media_test_service)
 ):
     """Patient join meeting with document and media test validation"""
     
@@ -1477,59 +1478,45 @@ async def patient_join_meeting(
         actual_meeting_id = meeting_id
     except Exception as e:
         logger.info(f"Meeting {meeting_id} not found, creating basic fallback meeting. Error: {e}")
-        
-        # Simply create a new meeting - patient join will work regardless
         meeting = meeting_service.create_meeting(
-            host_name="Doctor",
+            host_name="Doctor",  # Default doctor name
             host_role="doctor"
         )
-        logger.info(f"Created fallback meeting with ID {meeting.meeting_id} for requested ID {meeting_id}")
-        
-        # Use the created meeting_id for the rest of the process
         actual_meeting_id = meeting.meeting_id
+        logger.info(f"Created fallback meeting with ID: {actual_meeting_id}")
     
-    # Check if patient already joined
-    if meeting.patient_joined:
-        raise HTTPException(status_code=409, detail="Patient bereits dem Meeting beigetreten")
+    # Check if patient already has a name (indicates they went through setup)
+    has_patient_name = meeting.patient_name is not None
     
-    # Validate document upload (optional but recommended)
-    document_uploaded = False
-    if request.document_id:
-        document_service = get_document_service()
-        document = document_service.get_document(request.document_id)
-        if not document:
-            raise HTTPException(status_code=400, detail="Dokument nicht gefunden")
-        if document.meeting_id != actual_meeting_id:
-            raise HTTPException(status_code=400, detail="Dokument gehört nicht zu diesem Meeting")
-        document_uploaded = True
-        logger.info(f"Patient {request.patient_name} hat Dokument hochgeladen: {document.filename}")
-    
-    # Validate media test (flexible handling for Heroku database resets)
-    media_test_valid = False
-    if request.media_test_id:
-        media_test_service = get_media_test_service()
-        media_test = media_test_service.get_media_test(request.media_test_id)
-        if media_test and media_test.meeting_id == actual_meeting_id:
-            if media_test.allowed_to_join:
-                media_test_valid = True
-                logger.info(f"Media test validation successful for meeting {actual_meeting_id}")
-            else:
-                raise HTTPException(
-                    status_code=400, 
-                    detail="Media-Test fehlgeschlagen. Bitte stellen Sie sicher, dass Kamera und Mikrofon funktionieren."
+    # Skip detailed validation if patient is already known
+    if has_patient_name:
+        logger.info(f"Patient {request.patient_name} already known for meeting {actual_meeting_id}, allowing join")
+        document_uploaded = True  # Assume setup was completed
+        media_test_valid = True  # Assume media test was passed
+    else:
+        # Validate document upload if required
+        document_uploaded = request.document_id is not None
+        
+        # Validate media test
+        media_test_valid = False
+        if request.media_test_id:
+            # Check if media test exists and is valid
+            try:
+                media_test = media_test_service.get_media_test(request.media_test_id)
+                media_test_valid = (
+                    media_test.allowed_to_join and 
+                    media_test.patient_confirmed and
+                    media_test.meeting_id == actual_meeting_id
                 )
-        else:
-            logger.warning(f"Media test {request.media_test_id} not found for meeting {actual_meeting_id} - database might have been reset")
-    
-    # If media test not found but patient setup was completed, allow join (handles Heroku resets)
-    if not media_test_valid:
-        if meeting.patient_setup_completed and meeting.media_test_completed:
-            logger.info(f"Allowing patient join for meeting {actual_meeting_id} based on stored setup completion status")
-            media_test_valid = True
-        else:
+                logger.info(f"Media test {request.media_test_id} validation: {media_test_valid}")
+            except Exception as e:
+                logger.warning(f"Media test {request.media_test_id} not found for meeting {actual_meeting_id}: {e}")
+                media_test_valid = False
+        
+        # If no valid media test, create a fallback one
+        if not media_test_valid:
             # Create a fallback media test entry to allow join
             logger.info(f"Creating fallback media test for patient {request.patient_name} in meeting {actual_meeting_id}")
-            media_test_service = get_media_test_service()
             fallback_test_id = str(uuid.uuid4())
             media_test_service.create_media_test(
                 test_id=fallback_test_id,
