@@ -24,23 +24,23 @@ function createStableRoom() {
     console.log('🏗️ Creating STABLE LiveKit Room...');
     
     const room = new LiveKit.Room({
-        // STABILITY: Disable aggressive features
-        adaptiveStream: false,
-        dynacast: false,
+        // QUALITY: Enable adaptive features for better streaming
+        adaptiveStream: true,
+        dynacast: true,
         
         // CONSERVATIVE: Audio settings for maximum compatibility
         audioCaptureDefaults: {
             echoCancellation: true,
             noiseSuppression: true,
-            autoGainControl: false,  // Prevent audio suppression
-            sampleRate: 44100,       // Standard sample rate
-            channelCount: 1,         // Mono for stability
+            autoGainControl: true,       // Re-enable for better audio levels
+            sampleRate: 48000,           // High quality 48kHz sample rate
+            channelCount: 2,             // Stereo for better audio quality
         },
         
         // CONSERVATIVE: Video settings
         videoCaptureDefaults: {
-            resolution: { width: 640, height: 480 },  // Lower resolution
-            frameRate: 15,  // Lower frame rate
+            resolution: { width: 1280, height: 720 },  // HD quality (720p)
+            frameRate: 30,  // Smooth 30fps
         },
         
         // STABLE: Publish settings
@@ -48,8 +48,8 @@ function createStableRoom() {
             stopMicTrackOnMute: false,
             audioPreset: LiveKit.AudioPresets.speech,
             videoEncoding: {
-                maxBitrate: 300000,      // Lower bitrate for stability
-                maxFramerate: 15,
+                maxBitrate: 1500000,     // 1.5 Mbps for HD quality
+                maxFramerate: 30,        // Smooth 30fps
             }
         }
     });
