@@ -859,6 +859,18 @@
             font-weight: 600;
         }
 
+        /* Countdown indicator styles */
+        .countdown-indicator {
+            transition: all 0.3s ease;
+            animation: countdownPulse 1s ease-in-out infinite;
+        }
+
+        @keyframes countdownPulse {
+            0% { transform: scale(1); opacity: 0.9; }
+            50% { transform: scale(1.05); opacity: 1; }
+            100% { transform: scale(1); opacity: 0.9; }
+        }
+
         @media (max-width: 768px) {
             .media-test {
                 flex-direction: column;
@@ -2318,24 +2330,25 @@
             // Stop any automatic detection
             stopAutomaticDetection();
             
-            // Update status
-            updateScanStatus(side, 'detecting', 'Countdown gestartet - halten Sie die Karte bereit!');
+            // Update status and show countdown
+            updateScanStatus(side, 'detecting', `Positionieren Sie jetzt Ihre Karte im Rahmen - Scan in 5 Sekunden...`);
             updateCardFrame(side, 'detecting');
             
-            // Show countdown overlay
+            // Show small countdown indicator
             showCountdownOverlay(side);
             
-            // 5 second countdown
+            // 5 second countdown with status updates
             for (let i = 5; i > 0; i--) {
                 updateCountdownDisplay(side, i);
+                updateScanStatus(side, 'detecting', `Karte positionieren - Scan in ${i} Sekunde${i > 1 ? 'n' : ''}...`);
                 await new Promise(resolve => setTimeout(resolve, 1000));
             }
             
-            // Hide countdown and capture
+            // Hide countdown and start capture
             hideCountdownOverlay(side);
             
-            // Update status
-            updateScanStatus(side, 'loading', 'Karte wird gescannt...');
+            // Update status for capture
+            updateScanStatus(side, 'loading', 'Karte wird jetzt gescannt...');
             updateCardFrame(side, 'detected');
             
             // Capture and process - but use simplified approach
@@ -2587,49 +2600,56 @@
             }
         }
 
-        // NEW: Show countdown overlay
+        // NEW: Show countdown overlay - UPDATED: Smaller, non-blocking countdown
         function showCountdownOverlay(side) {
-            const overlay = document.createElement('div');
-            overlay.id = `${side}CountdownOverlay`;
-            overlay.style.cssText = `
+            // Create a small countdown indicator in the corner instead of full overlay
+            const countdownIndicator = document.createElement('div');
+            countdownIndicator.id = `${side}CountdownIndicator`;
+            countdownIndicator.className = 'countdown-indicator';
+            countdownIndicator.style.cssText = `
                 position: absolute;
-                top: 0;
-                left: 0;
-                right: 0;
-                bottom: 0;
-                background: rgba(0, 0, 0, 0.8);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                z-index: 100;
-                border-radius: 8px;
+                top: 10px;
+                right: 10px;
+                background: rgba(40, 167, 69, 0.9);
+                color: white;
+                padding: 8px 16px;
+                border-radius: 20px;
+                font-size: 1.2rem;
+                font-weight: bold;
+                z-index: 50;
+                border: 2px solid #28a745;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.3);
             `;
             
-            overlay.innerHTML = `
-                <div style="text-align: center; color: white;">
-                    <div id="${side}CountdownNumber" style="font-size: 4rem; font-weight: bold; margin-bottom: 1rem;">5</div>
-                    <div style="font-size: 1.2rem;">Karte bereithalten...</div>
+            countdownIndicator.innerHTML = `
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <div id="${side}CountdownNumber" style="font-size: 1.4rem;">5</div>
+                    <div style="font-size: 0.9rem;">Sek.</div>
                 </div>
             `;
             
             const scanner = document.querySelector(`#${side}SideStep .card-scanner`);
-            scanner.appendChild(overlay);
+            scanner.appendChild(countdownIndicator);
         }
 
-        // NEW: Update countdown display
+        // NEW: Update countdown display - UPDATED: Just update the number
         function updateCountdownDisplay(side, number) {
             const numberElement = document.getElementById(`${side}CountdownNumber`);
             if (numberElement) {
                 numberElement.textContent = number;
-                numberElement.style.animation = 'pulse 0.5s ease';
+                // Add a little pulse animation
+                numberElement.style.transform = 'scale(1.2)';
+                setTimeout(() => {
+                    if (numberElement) numberElement.style.transform = 'scale(1)';
+                }, 200);
             }
         }
 
-        // NEW: Hide countdown overlay
+        // NEW: Hide countdown indicator - UPDATED: Remove the small indicator
         function hideCountdownOverlay(side) {
-            const overlay = document.getElementById(`${side}CountdownOverlay`);
-            if (overlay) {
-                overlay.remove();
+            const indicator = document.getElementById(`${side}CountdownIndicator`);
+            if (indicator) {
+                indicator.remove();
             }
         }
 
