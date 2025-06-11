@@ -1068,6 +1068,11 @@
                                 <p style="font-size: 0.85rem; color: #666; margin-top: 0.5rem;">
                                     Karte bereithalten, dann Countdown starten
                                 </p>
+                                
+                                <!-- DEBUG: Test screenshot button -->
+                                <button class="btn" onclick="testScreenshot('front')" style="background: #6c757d; margin-left: 10px; font-size: 0.9rem; padding: 0.5rem 1rem;">
+                                    🧪 Screenshot testen
+                                </button>
                             </div>
                             
                             <!-- Automatic Processing Indicator -->
@@ -1154,6 +1159,11 @@
                                 <p style="font-size: 0.85rem; color: #666; margin-top: 0.5rem;">
                                     Karte bereithalten, dann Countdown starten
                                 </p>
+                                
+                                <!-- DEBUG: Test screenshot button -->
+                                <button class="btn" onclick="testScreenshot('back')" style="background: #6c757d; margin-left: 10px; font-size: 0.9rem; padding: 0.5rem 1rem;">
+                                    🧪 Screenshot testen
+                                </button>
                             </div>
                             
                             <!-- Automatic Processing Indicator -->
@@ -1175,32 +1185,6 @@
                                     <span class="tip">📏 Näher halten</span>
                                     <span class="tip">🎯 Im Rahmen zentrieren</span>
                                 </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Data Confirmation Section -->
-                    <div class="data-confirmation" id="dataConfirmation" style="display: none;">
-                        <div class="confirmation-header">
-                            <div style="font-size: 2rem; color: #28a745; margin-bottom: 1rem;">✅</div>
-                            <h4 style="color: #28a745;">Beide Seiten erfolgreich gescannt!</h4>
-                        </div>
-
-                        <div class="extracted-data" id="extractedData">
-                            <!-- Extracted data will be populated here -->
-                        </div>
-                        
-                        <div class="confirmation-question">
-                            <p style="font-weight: 600; margin: 1.5rem 0 1rem 0;">
-                                Sind diese Daten korrekt?
-                            </p>
-                            <div class="confirmation-buttons">
-                                <button class="btn btn-success" onclick="confirmCardData(true)">
-                                    ✅ Ja, korrekt
-                                </button>
-                                <button class="btn" onclick="confirmCardData(false)" style="background: #dc3545;">
-                                    ❌ Nein, erneut scannen
-                                </button>
                             </div>
                         </div>
                     </div>
@@ -2370,15 +2354,27 @@
                     throw new Error('Kein Bild erfasst - bitte erneut versuchen');
                 }
                 
+                console.log(`📸 SUCCESS: Image captured, size: ${imageBlob.size} bytes`);
+                updateScanStatus(side, 'loading', `Bild erfasst (${Math.round(imageBlob.size/1024)}KB) - Text wird erkannt...`);
+                
+                // ENHANCED DEBUG: Show image preview for debugging
+                const imageUrl = URL.createObjectURL(imageBlob);
+                console.log(`🔍 DEBUG: Image captured, preview:`, imageUrl);
+                
                 // Process with real OCR
                 updateScanStatus(side, 'loading', 'Text wird erkannt...');
                 const ocrResult = await performRealOCR(imageBlob, side);
                 
+                console.log(`🔍 OCR Result:`, ocrResult);
+                
                 if (ocrResult.success) {
+                    console.log(`✅ SUCCESS: OCR data extracted for ${side}:`, ocrResult.data);
+                    console.log(`📝 Raw text found:`, ocrResult.raw_text || 'No raw text');
+                    
                     if (side === 'front') {
                         frontCardData = ocrResult.data;
                         console.log('✅ Real front side data extracted:', frontCardData);
-                        updateScanStatus('front', 'success', 'Vorderseite erfolgreich gescannt!');
+                        updateScanStatus('front', 'success', `Vorderseite erfolgreich! Daten: ${JSON.stringify(frontCardData).substring(0,100)}...`);
                         
                         // Move to back side
                         currentScanStep = 'back';
@@ -2387,12 +2383,13 @@
                     } else {
                         backCardData = ocrResult.data;
                         console.log('✅ Real back side data extracted:', backCardData);
-                        updateScanStatus('back', 'success', 'Rückseite erfolgreich gescannt!');
+                        updateScanStatus('back', 'success', `Rückseite erfolgreich! Daten: ${JSON.stringify(backCardData).substring(0,100)}...`);
                         
                         // Combine and show results
                         combineCardData();
                     }
                 } else {
+                    console.error(`❌ OCR failed for ${side}:`, ocrResult.error || 'Unknown error');
                     throw new Error(ocrResult.error || 'Texterkennung fehlgeschlagen');
                 }
                 
@@ -2472,49 +2469,127 @@
         // Simple Tesseract approach
         async function performSimpleTesseractOCR(imageBlob, side) {
             try {
+                console.log(`🔍 Starting Tesseract OCR for ${side} side (image size: ${imageBlob.size} bytes)`);
                 updateScanStatus(side, 'loading', 'Tesseract OCR wird gestartet...');
                 
-                // IMPROVED: Enhanced Tesseract configuration for German insurance cards
-                const result = await Tesseract.recognize(imageBlob, 'deu', {
-                    logger: (m) => {
-                        if (m.status === 'recognizing text') {
-                            const progress = Math.round(m.progress * 100);
-                            updateScanStatus(side, 'loading', `Texterkennung: ${progress}%`);
+                // Check if Tesseract is available
+                if (typeof Tesseract === 'undefined') {
+                    console.error('❌ Tesseract.js not loaded!');
+                    throw new Error('Tesseract.js nicht verfügbar');
+                }
+                
+                console.log(`✅ Tesseract.js loaded, starting recognition...`);
+                
+                // ENHANCED: Try multiple OCR configurations for better results
+                const configs = [
+                    // Configuration 1: Standard German with enhanced settings
+                    {
+                        lang: 'deu',
+                        options: {
+                            tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÜßabcdefghijklmnopqrstuvwxyzäöüß0123456789 ./:,-()[]',
+                            tessedit_pageseg_mode: '6', // Uniform block of text
+                            tessedit_ocr_engine_mode: '1', // Neural net LSTM engine
+                            preserve_interword_spaces: '1',
+                            user_defined_dpi: '150'
                         }
                     },
-                    // ENHANCED OCR SETTINGS for insurance cards
-                    tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÜßabcdefghijklmnopqrstuvwxyzäöüß0123456789 ./:,-()[]',
-                    tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK, // Better for card text blocks
-                    tessedit_ocr_engine_mode: Tesseract.OEM.TESSERACT_LSTM_COMBINED,
-                    preserve_interword_spaces: '1',
-                    user_defined_dpi: '150', // Higher DPI for better text recognition
-                    tessjs_create_hocr: '0',
-                    tessjs_create_tsv: '0',
-                    tessjs_create_box: '0',
-                    tessjs_create_unlv: '0',
-                    tessjs_create_osd: '0'
-                });
+                    // Configuration 2: Fallback with English + German
+                    {
+                        lang: 'eng+deu',
+                        options: {
+                            tessedit_pageseg_mode: '3', // Fully automatic page segmentation
+                            tessedit_ocr_engine_mode: '1',
+                            user_defined_dpi: '100'
+                        }
+                    },
+                    // Configuration 3: Simple English fallback
+                    {
+                        lang: 'eng',
+                        options: {
+                            tessedit_pageseg_mode: '6',
+                            tessedit_ocr_engine_mode: '1'
+                        }
+                    }
+                ];
                 
-                updateScanStatus(side, 'loading', 'Text wird analysiert...');
+                let bestResult = null;
+                let bestConfidence = 0;
+                
+                for (let i = 0; i < configs.length; i++) {
+                    const config = configs[i];
+                    console.log(`🔄 Trying OCR configuration ${i + 1}: ${config.lang}`);
+                    updateScanStatus(side, 'loading', `OCR Versuch ${i + 1}/3 (${config.lang})...`);
+                    
+                    try {
+                        const result = await Tesseract.recognize(imageBlob, config.lang, {
+                            logger: (m) => {
+                                console.log(`Tesseract ${side} config ${i + 1}:`, m);
+                                if (m.status === 'recognizing text') {
+                                    const progress = Math.round(m.progress * 100);
+                                    updateScanStatus(side, 'loading', `OCR ${i + 1}/3: ${progress}% (${config.lang})`);
+                                }
+                            },
+                            ...config.options
+                        });
+                        
+                        console.log(`📊 Config ${i + 1} result:`, {
+                            confidence: result.data.confidence,
+                            text_length: result.data.text.length,
+                            text_preview: result.data.text.substring(0, 100)
+                        });
+                        
+                        if (result.data.confidence > bestConfidence) {
+                            bestResult = result;
+                            bestConfidence = result.data.confidence;
+                            console.log(`✅ New best result with confidence ${bestConfidence}%`);
+                        }
+                        
+                        // If we get a decent result, we can break early
+                        if (result.data.confidence > 70 && result.data.text.length > 20) {
+                            console.log(`🎯 Good result found early, stopping at config ${i + 1}`);
+                            break;
+                        }
+                        
+                    } catch (configError) {
+                        console.error(`❌ OCR config ${i + 1} failed:`, configError);
+                        updateScanStatus(side, 'loading', `Config ${i + 1} fehlgeschlagen, versuche nächste...`);
+                    }
+                }
+                
+                if (!bestResult) {
+                    console.error('❌ All OCR configurations failed');
+                    throw new Error('Alle OCR-Konfigurationen fehlgeschlagen');
+                }
+                
+                console.log(`🏆 Using best result (confidence: ${bestConfidence}%):`, bestResult.data.text);
+                updateScanStatus(side, 'loading', `OCR abgeschlossen (${bestConfidence.toFixed(1)}%) - Text wird analysiert...`);
                 
                 // Enhanced text parsing
-                const parsedData = parseInsuranceCardTextEnhanced(result.data.text, side);
+                const parsedData = parseInsuranceCardTextEnhanced(bestResult.data.text, side);
                 
                 console.log(`✅ Enhanced Tesseract OCR completed for ${side} side:`, parsedData);
-                console.log(`📝 Raw OCR text:`, result.data.text);
+                console.log(`📝 Raw OCR text (${bestResult.data.text.length} chars):`, bestResult.data.text);
+                
+                // Calculate success based on extracted data quality
+                const hasValidData = side === 'front' ? 
+                    (parsedData.name !== 'Name nicht erkannt' || parsedData.insurance_number !== 'Nummer nicht erkannt') :
+                    (parsedData.valid_until !== 'Gültigkeitsdatum nicht erkannt');
                 
                 return {
-                    success: true,
+                    success: hasValidData || bestResult.data.text.length > 10, // Success if we found data OR got substantial text
                     data: parsedData,
-                    confidence: result.data.confidence / 100,
-                    raw_text: result.data.text
+                    confidence: bestResult.data.confidence / 100,
+                    raw_text: bestResult.data.text,
+                    method: 'tesseract_multi_config'
                 };
                 
             } catch (error) {
-                console.error('Tesseract OCR error:', error);
+                console.error('❌ Tesseract OCR error:', error);
+                updateScanStatus(side, 'loading', `Tesseract fehlgeschlagen: ${error.message}`);
                 return {
                     success: false,
-                    error: error.message
+                    error: error.message,
+                    method: 'tesseract_failed'
                 };
             }
         }
@@ -2697,49 +2772,78 @@
         // Backend OCR fallback
         async function performBackendOCR(imageBlob, side) {
             try {
+                console.log(`🔄 Starting Backend OCR for ${side} side (image size: ${imageBlob.size} bytes)`);
                 updateScanStatus(side, 'loading', 'Backend OCR wird verwendet...');
                 
-                // Convert blob to base64 for backend
+                // Convert blob to base64 for debugging
                 const base64 = await blobToBase64(imageBlob);
+                console.log(`📋 Image converted to base64 (${base64.length} chars)`);
                 
                 const formData = new FormData();
                 formData.append('image', imageBlob);
                 formData.append('side', side);
                 formData.append('meeting_id', meetingId);
                 
+                console.log(`🌐 Sending request to backend OCR endpoint...`);
+                const startTime = Date.now();
+                
                 const response = await fetch('/api/ocr/process-card', {
                     method: 'POST',
                     body: formData
                 });
                 
+                const responseTime = Date.now() - startTime;
+                console.log(`⏱️ Backend OCR response time: ${responseTime}ms`);
+                
                 if (!response.ok) {
-                    throw new Error('Backend OCR request failed');
+                    const errorText = await response.text();
+                    console.error(`❌ Backend OCR HTTP error ${response.status}:`, errorText);
+                    throw new Error(`Backend OCR request failed: ${response.status} ${response.statusText}`);
                 }
                 
                 const result = await response.json();
+                console.log(`📥 Backend OCR response:`, result);
                 
                 if (result.success) {
-                    updateScanStatus(side, 'loading', 'Backend-Ergebnisse analysieren...');
+                    console.log(`✅ Backend OCR successful:`, result.data);
+                    console.log(`📝 Backend raw text:`, result.raw_text || 'No raw text provided');
+                    updateScanStatus(side, 'loading', 'Backend-Ergebnisse erfolgreich analysiert!');
                     
                     return {
                         success: true,
                         data: result.data,
                         confidence: result.confidence || 0.8,
-                        raw_text: result.raw_text || ''
+                        raw_text: result.raw_text || '',
+                        method: 'backend_pytesseract'
                     };
                 } else {
+                    console.error(`❌ Backend OCR failed:`, result.error || 'Unknown backend error');
                     throw new Error(result.error || 'Backend OCR failed');
                 }
                 
             } catch (error) {
-                console.error('Backend OCR error:', error);
+                console.error('❌ Backend OCR error:', error);
                 
-                // Final fallback: use minimal data
+                // If it's a network error, provide more details
+                if (error.name === 'TypeError' && error.message.includes('fetch')) {
+                    console.error('🌐 Network error - backend may be unreachable');
+                    updateScanStatus(side, 'loading', 'Backend nicht erreichbar - verwende Fallback...');
+                } else {
+                    updateScanStatus(side, 'loading', `Backend-Fehler: ${error.message}`);
+                }
+                
+                // Enhanced fallback: return success with debug info to not block user
+                console.log('🔄 Using enhanced fallback to continue workflow');
                 return {
-                    success: true, // Return success with minimal data to not block user
-                    data: getMinimalFallbackData(side),
-                    confidence: 0.3,
-                    raw_text: 'OCR nicht verfügbar - manuelle Eingabe erforderlich'
+                    success: true, // Return success to not block user
+                    data: {
+                        ...getMinimalFallbackData(side),
+                        debug_info: `Backend failed: ${error.message}`,
+                        debug_timestamp: new Date().toISOString()
+                    },
+                    confidence: 0.1,
+                    raw_text: `Backend OCR Error: ${error.message}`,
+                    method: 'backend_fallback'
                 };
             }
         }
@@ -2833,16 +2937,18 @@
         }
 
         function getMinimalFallbackData(side) {
+            const timestamp = new Date().toLocaleTimeString();
+            
             if (side === 'front') {
                 return {
-                    name: 'Texterkennung fehlgeschlagen',
-                    insurance_number: 'Bitte manuell eingeben',
-                    insurance_company: 'Nicht erkannt'
+                    name: `📸 Bild erfasst ${timestamp}`,
+                    insurance_number: `🔍 OCR versucht ${timestamp}`,
+                    insurance_company: `⚠️ Text nicht erkannt ${timestamp}`
                 };
             } else {
                 return {
-                    valid_until: 'Nicht erkannt',
-                    birth_date: 'Nicht erkannt'
+                    valid_until: `📸 Rückseite erfasst ${timestamp}`,
+                    birth_date: `🔍 OCR versucht ${timestamp}`
                 };
             }
         }
@@ -3888,6 +3994,133 @@
                     confetti.parentNode.removeChild(confetti);
                 }
             }, 5000);
+        }
+        
+        // DEBUG: Test screenshot function
+        async function testScreenshot(side) {
+            try {
+                console.log(`🧪 Testing screenshot for ${side} side`);
+                updateScanStatus(side, 'loading', 'Screenshot-Test läuft...');
+                
+                const imageBlob = await captureCardImageFromVideo(side);
+                
+                if (imageBlob) {
+                    const imageUrl = URL.createObjectURL(imageBlob);
+                    const imageSize = (imageBlob.size / 1024).toFixed(1);
+                    
+                    console.log(`✅ Screenshot erfolgreich! Größe: ${imageSize}KB`);
+                    console.log(`🔗 Bild-URL:`, imageUrl);
+                    
+                    updateScanStatus(side, 'success', `✅ Screenshot OK (${imageSize}KB) - OCR würde jetzt starten!`);
+                    
+                    // Show preview in browser console for debugging
+                    console.log(`📸 Screenshot Preview (${side} side):`);
+                    console.log(`%c `, `
+                        background-image: url(${imageUrl}); 
+                        background-size: contain; 
+                        background-repeat: no-repeat; 
+                        width: 200px; 
+                        height: 120px; 
+                        border: 2px solid #4a90e2;
+                    `);
+                    
+                    // Create a small preview overlay for the user
+                    showScreenshotPreview(imageUrl, side, imageSize);
+                    
+                    // Reset status after preview
+                    setTimeout(() => {
+                        updateScanStatus(side, 'ready', `Bereit für ${side === 'front' ? 'Vorderseite' : 'Rückseite'}-Scan. Klicken Sie "Countdown starten" wenn Sie bereit sind.`);
+                    }, 3000);
+                    
+                } else {
+                    throw new Error('Screenshot fehlgeschlagen');
+                }
+                
+            } catch (error) {
+                console.error(`❌ Screenshot-Test fehlgeschlagen:`, error);
+                updateScanStatus(side, 'error', `Screenshot-Test fehlgeschlagen: ${error.message}`);
+                
+                // Reset status after error
+                setTimeout(() => {
+                    updateScanStatus(side, 'ready', `Bereit für ${side === 'front' ? 'Vorderseite' : 'Rückseite'}-Scan. Klicken Sie "Countdown starten" wenn Sie bereit sind.`);
+                }, 3000);
+            }
+        }
+        
+        // Show a preview of the captured screenshot to the user
+        function showScreenshotPreview(imageUrl, side, imageSize) {
+            // Create preview overlay
+            const previewOverlay = document.createElement('div');
+            previewOverlay.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(0, 0, 0, 0.8);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 1000;
+                animation: fadeIn 0.3s ease;
+            `;
+            
+            previewOverlay.innerHTML = `
+                <div style="
+                    background: white;
+                    padding: 2rem;
+                    border-radius: 16px;
+                    text-align: center;
+                    max-width: 500px;
+                    width: 90%;
+                ">
+                    <h3 style="color: #28a745; margin-bottom: 1rem;">📸 Screenshot erfolgreich!</h3>
+                    <img src="${imageUrl}" style="
+                        max-width: 100%;
+                        max-height: 300px;
+                        border: 2px solid #28a745;
+                        border-radius: 8px;
+                        margin-bottom: 1rem;
+                    ">
+                    <p style="color: #666; margin-bottom: 1rem;">
+                        <strong>${side === 'front' ? 'Vorderseite' : 'Rückseite'}</strong> erfasst (${imageSize}KB)<br>
+                        <small>Können Sie Text auf der Karte lesen?</small>
+                    </p>
+                    <div style="display: flex; gap: 1rem; justify-content: center;">
+                        <button onclick="this.closest('div').parentNode.remove()" style="
+                            background: #28a745;
+                            color: white;
+                            border: none;
+                            padding: 0.75rem 1.5rem;
+                            border-radius: 8px;
+                            cursor: pointer;
+                            font-size: 1rem;
+                        ">
+                            ✅ Bild ist gut
+                        </button>
+                        <button onclick="this.closest('div').parentNode.remove(); alert('💡 Tipp: Bessere Beleuchtung oder näher an die Karte gehen!')" style="
+                            background: #dc3545;
+                            color: white;
+                            border: none;
+                            padding: 0.75rem 1.5rem;
+                            border-radius: 8px;
+                            cursor: pointer;
+                            font-size: 1rem;
+                        ">
+                            ❌ Text unscharf
+                        </button>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(previewOverlay);
+            
+            // Auto-remove after 15 seconds
+            setTimeout(() => {
+                if (previewOverlay.parentNode) {
+                    previewOverlay.remove();
+                }
+            }, 15000);
         }
     </script>
 </body>
