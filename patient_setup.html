@@ -2449,34 +2449,46 @@
                 // Show OCR progress
                 updateScanStatus(side, 'loading', 'OCR-Engine wird gestartet...');
                 
-                // Configure Tesseract for German insurance cards
-                const ocrConfig = {
+                // Try simple Tesseract.js approach first
+                const result = await performSimpleTesseractOCR(imageBlob, side);
+                
+                if (result.success) {
+                    return result;
+                } else {
+                    // If Tesseract fails, use backend OCR fallback
+                    console.log('🔄 Tesseract failed, trying backend OCR...');
+                    return await performBackendOCR(imageBlob, side);
+                }
+                
+            } catch (error) {
+                console.error('OCR error:', error);
+                
+                // Final fallback: backend OCR
+                console.log('🔄 Using backend OCR as final fallback...');
+                return await performBackendOCR(imageBlob, side);
+            }
+        }
+
+        // Simple Tesseract approach
+        async function performSimpleTesseractOCR(imageBlob, side) {
+            try {
+                updateScanStatus(side, 'loading', 'Tesseract OCR wird gestartet...');
+                
+                // Use the simple recognize method without custom workers
+                const result = await Tesseract.recognize(imageBlob, 'deu', {
                     logger: (m) => {
-                        console.log(`Tesseract ${side} side:`, m);
-                        
                         if (m.status === 'recognizing text') {
                             const progress = Math.round(m.progress * 100);
                             updateScanStatus(side, 'loading', `Texterkennung: ${progress}%`);
                         }
-                    },
-                    
-                    // Optimized for German insurance cards
-                    tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÜßabcdefghijklmnopqrstuvwxyzäöüß0123456789 ./:,-',
-                    tessedit_pageseg_mode: '6', // Uniform block of text
-                    tessedit_ocr_engine_mode: '1', // Neural net LSTM engine
-                    preserve_interword_spaces: '1'
-                };
-
-                // Perform OCR with Tesseract.js
-                updateScanStatus(side, 'loading', 'Texterkennung läuft...');
-                const result = await Tesseract.recognize(imageBlob, 'deu', ocrConfig);
+                    }
+                });
                 
                 updateScanStatus(side, 'loading', 'Text wird analysiert...');
                 
-                // Parse the OCR result
                 const parsedData = parseInsuranceCardText(result.data.text, side);
                 
-                console.log(`✅ OCR completed for ${side} side:`, parsedData);
+                console.log(`✅ Tesseract OCR completed for ${side} side:`, parsedData);
                 
                 return {
                     success: true,
@@ -2486,13 +2498,60 @@
                 };
                 
             } catch (error) {
-                console.error('OCR error:', error);
-                
-                // Fallback: Try to extract any text we can
+                console.error('Tesseract OCR error:', error);
                 return {
                     success: false,
-                    error: `Texterkennung fehlgeschlagen: ${error.message}`,
-                    data: getMinimalFallbackData(side)
+                    error: error.message
+                };
+            }
+        }
+
+        // Backend OCR fallback
+        async function performBackendOCR(imageBlob, side) {
+            try {
+                updateScanStatus(side, 'loading', 'Backend OCR wird verwendet...');
+                
+                // Convert blob to base64 for backend
+                const base64 = await blobToBase64(imageBlob);
+                
+                const formData = new FormData();
+                formData.append('image', imageBlob);
+                formData.append('side', side);
+                formData.append('meeting_id', meetingId);
+                
+                const response = await fetch('/api/ocr/process-card', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Backend OCR request failed');
+                }
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    updateScanStatus(side, 'loading', 'Backend-Ergebnisse analysieren...');
+                    
+                    return {
+                        success: true,
+                        data: result.data,
+                        confidence: result.confidence || 0.8,
+                        raw_text: result.raw_text || ''
+                    };
+                } else {
+                    throw new Error(result.error || 'Backend OCR failed');
+                }
+                
+            } catch (error) {
+                console.error('Backend OCR error:', error);
+                
+                // Final fallback: use minimal data
+                return {
+                    success: true, // Return success with minimal data to not block user
+                    data: getMinimalFallbackData(side),
+                    confidence: 0.3,
+                    raw_text: 'OCR nicht verfügbar - manuelle Eingabe erforderlich'
                 };
             }
         }
