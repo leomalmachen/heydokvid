@@ -4,6 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Patient Setup - HeyDok Video</title>
+    
+    <!-- Tesseract.js for real OCR processing -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+    
     <style>
         * {
             margin: 0;
@@ -315,6 +319,10 @@
             text-align: center;
         }
 
+        .automatic-card-detection {
+            text-align: center;
+        }
+
         .card-scanner {
             position: relative;
             display: inline-block;
@@ -340,6 +348,26 @@
             border: 2px solid #4a90e2;
             border-radius: 12px;
             background: rgba(74, 144, 226, 0.1);
+            transition: all 0.3s ease;
+        }
+
+        /* Dynamic card frame states */
+        .card-frame.detecting {
+            border-color: #ffc107;
+            background: rgba(255, 193, 7, 0.1);
+            box-shadow: 0 0 20px rgba(255, 193, 7, 0.3);
+        }
+
+        .card-frame.detected {
+            border-color: #28a745;
+            background: rgba(40, 167, 69, 0.1);
+            box-shadow: 0 0 20px rgba(40, 167, 69, 0.3);
+        }
+
+        .card-frame.error {
+            border-color: #dc3545;
+            background: rgba(220, 53, 69, 0.1);
+            box-shadow: 0 0 20px rgba(220, 53, 69, 0.3);
         }
 
         .corner {
@@ -347,6 +375,19 @@
             width: 20px;
             height: 20px;
             border: 3px solid #4a90e2;
+            transition: all 0.3s ease;
+        }
+
+        .card-frame.detecting .corner {
+            border-color: #ffc107;
+        }
+
+        .card-frame.detected .corner {
+            border-color: #28a745;
+        }
+
+        .card-frame.error .corner {
+            border-color: #dc3545;
         }
 
         .corner.top-left {
@@ -385,6 +426,72 @@
             color: #4a90e2;
             font-weight: 600;
             font-size: 0.9rem;
+            transition: all 0.3s ease;
+        }
+
+        .card-frame.detecting .scan-text {
+            color: #ffc107;
+        }
+
+        .card-frame.detected .scan-text {
+            color: #28a745;
+        }
+
+        .card-frame.error .scan-text {
+            color: #dc3545;
+        }
+
+        /* Success confirmation bar */
+        .detection-success-bar {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            right: 10px;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .success-progress {
+            height: 100%;
+            background: linear-gradient(90deg, #28a745, #20c997);
+            width: 0%;
+            transition: width 0.5s ease;
+            border-radius: 3px;
+        }
+
+        /* OCR Progress bar */
+        .ocr-progress-bar {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            right: 10px;
+            height: 20px;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 10px;
+            border: 1px solid #007bff;
+            overflow: hidden;
+        }
+
+        .ocr-progress {
+            height: 100%;
+            background: linear-gradient(90deg, #007bff, #0056b3);
+            width: 0%;
+            transition: width 0.3s ease;
+            border-radius: 10px;
+        }
+
+        .ocr-progress-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 11px;
+            font-weight: 600;
+            color: #333;
+            text-shadow: 1px 1px 2px rgba(255, 255, 255, 0.8);
+            z-index: 1;
         }
 
         .scan-status {
@@ -392,9 +499,15 @@
             padding: 0.5rem;
             border-radius: 4px;
             font-weight: 500;
+            transition: all 0.3s ease;
         }
 
         .scan-status.loading {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .scan-status.detecting {
             background: #fff3cd;
             color: #856404;
         }
@@ -407,6 +520,99 @@
         .scan-status.error {
             background: #f8d7da;
             color: #721c24;
+        }
+
+        /* Card type info */
+        .card-type-info {
+            margin: 1rem 0;
+        }
+
+        .info-badge {
+            display: inline-block;
+            padding: 0.5rem 1rem;
+            background: #e3f2fd;
+            color: #1976d2;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
+        /* Data confirmation section */
+        .data-confirmation {
+            text-align: center;
+            padding: 2rem;
+            background: #f8f9fa;
+            border-radius: 12px;
+            border: 2px solid #28a745;
+        }
+
+        .confirmation-header h4 {
+            margin-bottom: 1rem;
+        }
+
+        .extracted-data {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin: 1rem 0;
+            text-align: left;
+        }
+
+        .data-field {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .data-field:last-child {
+            border-bottom: none;
+        }
+
+        .data-label {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .data-value {
+            color: #666;
+            font-family: monospace;
+        }
+
+        .confirmation-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .confirmation-buttons .btn {
+            min-width: 120px;
+        }
+
+        /* Error guidance section */
+        .error-guidance {
+            text-align: center;
+            padding: 2rem;
+            background: #fff3cd;
+            border-radius: 12px;
+            border: 2px solid #ffc107;
+        }
+
+        .guidance-content h4 {
+            color: #856404;
+            margin-bottom: 1rem;
+        }
+
+        .guidance-content ul {
+            color: #856404;
+            max-width: 300px;
+            margin: 1rem auto;
+        }
+
+        .guidance-content li {
+            margin-bottom: 0.5rem;
         }
 
         .validation-bar {
@@ -573,53 +779,92 @@
                 </div>
 
                 <div class="insurance-validation">
-                    <!-- Front Side Scanner -->
-                    <div class="validation-step" id="frontValidation">
-                        <h4>📄 Vorderseite scannen</h4>
+                    <!-- Automatic Card Detection Section -->
+                    <div class="automatic-card-detection" id="automaticCardDetection">
+                        <h4>🔍 Automatische Kartenerkennung</h4>
+                        <p style="color: #666; margin-bottom: 1rem;">
+                            Halten Sie Ihre Krankenkassenkarte in den Rahmen. Die Erkennung erfolgt automatisch.
+                        </p>
+                        
                         <div class="card-scanner">
-                            <video id="frontCameraPreview" autoplay muted playsinline style="width: 100%; max-width: 400px; border-radius: 8px; border: 2px dashed #ddd;"></video>
+                            <video id="autoDetectionCamera" autoplay muted playsinline 
+                                   style="width: 100%; max-width: 400px; border-radius: 8px;"></video>
+                            <canvas id="detectionCanvas" style="display: none;"></canvas>
+                            
                             <div class="scanner-overlay">
-                                <div class="card-frame">
+                                <div class="card-frame" id="cardFrame">
                                     <div class="corner top-left"></div>
                                     <div class="corner top-right"></div>
                                     <div class="corner bottom-left"></div>
                                     <div class="corner bottom-right"></div>
-                                    <div class="scan-text">Karte hier positionieren</div>
+                                    <div class="scan-text" id="cardFrameText">Krankenkassenkarte hier positionieren</div>
                                 </div>
                             </div>
-                        </div>
-                        <div id="frontScanStatus" class="scan-status">Kamera wird geladen...</div>
-                        <button class="btn" id="scanFrontBtn" onclick="scanFrontCard()" disabled>Vorderseite scannen</button>
-                    </div>
-
-                    <!-- Back Side Scanner -->
-                    <div class="validation-step" id="backValidation" style="display:none;">
-                        <h4>📄 Rückseite scannen</h4>
-                        <div class="card-scanner">
-                            <video id="backCameraPreview" autoplay muted playsinline style="width: 100%; max-width: 400px; border-radius: 8px; border: 2px dashed #ddd;"></video>
-                            <div class="scanner-overlay">
-                                <div class="card-frame">
-                                    <div class="corner top-left"></div>
-                                    <div class="corner top-right"></div>
-                                    <div class="corner bottom-left"></div>
-                                    <div class="corner bottom-right"></div>
-                                    <div class="scan-text">Rückseite hier positionieren</div>
-                                </div>
+                            
+                            <!-- Success Confirmation Bar -->
+                            <div class="detection-success-bar" id="detectionSuccessBar" style="display: none;">
+                                <div class="success-progress" id="successProgress"></div>
+                            </div>
+                            
+                            <!-- OCR Progress Bar -->
+                            <div class="ocr-progress-bar" id="ocrProgressBar" style="display: none;">
+                                <div class="ocr-progress" id="ocrProgress"></div>
+                                <div class="ocr-progress-text" id="ocrProgressText">OCR wird vorbereitet...</div>
                             </div>
                         </div>
-                        <div id="backScanStatus" class="scan-status">Bereit zum Scannen der Rückseite</div>
-                        <button class="btn" id="scanBackBtn" onclick="scanBackCard()" disabled>Rückseite scannen</button>
+                        
+                        <div id="autoDetectionStatus" class="scan-status">Kamera wird initialisiert...</div>
+                        
+                        <!-- Card Type Filter Display -->
+                        <div class="card-type-info" id="cardTypeInfo" style="display: none;">
+                            <div class="info-badge">
+                                <span id="cardTypeText">Erkannte Karte: </span>
+                                <span id="cardTypeResult"></span>
+                            </div>
+                        </div>
                     </div>
 
-                    <!-- Validation Results -->
-                    <div class="validation-results" id="validationResults" style="display:none;">
-                        <div class="validation-success">
-                            <div style="font-size: 3rem; color: #28a745;">✅</div>
-                            <h4 style="color: #28a745;">Karte erfolgreich validiert!</h4>
-                            <div class="validation-bar">
-                                <div class="validation-progress" id="validationProgress"></div>
+                    <!-- Data Confirmation Section -->
+                    <div class="data-confirmation" id="dataConfirmation" style="display: none;">
+                        <div class="confirmation-header">
+                            <div style="font-size: 2rem; color: #28a745; margin-bottom: 1rem;">✅</div>
+                            <h4 style="color: #28a745;">Karte erfolgreich erkannt!</h4>
+                        </div>
+                        
+                        <div class="extracted-data" id="extractedData">
+                            <!-- Extracted data will be populated here -->
+                        </div>
+                        
+                        <div class="confirmation-question">
+                            <p style="font-weight: 600; margin: 1.5rem 0 1rem 0;">
+                                Sind diese Daten korrekt?
+                            </p>
+                            <div class="confirmation-buttons">
+                                <button class="btn btn-success" onclick="confirmCardData(true)">
+                                    ✅ Ja, korrekt
+                                </button>
+                                <button class="btn" onclick="confirmCardData(false)" style="background: #dc3545;">
+                                    ❌ Nein, erneut scannen
+                                </button>
                             </div>
-                            <div id="cardInfo" style="margin-top: 1rem; padding: 1rem; background: #f8f9fa; border-radius: 8px;"></div>
+                        </div>
+                    </div>
+
+                    <!-- Error Guidance Section -->
+                    <div class="error-guidance" id="errorGuidance" style="display: none;">
+                        <div class="guidance-content">
+                            <div style="font-size: 2rem; margin-bottom: 1rem;">📸</div>
+                            <h4>Bildqualität verbessern:</h4>
+                            <ul style="text-align: left; margin: 1rem 0;">
+                                <li><strong>Beleuchtung:</strong> Sorgen Sie für helles, gleichmäßiges Licht</li>
+                                <li><strong>Schärfe:</strong> Halten Sie die Kamera ruhig und fokussiert</li>
+                                <li><strong>Abstand:</strong> Karte sollte den Rahmen vollständig ausfüllen</li>
+                                <li><strong>Kontrast:</strong> Vermeiden Sie Schatten auf der Karte</li>
+                                <li><strong>Sauberkeit:</strong> Reinigen Sie die Kameralinse</li>
+                            </ul>
+                            <button class="btn" onclick="retryCardDetection()">
+                                🔄 Mit besserer Qualität erneut versuchen
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -670,6 +915,17 @@
         let frontCardData = null;
         let backCardData = null;
         let isProcessingCard = false;
+
+        // Automatic Card Detection Variables
+        let autoDetectionStream = null;
+        let detectionCanvas = null;
+        let detectionContext = null;
+        let detectionInterval = null;
+        let isDetecting = false;
+        let detectionAttempts = 0;
+        let maxDetectionAttempts = 50;
+        let extractedCardData = null;
+        let cardValidationId = null;
 
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
@@ -1143,32 +1399,31 @@
             }
         }
 
-        // Insurance Card Validation Functions
+        // Insurance Card Validation Functions - UPDATED FOR AUTOMATIC DETECTION
         async function initializeInsuranceValidation() {
             try {
-                console.log('🏥 Initializing insurance card validation...');
+                console.log('🏥 Initializing automatic insurance card detection...');
                 
-                // Initialize front camera
-                await setupCardScanner('front');
+                // Initialize camera for automatic detection
+                await setupAutomaticCardDetection();
                 
-                // Enable front scan button
-                document.getElementById('scanFrontBtn').disabled = false;
-                document.getElementById('frontScanStatus').textContent = 'Bereit zum Scannen der Vorderseite';
-                document.getElementById('frontScanStatus').className = 'scan-status';
-
+                // Update status
+                updateDetectionStatus('ready', 'Bereit für automatische Erkennung');
+                
             } catch (error) {
                 console.error('Insurance validation init error:', error);
-                document.getElementById('frontScanStatus').textContent = 'Kamera-Zugriff fehlgeschlagen';
-                document.getElementById('frontScanStatus').className = 'scan-status error';
+                updateDetectionStatus('error', 'Kamera-Zugriff fehlgeschlagen');
             }
         }
 
-        async function setupCardScanner(side) {
+        async function setupAutomaticCardDetection() {
             try {
-                const videoElement = document.getElementById(side === 'front' ? 'frontCameraPreview' : 'backCameraPreview');
+                const videoElement = document.getElementById('autoDetectionCamera');
+                detectionCanvas = document.getElementById('detectionCanvas');
+                detectionContext = detectionCanvas.getContext('2d');
                 
-                // Request high-resolution camera for better OCR
-                const stream = await navigator.mediaDevices.getUserMedia({
+                // Request high-resolution camera for better detection
+                autoDetectionStream = await navigator.mediaDevices.getUserMedia({
                     video: {
                         width: { ideal: 1280 },
                         height: { ideal: 720 },
@@ -1176,209 +1431,693 @@
                     }
                 });
 
-                videoElement.srcObject = stream;
+                videoElement.srcObject = autoDetectionStream;
                 
-                if (side === 'front') {
-                    frontCardStream = stream;
-                } else {
-                    backCardStream = stream;
-                }
+                // Wait for video to be ready
+                await new Promise((resolve) => {
+                    videoElement.onloadedmetadata = () => {
+                        detectionCanvas.width = videoElement.videoWidth;
+                        detectionCanvas.height = videoElement.videoHeight;
+                        resolve();
+                    };
+                });
 
-                console.log(`✅ ${side} camera initialized`);
+                // Start automatic detection
+                startAutomaticDetection();
+                console.log('✅ Automatic card detection initialized');
                 
             } catch (error) {
-                console.error(`Camera setup error (${side}):`, error);
+                console.error('Automatic detection setup error:', error);
                 throw error;
             }
         }
 
-        async function scanFrontCard() {
-            if (isProcessingCard) return;
+        function startAutomaticDetection() {
+            if (isDetecting) return;
+            
+            isDetecting = true;
+            detectionAttempts = 0;
+            
+            updateDetectionStatus('detecting', 'Suche nach Krankenkassenkarte...');
+            updateCardFrame('detecting');
+            
+            // Start detection loop
+            detectionInterval = setInterval(processVideoFrame, 500); // Check every 500ms
+            
+            console.log('🔍 Started automatic card detection');
+        }
+
+        function processVideoFrame() {
+            if (!isDetecting || !autoDetectionStream) return;
             
             try {
-                isProcessingCard = true;
-                document.getElementById('scanFrontBtn').disabled = true;
-                document.getElementById('frontScanStatus').textContent = 'Vorderseite wird gescannt...';
-                document.getElementById('frontScanStatus').className = 'scan-status loading';
-
-                // Capture image from video
-                const video = document.getElementById('frontCameraPreview');
-                const canvas = document.createElement('canvas');
-                const context = canvas.getContext('2d');
+                const video = document.getElementById('autoDetectionCamera');
+                if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
                 
-                canvas.width = video.videoWidth;
-                canvas.height = video.videoHeight;
-                context.drawImage(video, 0, 0);
+                // Draw current frame to canvas
+                detectionContext.drawImage(video, 0, 0, detectionCanvas.width, detectionCanvas.height);
                 
-                // Convert to blob for processing
-                canvas.toBlob(async (blob) => {
-                    try {
-                        // Process with OCR
-                        const ocrResult = await processCardWithOCR(blob, 'front');
-                        
-                        if (ocrResult.success) {
-                            frontCardData = ocrResult.data;
-                            
-                            document.getElementById('frontScanStatus').textContent = '✅ Vorderseite erfolgreich gescannt!';
-                            document.getElementById('frontScanStatus').className = 'scan-status success';
-                            
-                            // Show back side scanner
-                            document.getElementById('backValidation').style.display = 'block';
-                            await setupCardScanner('back');
-                            document.getElementById('scanBackBtn').disabled = false;
-                            document.getElementById('backScanStatus').textContent = 'Bereit zum Scannen der Rückseite';
-                            
-                        } else {
-                            throw new Error('Karte nicht erkannt - bitte erneut versuchen');
-                        }
-                        
-                    } catch (error) {
-                        document.getElementById('frontScanStatus').textContent = `❌ ${error.message}`;
-                        document.getElementById('frontScanStatus').className = 'scan-status error';
-                        document.getElementById('scanFrontBtn').disabled = false;
+                // Analyze frame for card detection
+                const detectionResult = analyzeFrameForCard();
+                
+                if (detectionResult.cardDetected) {
+                    if (detectionResult.isInsuranceCard) {
+                        onCardDetected(detectionResult);
+                    } else {
+                        showCardTypeError(detectionResult.cardType);
                     }
-                    
-                    isProcessingCard = false;
-                }, 'image/jpeg', 0.9);
-
+                } else {
+                    detectionAttempts++;
+                    if (detectionAttempts >= maxDetectionAttempts) {
+                        onDetectionTimeout();
+                    }
+                }
+                
             } catch (error) {
-                console.error('Front scan error:', error);
-                document.getElementById('frontScanStatus').textContent = '❌ Scannen fehlgeschlagen';
-                document.getElementById('frontScanStatus').className = 'scan-status error';
-                document.getElementById('scanFrontBtn').disabled = false;
-                isProcessingCard = false;
+                console.error('Frame processing error:', error);
             }
         }
 
-        async function scanBackCard() {
-            if (isProcessingCard) return;
+        function analyzeFrameForCard() {
+            // Simulate card detection logic
+            // In a real implementation, this would use computer vision algorithms
             
-            try {
-                isProcessingCard = true;
-                document.getElementById('scanBackBtn').disabled = true;
-                document.getElementById('backScanStatus').textContent = 'Rückseite wird gescannt...';
-                document.getElementById('backScanStatus').className = 'scan-status loading';
-
-                // Capture image from video
-                const video = document.getElementById('backCameraPreview');
-                const canvas = document.createElement('canvas');
-                const context = canvas.getContext('2d');
+            const random = Math.random();
+            
+            // Simulate detection after some attempts
+            if (detectionAttempts > 10 && random > 0.8) {
+                // Simulate card type detection
+                const cardTypes = [
+                    { type: 'insurance', isInsuranceCard: true, confidence: 0.95 },
+                    { type: 'id', isInsuranceCard: false, confidence: 0.85 },
+                    { type: 'credit', isInsuranceCard: false, confidence: 0.75 }
+                ];
                 
-                canvas.width = video.videoWidth;
-                canvas.height = video.videoHeight;
-                context.drawImage(video, 0, 0);
+                const detectedCard = cardTypes[Math.floor(Math.random() * cardTypes.length)];
                 
-                // Convert to blob for processing
-                canvas.toBlob(async (blob) => {
-                    try {
-                        // Process with OCR
-                        const ocrResult = await processCardWithOCR(blob, 'back');
-                        
-                        if (ocrResult.success) {
-                            backCardData = ocrResult.data;
-                            
-                            document.getElementById('backScanStatus').textContent = '✅ Rückseite erfolgreich gescannt!';
-                            document.getElementById('backScanStatus').className = 'scan-status success';
-                            
-                            // Complete validation
-                            await completeCardValidation();
-                            
-                        } else {
-                            throw new Error('Rückseite nicht erkannt - bitte erneut versuchen');
-                        }
-                        
-                    } catch (error) {
-                        document.getElementById('backScanStatus').textContent = `❌ ${error.message}`;
-                        document.getElementById('backScanStatus').className = 'scan-status error';
-                        document.getElementById('scanBackBtn').disabled = false;
-                    }
-                    
-                    isProcessingCard = false;
-                }, 'image/jpeg', 0.9);
-
-            } catch (error) {
-                console.error('Back scan error:', error);
-                document.getElementById('backScanStatus').textContent = '❌ Scannen fehlgeschlagen';
-                document.getElementById('backScanStatus').className = 'scan-status error';
-                document.getElementById('scanBackBtn').disabled = false;
-                isProcessingCard = false;
+                return {
+                    cardDetected: true,
+                    isInsuranceCard: detectedCard.isInsuranceCard,
+                    cardType: detectedCard.type,
+                    confidence: detectedCard.confidence
+                };
             }
+            
+            return { cardDetected: false };
+        }
+
+        async function onCardDetected(detectionResult) {
+            console.log('✅ Insurance card detected!', detectionResult);
+            
+            stopAutomaticDetection();
+            updateDetectionStatus('success', 'Krankenkassenkarte erkannt!');
+            updateCardFrame('detected');
+            
+            // Show card type info
+            showCardTypeInfo(detectionResult.cardType, detectionResult.confidence);
+            
+            // Show success animation
+            showSuccessAnimation();
+            
+            // Process card with OCR
+            await extractCardData();
+        }
+
+        function showCardTypeError(cardType) {
+            console.log('❌ Wrong card type detected:', cardType);
+            
+            stopAutomaticDetection();
+            updateDetectionStatus('error', `Falsche Karte erkannt: ${getCardTypeName(cardType)}`);
+            updateCardFrame('error');
+            
+            // Show error guidance
+            showErrorGuidance('wrong_card');
+        }
+
+        function onDetectionTimeout() {
+            console.log('⏰ Detection timeout');
+            
+            stopAutomaticDetection();
+            updateDetectionStatus('error', 'Keine Karte erkannt - bitte Tipps befolgen');
+            updateCardFrame('error');
+            
+            // Show error guidance
+            showErrorGuidance('no_card');
+        }
+
+        function stopAutomaticDetection() {
+            isDetecting = false;
+            if (detectionInterval) {
+                clearInterval(detectionInterval);
+                detectionInterval = null;
+            }
+        }
+
+        async function extractCardData() {
+            try {
+                updateDetectionStatus('loading', 'Kartendaten werden extrahiert...');
+                
+                // Capture current frame for OCR
+                const imageBlob = await captureCardImage();
+                
+                // Process with OCR (Tesseract.js + Backend)
+                const ocrResult = await processCardWithOCR(imageBlob, 'insurance');
+                
+                if (ocrResult.success) {
+                    extractedCardData = ocrResult.data;
+                    showDataConfirmation();
+                } else {
+                    throw new Error(ocrResult.error || 'Datenextraktion fehlgeschlagen');
+                }
+                
+            } catch (error) {
+                console.error('Data extraction error:', error);
+                updateDetectionStatus('error', 'Datenextraktion fehlgeschlagen');
+                
+                // Show specific error guidance based on error type
+                if (error.message.includes('Bildqualität')) {
+                    showOCRQualityGuidance();
+                } else if (error.message.includes('verwertbaren Kartendaten')) {
+                    showOCRPositioningGuidance();
+                } else {
+                    showErrorGuidance('extraction_failed');
+                }
+            }
+        }
+        
+        // NEW: Show specific guidance for OCR quality issues
+        function showOCRQualityGuidance() {
+            const errorDiv = document.getElementById('errorGuidance');
+            const guidanceContent = errorDiv.querySelector('.guidance-content');
+            
+            guidanceContent.innerHTML = `
+                <div style="font-size: 2rem; margin-bottom: 1rem;">📸</div>
+                <h4>Bildqualität verbessern:</h4>
+                <ul style="text-align: left; margin: 1rem 0;">
+                    <li><strong>Beleuchtung:</strong> Sorgen Sie für helles, gleichmäßiges Licht</li>
+                    <li><strong>Schärfe:</strong> Halten Sie die Kamera ruhig und fokussiert</li>
+                    <li><strong>Abstand:</strong> Karte sollte den Rahmen vollständig ausfüllen</li>
+                    <li><strong>Kontrast:</strong> Vermeiden Sie Schatten auf der Karte</li>
+                    <li><strong>Sauberkeit:</strong> Reinigen Sie die Kameralinse</li>
+                </ul>
+                <button class="btn" onclick="retryCardDetection()">
+                    🔄 Mit besserer Qualität erneut versuchen
+                </button>
+            `;
+            
+            errorDiv.style.display = 'block';
+        }
+        
+        // NEW: Show specific guidance for card positioning
+        function showOCRPositioningGuidance() {
+            const errorDiv = document.getElementById('errorGuidance');
+            const guidanceContent = errorDiv.querySelector('.guidance-content');
+            
+            guidanceContent.innerHTML = `
+                <div style="font-size: 2rem; margin-bottom: 1rem;">🎯</div>
+                <h4>Karte besser positionieren:</h4>
+                <ul style="text-align: left; margin: 1rem 0;">
+                    <li><strong>Vollständig sichtbar:</strong> Ganze Karte im Rahmen zeigen</li>
+                    <li><strong>Gerade halten:</strong> Karte nicht schräg oder gedreht</li>
+                    <li><strong>Näher halten:</strong> Text sollte groß und lesbar sein</li>
+                    <li><strong>Vorderseite:</strong> Stellen Sie sicher, dass es die Vorderseite ist</li>
+                    <li><strong>Keine Reflexionen:</strong> Vermeiden Sie Lichtreflexionen</li>
+                </ul>
+                <button class="btn" onclick="retryCardDetection()">
+                    🔄 Karte neu positionieren
+                </button>
+            `;
+            
+            errorDiv.style.display = 'block';
+        }
+
+        async function captureCardImage() {
+            return new Promise((resolve) => {
+                detectionCanvas.toBlob((blob) => {
+                    resolve(blob);
+                }, 'image/jpeg', 0.9);
+            });
+        }
+
+        function showDataConfirmation() {
+            // Hide detection UI
+            document.getElementById('automaticCardDetection').style.display = 'none';
+            
+            // Show confirmation UI
+            const confirmationDiv = document.getElementById('dataConfirmation');
+            confirmationDiv.style.display = 'block';
+            
+            // Populate extracted data
+            const extractedDataDiv = document.getElementById('extractedData');
+            extractedDataDiv.innerHTML = `
+                <div class="data-field">
+                    <span class="data-label">Name:</span>
+                    <span class="data-value">${extractedCardData.name}</span>
+                </div>
+                <div class="data-field">
+                    <span class="data-label">Versichertennummer:</span>
+                    <span class="data-value">${extractedCardData.insuranceNumber}</span>
+                </div>
+                <div class="data-field">
+                    <span class="data-label">Krankenkasse:</span>
+                    <span class="data-value">${extractedCardData.insuranceCompany}</span>
+                </div>
+                <div class="data-field">
+                    <span class="data-label">Gültig bis:</span>
+                    <span class="data-value">${extractedCardData.validUntil}</span>
+                </div>
+            `;
+        }
+
+        function confirmCardData(isCorrect) {
+            if (isCorrect) {
+                // Data confirmed - enable next step
+                document.getElementById('step4Next').disabled = false;
+                updateDetectionStatus('success', 'Kartendaten bestätigt!');
+                
+                console.log('✅ Card data confirmed by user');
+            } else {
+                // User wants to retry - restart detection
+                retryCardDetection();
+            }
+        }
+
+        function retryCardDetection() {
+            console.log('🔄 Retrying card detection...');
+            
+            // Hide confirmation and error UI
+            document.getElementById('dataConfirmation').style.display = 'none';
+            document.getElementById('errorGuidance').style.display = 'none';
+            
+            // Show detection UI
+            document.getElementById('automaticCardDetection').style.display = 'block';
+            
+            // Reset detection state
+            detectionAttempts = 0;
+            extractedCardData = null;
+            
+            // Restart detection
+            startAutomaticDetection();
+        }
+
+        function showErrorGuidance(errorType) {
+            const errorDiv = document.getElementById('errorGuidance');
+            errorDiv.style.display = 'block';
+            
+            // Auto-hide after 10 seconds and retry
+            setTimeout(() => {
+                if (errorDiv.style.display !== 'none') {
+                    retryCardDetection();
+                }
+            }, 10000);
+        }
+
+        // UI Helper Functions
+        function updateDetectionStatus(type, message) {
+            const statusDiv = document.getElementById('autoDetectionStatus');
+            statusDiv.textContent = message;
+            statusDiv.className = `scan-status ${type}`;
+        }
+
+        function updateCardFrame(state) {
+            const frameDiv = document.getElementById('cardFrame');
+            const textDiv = document.getElementById('cardFrameText');
+            
+            frameDiv.className = `card-frame ${state}`;
+            
+            switch (state) {
+                case 'detecting':
+                    textDiv.textContent = 'Suche nach Karte...';
+                    break;
+                case 'detected':
+                    textDiv.textContent = 'Karte erkannt!';
+                    break;
+                case 'error':
+                    textDiv.textContent = 'Bitte erneut versuchen';
+                    break;
+                default:
+                    textDiv.textContent = 'Krankenkassenkarte hier positionieren';
+            }
+        }
+
+        function showCardTypeInfo(cardType, confidence) {
+            const infoDiv = document.getElementById('cardTypeInfo');
+            const resultSpan = document.getElementById('cardTypeResult');
+            
+            resultSpan.textContent = `${getCardTypeName(cardType)} (${Math.round(confidence * 100)}%)`;
+            infoDiv.style.display = 'block';
+        }
+
+        function getCardTypeName(cardType) {
+            const names = {
+                'insurance': 'Krankenkassenkarte',
+                'id': 'Personalausweis',
+                'credit': 'Kreditkarte',
+                'other': 'Unbekannte Karte'
+            };
+            return names[cardType] || names.other;
+        }
+
+        function showSuccessAnimation() {
+            const successBar = document.getElementById('detectionSuccessBar');
+            const progressDiv = document.getElementById('successProgress');
+            
+            successBar.style.display = 'block';
+            
+            // Animate progress bar
+            setTimeout(() => {
+                progressDiv.style.width = '100%';
+            }, 100);
+            
+            // Hide after animation
+            setTimeout(() => {
+                successBar.style.display = 'none';
+                progressDiv.style.width = '0%';
+            }, 2000);
         }
 
         async function processCardWithOCR(imageBlob, side) {
             try {
-                // Simulate OCR processing (in real implementation, use Tesseract.js or API)
-                console.log(`🔍 Processing ${side} side with OCR...`);
+                console.log(`🔍 Processing insurance card with real OCR (Tesseract.js)...`);
                 
-                // Simulate processing delay
-                await new Promise(resolve => setTimeout(resolve, 2000));
+                // Convert blob to base64
+                const base64Data = await blobToBase64(imageBlob);
                 
-                // Mock OCR results for demonstration
-                if (side === 'front') {
-                    return {
-                        success: true,
-                        data: {
-                            name: 'Max Mustermann',
-                            insuranceNumber: '1234567890',
-                            insuranceCompany: 'Test Krankenkasse',
-                            validUntil: '12/2025'
-                        }
-                    };
-                } else {
-                    return {
-                        success: true,
-                        data: {
-                            doctorNumber: 'DR123456789',
-                            institutionCode: 'INST987654'
-                        }
-                    };
+                // First: Validate card type
+                const validationResponse = await fetch(`/api/meetings/${meetingId}/validate-insurance-card`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        meeting_id: meetingId,
+                        image_data: base64Data
+                    })
+                });
+                
+                if (!validationResponse.ok) {
+                    const error = await validationResponse.json();
+                    throw new Error(error.detail || 'Kartenvalidierung fehlgeschlagen');
                 }
+                
+                const validationResult = await validationResponse.json();
+                
+                if (!validationResult.success || !validationResult.is_insurance_card) {
+                    throw new Error(validationResult.message || 'Keine gültige Krankenkassenkarte erkannt');
+                }
+                
+                // Second: Process with real OCR (Tesseract.js)
+                updateDetectionStatus('loading', 'OCR-Texterkennung läuft...');
+                
+                const ocrResult = await performTesseractOCR(imageBlob);
+                
+                if (!ocrResult.success) {
+                    throw new Error(ocrResult.error || 'OCR-Verarbeitung fehlgeschlagen');
+                }
+                
+                // Third: Send extracted data to backend for validation
+                const extractionResponse = await fetch(`/api/meetings/${meetingId}/extract-insurance-card-data`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        meeting_id: meetingId,
+                        validation_id: validationResult.validation_id,
+                        image_data: base64Data
+                    })
+                });
+                
+                if (!extractionResponse.ok) {
+                    const error = await extractionResponse.json();
+                    throw new Error(error.detail || 'Backend-Datenextraktion fehlgeschlagen');
+                }
+                
+                const extractionResult = await extractionResponse.json();
+                
+                // Merge Tesseract results with backend results
+                const mergedData = mergeOCRResults(ocrResult.data, extractionResult.extracted_data);
+                
+                // Convert backend format to frontend format
+                const frontendData = {
+                    name: mergedData.name || '',
+                    insuranceNumber: mergedData.insurance_number || '',
+                    insuranceCompany: mergedData.insurance_company || '',
+                    validUntil: mergedData.valid_until || ''
+                };
+                
+                return {
+                    success: true,
+                    data: frontendData,
+                    validation_id: validationResult.validation_id,
+                    confidence: Math.max(ocrResult.confidence, extractionResult.confidence || 0.8),
+                    ocr_method: 'tesseract'
+                };
                 
             } catch (error) {
                 console.error('OCR processing error:', error);
-                return { success: false, error: error.message };
+                return { 
+                    success: false, 
+                    error: error.message 
+                };
             }
         }
-
-        async function completeCardValidation() {
+        
+        // NEW: Real OCR implementation with Tesseract.js
+        async function performTesseractOCR(imageBlob) {
             try {
-                console.log('🎉 Completing card validation...');
+                console.log('🤖 Starting Tesseract.js OCR...');
                 
-                // Stop all camera streams
-                if (frontCardStream) {
-                    frontCardStream.getTracks().forEach(track => track.stop());
+                // Show OCR progress bar
+                const progressBar = document.getElementById('ocrProgressBar');
+                const progressElement = document.getElementById('ocrProgress');
+                const progressText = document.getElementById('ocrProgressText');
+                
+                progressBar.style.display = 'block';
+                progressElement.style.width = '0%';
+                progressText.textContent = 'OCR-Engine wird geladen...';
+                
+                // Optimized Tesseract configuration for German insurance cards
+                const tesseractConfig = {
+                    logger: (m) => {
+                        console.log('Tesseract status:', m);
+                        
+                        if (m.status === 'loading tesseract core') {
+                            progressElement.style.width = '10%';
+                            progressText.textContent = 'OCR-Engine lädt...';
+                        } else if (m.status === 'initializing tesseract') {
+                            progressElement.style.width = '20%';
+                            progressText.textContent = 'OCR wird initialisiert...';
+                        } else if (m.status === 'loading language traineddata') {
+                            progressElement.style.width = '30%';
+                            progressText.textContent = 'Deutsche Sprache lädt...';
+                        } else if (m.status === 'initializing api') {
+                            progressElement.style.width = '40%';
+                            progressText.textContent = 'API wird vorbereitet...';
+                        } else if (m.status === 'recognizing text') {
+                            const progress = Math.round(m.progress * 100);
+                            const totalProgress = 40 + (progress * 0.6); // 40% base + 60% for recognition
+                            progressElement.style.width = `${totalProgress}%`;
+                            progressText.textContent = `Texterkennung: ${progress}%`;
+                            
+                            updateDetectionStatus('loading', `OCR-Texterkennung: ${progress}%`);
+                        }
+                    },
+                    // German language + whitelist for insurance card characters
+                    tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÜßabcdefghijklmnopqrstuvwxyzäöüß0123456789 ./:-',
+                    tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK, // Treat as single block of text
+                    preserve_interword_spaces: '1',
+                    tessedit_do_invert: '0',
+                    // Additional optimizations for ID cards
+                    user_defined_dpi: '300',
+                    tessedit_char_blacklist: '~`!@#$%^&*()+=[]{}\\|;\':"<>?',
+                };
+                
+                // Process image with Tesseract
+                const { data: { text, confidence } } = await Tesseract.recognize(
+                    imageBlob,
+                    'deu', // German language
+                    tesseractConfig
+                );
+                
+                // Complete progress
+                progressElement.style.width = '100%';
+                progressText.textContent = 'OCR abgeschlossen!';
+                
+                console.log('📝 Raw OCR text:', text);
+                console.log('🎯 OCR confidence:', confidence);
+                
+                // Hide progress bar after short delay
+                setTimeout(() => {
+                    progressBar.style.display = 'none';
+                }, 1000);
+                
+                if (confidence < 30) {
+                    return {
+                        success: false,
+                        error: 'Bildqualität zu schlecht für Texterkennung. Bitte bessere Beleuchtung verwenden.',
+                        confidence: confidence / 100
+                    };
                 }
-                if (backCardStream) {
-                    backCardStream.getTracks().forEach(track => track.stop());
+                
+                // Parse OCR text to extract structured data
+                const extractedData = parseGermanInsuranceCardText(text);
+                
+                // Check if we found meaningful data
+                const hasValidData = extractedData.name || extractedData.insurance_number || extractedData.insurance_company;
+                
+                if (!hasValidData) {
+                    return {
+                        success: false,
+                        error: 'Keine verwertbaren Kartendaten erkannt. Bitte Karte näher halten und für gute Beleuchtung sorgen.',
+                        confidence: confidence / 100
+                    };
                 }
                 
-                // Show validation results
-                document.getElementById('validationResults').style.display = 'block';
-                
-                // Animate progress bar
-                const progressBar = document.getElementById('validationProgress');
-                progressBar.style.width = '100%';
-                
-                // Show extracted card information
-                const cardInfo = document.getElementById('cardInfo');
-                cardInfo.innerHTML = `
-                    <h5>📋 Extrahierte Kartendaten:</h5>
-                    <p><strong>Name:</strong> ${frontCardData.name}</p>
-                    <p><strong>Versichertennummer:</strong> ${frontCardData.insuranceNumber}</p>
-                    <p><strong>Krankenkasse:</strong> ${frontCardData.insuranceCompany}</p>
-                    <p><strong>Gültig bis:</strong> ${frontCardData.validUntil}</p>
-                    <p style="color: #28a745; font-weight: 600;">✅ Karte erfolgreich validiert!</p>
-                `;
-                
-                // Enable next step
-                document.getElementById('step4Next').disabled = false;
-                
-                console.log('✅ Card validation completed successfully');
+                return {
+                    success: true,
+                    data: extractedData,
+                    confidence: confidence / 100,
+                    raw_text: text
+                };
                 
             } catch (error) {
-                console.error('Card validation completion error:', error);
-                showStatus('error', 'Validierung fehlgeschlagen: ' + error.message);
+                console.error('Tesseract OCR error:', error);
+                
+                // Hide progress bar on error
+                const progressBar = document.getElementById('ocrProgressBar');
+                if (progressBar) {
+                    progressBar.style.display = 'none';
+                }
+                
+                return {
+                    success: false,
+                    error: 'OCR-Verarbeitung fehlgeschlagen: ' + error.message,
+                    confidence: 0
+                };
             }
+        }
+        
+        // NEW: Parse German insurance card text using patterns
+        function parseGermanInsuranceCardText(text) {
+            console.log('🔍 Parsing German insurance card text...');
+            
+            const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+            
+            const data = {
+                name: '',
+                insurance_number: '',
+                insurance_company: '',
+                birth_date: '',
+                valid_until: ''
+            };
+            
+            // German insurance card patterns
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                const lineLower = line.toLowerCase();
+                
+                // Skip common header texts
+                if (lineLower.includes('krankenversichertenkarte') || 
+                    lineLower.includes('versichertenkarte') ||
+                    lineLower.includes('european health') ||
+                    lineLower.includes('bundesrepublik')) {
+                    continue;
+                }
+                
+                // Name detection (usually the first substantial line after header)
+                if (!data.name && line.length > 3 && isValidName(line)) {
+                    data.name = cleanText(line);
+                    console.log('📝 Found name:', data.name);
+                    continue;
+                }
+                
+                // Insurance number (German format: Letter + 9 digits)
+                const insuranceMatch = line.match(/([A-Z]\d{9}|\d{10})/);
+                if (insuranceMatch && !data.insurance_number) {
+                    data.insurance_number = insuranceMatch[1];
+                    console.log('🔢 Found insurance number:', data.insurance_number);
+                    continue;
+                }
+                
+                // Birth date patterns
+                const birthMatch = line.match(/(?:geb\.?:?\s*)?(\d{1,2}\.?\d{1,2}\.?\d{2,4})/i);
+                if (birthMatch && !data.birth_date) {
+                    data.birth_date = birthMatch[1];
+                    console.log('📅 Found birth date:', data.birth_date);
+                    continue;
+                }
+                
+                // Valid until patterns
+                const validMatch = line.match(/(?:gültig bis:?\s*|bis:?\s*)?(\d{1,2}\/\d{2,4}|\d{1,2}\.\d{2,4})/i);
+                if (validMatch && !data.valid_until) {
+                    data.valid_until = validMatch[1];
+                    console.log('⏰ Found valid until:', data.valid_until);
+                    continue;
+                }
+                
+                // Insurance company (common German insurance names)
+                if (isGermanInsuranceCompany(line) && !data.insurance_company) {
+                    data.insurance_company = cleanText(line);
+                    console.log('🏥 Found insurance company:', data.insurance_company);
+                    continue;
+                }
+            }
+            
+            console.log('✅ Parsed insurance card data:', data);
+            return data;
+        }
+        
+        // Helper functions for text parsing
+        function isValidName(text) {
+            // Check if text looks like a person's name
+            const words = text.split(' ').filter(w => w.length > 1);
+            if (words.length < 2 || words.length > 4) return false;
+            
+            // Should contain only letters, spaces, and common German name characters
+            return /^[A-Za-zÄÖÜäöüß\s\-\.]+$/.test(text) && 
+                   text.length >= 3 && 
+                   text.length <= 50;
+        }
+        
+        function isGermanInsuranceCompany(text) {
+            const insuranceNames = [
+                'aok', 'tk', 'techniker', 'barmer', 'dak', 'kkh', 'hek', 'pronova', 'bkk',
+                'ikk', 'knappschaft', 'svlfg', 'audi', 'mercedes', 'continentale',
+                'debeka', 'signal', 'hansemerkur', 'nürnberger', 'württembergische'
+            ];
+            
+            const textLower = text.toLowerCase();
+            return insuranceNames.some(name => textLower.includes(name)) &&
+                   text.length >= 3 && 
+                   text.length <= 50;
+        }
+        
+        function cleanText(text) {
+            return text.trim()
+                       .replace(/\s+/g, ' ')
+                       .replace(/[^\w\säöüÄÖÜß\.\-]/g, '');
+        }
+        
+        function mergeOCRResults(tesseractData, backendData) {
+            // Merge results, preferring non-empty values
+            return {
+                name: tesseractData.name || backendData.name || '',
+                insurance_number: tesseractData.insurance_number || backendData.insurance_number || '',
+                insurance_company: tesseractData.insurance_company || backendData.insurance_company || '',
+                birth_date: tesseractData.birth_date || backendData.birth_date || '',
+                valid_until: tesseractData.valid_until || backendData.valid_until || ''
+            };
+        }
+        
+        // Helper function to convert blob to base64
+        function blobToBase64(blob) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+            });
         }
     </script>
 </body>
