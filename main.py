@@ -2542,6 +2542,152 @@ async def get_insurance_card_status(
         logger.error(f"Insurance card status check error: {str(e)}")
         raise HTTPException(status_code=500, detail="Fehler bei der Status-Abfrage")
 
+# NEW: Frontend-compatible OCR endpoint
+@app.post("/api/ocr/process-card",
+          tags=["Patient Flow"],
+          summary="🔍 OCR-Kartenverarbeitung (Frontend-kompatibel)",
+          description="""
+          **Frontend-kompatibler OCR-Endpunkt für Krankenkassenkarten.**
+          
+          Dieser Endpunkt wird direkt vom Frontend aufgerufen und verarbeitet
+          Kartenbilder mit verbesserter OCR-Technologie.
+          
+          ### 🔧 Features:
+          - **Bildvorverarbeitung**: Automatische Optimierung für OCR
+          - **Robuste Erkennung**: Speziell für deutsche Krankenkassenkarten
+          - **Fehlerbehandlung**: Graceful Fallbacks bei OCR-Problemen
+          - **Logging**: Detaillierte Logs für Debugging
+          
+          ### 📊 Rückgabe:
+          - **Erfolg**: Strukturierte Kartendaten
+          - **Fehler**: Hilfreiche Fehlermeldungen
+          - **Konfidenz**: Qualitätsbewertung der Erkennung
+          """)
+async def process_card_ocr(
+    request: Request,
+    meeting_service: MeetingService = Depends(get_meeting_service),
+    insurance_service: InsuranceCardService = Depends(get_insurance_card_service)
+):
+    """
+    🔍 **OCR-Verarbeitung für Krankenkassenkarten (Frontend-kompatibel)**
+    
+    Verarbeitet Kartenbilder mit fortschrittlicher OCR-Technologie
+    und gibt strukturierte Daten zurück.
+    """
+    try:
+        # Parse form data
+        form = await request.form()
+        
+        # Get required fields
+        meeting_id = form.get('meeting_id')
+        side = form.get('side', 'front')
+        
+        if not meeting_id:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "success": False,
+                    "error": "meeting_id erforderlich",
+                    "raw_text": ""
+                }
+            )
+        
+        # Validate meeting exists
+        meeting = meeting_service.get_meeting(meeting_id)
+        if not meeting:
+            return JSONResponse(
+                status_code=404,
+                content={
+                    "success": False,
+                    "error": f"Meeting {meeting_id} nicht gefunden",
+                    "raw_text": ""
+                }
+            )
+        
+        # Get image data
+        image_file = form.get('image')
+        if not image_file:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "success": False,
+                    "error": "Bild erforderlich",
+                    "raw_text": ""
+                }
+            )
+        
+        # Read image bytes
+        image_bytes = await image_file.read()
+        
+        if len(image_bytes) == 0:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "success": False,
+                    "error": "Leeres Bild empfangen",
+                    "raw_text": ""
+                }
+            )
+        
+        logger.info(f"Processing OCR for meeting {meeting_id}, side: {side}, image size: {len(image_bytes)} bytes")
+        
+        # Process with OCR
+        ocr_result = insurance_service._process_with_ocr(image_bytes)
+        
+        if ocr_result.get("success"):
+            extracted_data = ocr_result.get("data", {})
+            confidence = ocr_result.get("confidence", 0.0)
+            raw_text = ocr_result.get("raw_text", "")
+            
+            # Filter data based on card side
+            if side == 'front':
+                filtered_data = {
+                    "name": extracted_data.get("name", ""),
+                    "insurance_number": extracted_data.get("insurance_number", ""),
+                    "insurance_company": extracted_data.get("insurance_company", ""),
+                    "birth_date": extracted_data.get("birth_date", "")
+                }
+            else:  # back
+                filtered_data = {
+                    "valid_until": extracted_data.get("valid_until", ""),
+                    "birth_date": extracted_data.get("birth_date", "")
+                }
+            
+            logger.info(f"OCR success for {side} side: {list(filtered_data.keys())}")
+            
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "success": True,
+                    "data": filtered_data,
+                    "confidence": confidence,
+                    "raw_text": raw_text
+                }
+            )
+        else:
+            error_message = ocr_result.get("error", "OCR-Verarbeitung fehlgeschlagen")
+            logger.error(f"OCR failed for meeting {meeting_id}: {error_message}")
+            
+            return JSONResponse(
+                status_code=200,  # Return 200 but with success=False
+                content={
+                    "success": False,
+                    "error": error_message,
+                    "raw_text": ocr_result.get("raw_text", "")
+                }
+            )
+        
+    except Exception as e:
+        logger.error(f"OCR processing error: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "error": f"Server-Fehler: {str(e)}",
+                "raw_text": ""
+            }
+        )
+
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
     logger.info(f"Starting HeyDok Video on port {port}")

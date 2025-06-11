@@ -38,8 +38,8 @@ phonenumbers==8.13.26
 Pillow==10.1.0
 numpy==1.24.4
 opencv-python==4.8.1.78
-# Note: pytesseract can be added later for production OCR
-# pytesseract==0.3.10
+# Real OCR processing for insurance cards
+pytesseract==0.3.10
 
 # Development & Testing (optional)
 pytest==7.4.3

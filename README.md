@@ -1,135 +1,164 @@
-# HeyDok Video - Simple Video Meeting Platform
+# HeyDoc Video - Telemedizin Platform
 
-Eine minimale, voll funktionsfähige Video-Meeting-Plattform ähnlich wie Google Meet. Nutzer können mit einem Klick ein Meeting starten, den Link teilen, und andere können sofort beitreten - ohne Registrierung.
+Eine moderne, sichere Video-Plattform für Telemedizin mit integriertem Patient-Setup und Dokumentenverwaltung.
 
 ## 🚀 Features
 
-- **One-Click Meeting Creation** - Kein Login erforderlich
-- **Instant Join** - Mit Meeting-Code oder Link
-- **Video/Audio Controls** - Mikrofon und Kamera An/Aus
-- **Responsive Design** - Funktioniert auf Desktop und Mobile
-- **Real-time Video** - Powered by LiveKit
+- **Video-Meetings**: Sichere, verschlüsselte Video-Kommunikation
+- **Patient-Setup**: Automatisierter Onboarding-Prozess
+- **Dokumentenupload**: Sichere Übertragung medizinischer Dokumente
+- **Media-Tests**: Automatische Überprüfung von Kamera/Mikrofon
+- **Krankenkassenkarten-OCR**: Automatische Erkennung und Datenextraktion ✨
+- **Responsive Design**: Optimiert für Desktop und Mobile
 
-## 📋 Tech Stack
+## 📋 System-Anforderungen
 
-- **Backend**: FastAPI (Python)
-- **Frontend**: Vanilla JavaScript, HTML, CSS
-- **Video/Audio**: LiveKit WebRTC
-- **Deployment**: Render.com (kostenlos)
-
-## 🛠️ Local Setup
-
-### 1. Clone Repository
-```bash
-git clone https://github.com/yourusername/heydokvid.git
-cd heydokvid
-```
-
-### 2. Create Virtual Environment
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
-
-### 3. Install Dependencies
+### Python Dependencies
 ```bash
 pip install -r requirements.txt
 ```
 
-### 4. Set Environment Variables
-Create a `.env` file in the root directory:
-```env
-LIVEKIT_URL=wss://your-instance.livekit.cloud
-LIVEKIT_API_KEY=your-api-key
-LIVEKIT_API_SECRET=your-api-secret
-```
+### OCR-System (für Krankenkassenkarten-Erkennung)
 
-⚠️ **WICHTIG**: Niemals echte API-Schlüssel in GitHub committen!
-
-### 5. Run the Application
+**Ubuntu/Debian:**
 ```bash
-cd backend
-uvicorn main:app --reload
+sudo apt-get install tesseract-ocr tesseract-ocr-deu
 ```
 
-Visit http://localhost:8000
-
-## 🚀 Deploy to Render.com (Kostenlos)
-
-### 1. Vorbereitung
-- Erstellen Sie einen [LiveKit Cloud Account](https://livekit.io/cloud) (kostenlos)
-- Forken Sie dieses Repository zu Ihrem GitHub Account
-
-### 2. Deploy auf Render
-1. Gehen Sie zu [render.com](https://render.com) und melden Sie sich mit GitHub an
-2. Klicken Sie auf "New +" → "Web Service"
-3. Verbinden Sie Ihr GitHub Repository
-4. Render erkennt automatisch die `render.yaml` Konfiguration
-5. Fügen Sie die Environment Variables hinzu:
-   - `LIVEKIT_URL`: Ihre LiveKit Server URL
-   - `LIVEKIT_API_KEY`: Ihr LiveKit API Key
-   - `LIVEKIT_API_SECRET`: Ihr LiveKit API Secret
-   - `APP_URL`: Wird automatisch gesetzt (https://ihr-app-name.onrender.com)
-
-### 3. Deployment
-- Klicken Sie auf "Create Web Service"
-- Warten Sie 2-3 Minuten für das erste Deployment
-- Ihre App ist live unter: `https://ihr-app-name.onrender.com`
-
-## 📁 Project Structure
-
-```
-heydok-video/
-├── backend/
-│   ├── main.py           # FastAPI Server
-│   └── livekit_client.py # LiveKit Integration
-├── frontend/
-│   ├── index.html        # Homepage
-│   ├── meeting.html      # Meeting Room
-│   └── app.js           # Meeting Logic
-├── static/
-│   └── style.css        # Styling
-├── requirements.txt     # Python Dependencies
-├── render.yaml         # Render.com Config
-└── README.md          # This file
+**macOS:**
+```bash
+brew install tesseract tesseract-lang
 ```
 
-## 🔧 Development
+**Windows:**
+1. Download Tesseract installer from: https://tesseract-ocr.github.io/tessdoc/Installation.html
+2. Install with German language pack
+3. Add Tesseract to PATH
 
-### Testing Locally
-1. Start the backend server
-2. Open browser 1 and create a meeting
-3. Copy the meeting link
-4. Open browser 2 (or incognito) and join with the link
-5. Test video/audio and controls
+**Docker:**
+```dockerfile
+RUN apt-get update && apt-get install -y \
+    tesseract-ocr \
+    tesseract-ocr-deu \
+    && rm -rf /var/lib/apt/lists/*
+```
 
-### Common Issues
+### Konfiguration
 
-**LiveKit Connection Failed**
-- Check environment variables
-- Ensure LIVEKIT_URL starts with `wss://`
-- Verify API Key and Secret match
+Erstellen Sie eine `.env` Datei basierend auf `env.example`:
 
-**No Video/Audio**
-- HTTPS required (except localhost)
-- Check browser permissions
-- Look for console errors
+```bash
+cp env.example .env
+```
 
-## 🔒 Security Notes
+## 🔧 Installation & Start
 
-- Verwenden Sie niemals die API-Schlüssel aus Beispielen
-- Erstellen Sie eigene LiveKit Credentials
-- Nutzen Sie Environment Variables für alle Secrets
-- Aktivieren Sie CORS-Restrictions für Production
+1. **Repository klonen:**
+```bash
+git clone <repository-url>
+cd telemedizintool
+```
 
-## 📝 License
+2. **Virtual Environment erstellen:**
+```bash
+python -m venv .venv
+source .venv/bin/activate  # Linux/macOS
+# oder
+.venv\Scripts\activate     # Windows
+```
 
-MIT License - feel free to use this project for anything!
+3. **Dependencies installieren:**
+```bash
+pip install -r requirements.txt
+```
 
-## 🤝 Contributing
+4. **Tesseract OCR installieren** (siehe oben)
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request 
+5. **Environment konfigurieren:**
+```bash
+cp env.example .env
+# .env Datei entsprechend anpassen
+```
+
+6. **Anwendung starten:**
+```bash
+python main.py
+```
+
+## 📱 Nutzung
+
+### Arzt-Workflow:
+1. Meeting erstellen über Homepage
+2. Patient-Link an Patient senden
+3. Direkt beitreten wenn Patient fertig ist
+
+### Patient-Workflow:
+1. Patient-Setup Link öffnen
+2. **Krankenkassenkarte scannen** (automatische OCR-Erkennung) ✨
+3. Zusätzliche Dokumente hochladen
+4. Media-Test durchführen
+5. Meeting beitreten
+
+## 🔍 OCR-Funktionalität
+
+Die integrierte OCR-Erkennung kann automatisch folgende Daten von deutschen Krankenkassenkarten extrahieren:
+
+- **Name des Versicherten**
+- **Krankenversicherungsnummer**
+- **Name der Krankenkasse**
+- **Gültigkeitsdatum**
+- **Geburtsdatum**
+
+### OCR-Features:
+- **Bildvorverarbeitung**: Automatische Optimierung für bessere Erkennung
+- **Robuste Parsing-Logic**: Speziell für deutsche Krankenkassenkarten
+- **Fehlerbehandlung**: Graceful Fallbacks bei OCR-Problemen
+- **Dual-Engine**: Frontend (Tesseract.js) + Backend (pytesseract) Fallback
+
+## 🚀 Deployment
+
+### Lokale Entwicklung:
+```bash
+./start_local.sh
+```
+
+### Production (Heroku):
+- Automatisches Deployment via GitHub Integration
+- Buildpack für Tesseract wird automatisch installiert
+- Environment Variables über Heroku Dashboard konfigurieren
+
+## 🔒 Sicherheit
+
+- Verschlüsselte Video-Übertragung
+- Sichere Token-basierte Authentifizierung  
+- DSGVO-konforme Datenverarbeitung
+- Automatische Session-Bereinigung
+
+## 📊 API-Dokumentation
+
+Nach dem Start verfügbar unter: `http://localhost:8000/docs`
+
+## 🛠️ Technologie-Stack
+
+- **Backend**: FastAPI, SQLAlchemy, Python 3.8+
+- **Video**: LiveKit SDK
+- **OCR**: Tesseract OCR, OpenCV, PIL ✨
+- **Frontend**: Vanilla JavaScript, HTML5, CSS3
+- **Database**: SQLite (Development), PostgreSQL (Production)
+- **Deployment**: Heroku, Docker-ready
+
+## 🆘 Troubleshooting
+
+### OCR-Probleme:
+- **"OCR-Engine nicht installiert"**: Tesseract OCR installieren (siehe oben)
+- **"Kein Text erkannt"**: Bildqualität verbessern, bessere Beleuchtung
+- **"Deutsche Sprache fehlt"**: `tesseract-ocr-deu` Paket installieren
+
+### Video-Probleme:
+- LiveKit-Konfiguration in `.env` prüfen
+- Browser-Berechtigungen für Kamera/Mikrofon erlauben
+- HTTPS für Production verwenden
+
+## 📝 Lizenz
+
+[Lizenz hier einfügen] 
