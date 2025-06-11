@@ -1379,10 +1379,13 @@ async def upload_patient_document(
     )
 
 @app.post("/api/meetings/{meeting_id}/process-document")
-async def process_patient_document(meeting_id: str, document_id: str = Form(...)):
+async def process_patient_document(
+    meeting_id: str, 
+    document_id: str = Form(...),
+    document_service: DocumentService = Depends(get_document_service)
+):
     """Process uploaded patient document (placeholder for actual processing logic)"""
     
-    document_service = get_document_service()
     document = document_service.get_document(document_id)
     
     if not document:
