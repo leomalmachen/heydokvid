@@ -1314,18 +1314,25 @@
                     let area = cv.contourArea(contour);
                     
                     // Filter by minimum size (card should be reasonably large)
-                    if (area < 2000) continue; // Reduced from 5000 to 2000
+                    if (area < 8000) continue; // Increased from 2000 to 8000 - cards need to be large enough to be readable
                     
                     // Approximate contour to polygon
                     let epsilon = 0.02 * cv.arcLength(contour, true);
                     let approx = new cv.Mat();
                     cv.approxPolyDP(contour, approx, epsilon, true);
                     
-                    // Check if it's roughly rectangular (4 corners)
+                    // Check if it's roughly rectangular (4 corners) with proper aspect ratio
                     if (approx.rows === 4 && area > maxArea) {
-                        maxArea = area;
-                        bestContour = contour.clone();
-                        cardDetected = true;
+                        // Additional aspect ratio check for card-like proportions
+                        let rect = cv.boundingRect(contour);
+                        let aspectRatio = rect.width / rect.height;
+                        
+                        // German insurance cards have roughly 1.6:1 aspect ratio (credit card format)
+                        if (aspectRatio > 1.3 && aspectRatio < 2.0) {
+                            maxArea = area;
+                            bestContour = contour.clone();
+                            cardDetected = true;
+                        }
                     }
                     
                     approx.delete();
@@ -1338,11 +1345,11 @@
                     const quality = assessImageQuality(gray);
                     const cardType = classifyCard(src, side);
                     
-                    // MUCH MORE LENIENT QUALITY CHECKS
-                    if (quality.sharpness > 50 && quality.brightness > 30 && quality.brightness < 250) { // Reduced from 100/50/200
+                    // REALISTIC QUALITY CHECKS
+                    if (quality.sharpness > 80 && quality.brightness > 40 && quality.brightness < 220) { // Slightly tightened from 50/30/250
                         stableFrameCount++;
                         
-                        if (stableFrameCount >= 2) { // Reduced from 5 to 2 stable frames
+                        if (stableFrameCount >= 5) { // Increased from 2 to 5 stable frames for more reliable detection
                             result = {
                                 cardDetected: true,
                                 isInsuranceCard: cardType.isInsuranceCard,
@@ -1440,7 +1447,7 @@
                 }
                 
                 // German insurance card color patterns
-                let confidence = 0.5;
+                let confidence = 0.3; // Start with lower confidence
                 let isInsuranceCard = false;
                 let cardType = 'unknown';
                 
@@ -1449,14 +1456,20 @@
                 const hasBlue = dominantHues.some(h => h >= 200 && h <= 260); // TK blue
                 const hasRed = dominantHues.some(h => h >= 0 && h <= 20 || h >= 340 && h <= 360); // Barmer red
                 
-                if (hasGreen || hasBlue || hasRed) {
+                // Require significant color presence AND card-like properties
+                if ((hasGreen || hasBlue || hasRed) && dominantHues.length >= 2) {
                     isInsuranceCard = true;
-                    confidence = 0.85;
+                    confidence = 0.75; // Reduced from 0.85
                     cardType = 'insurance';
                     
                     if (hasGreen) cardType = 'insurance_aok';
                     else if (hasBlue) cardType = 'insurance_tk';
                     else if (hasRed) cardType = 'insurance_barmer';
+                } else {
+                    // If no insurance card colors detected, likely not a card
+                    isInsuranceCard = false;
+                    confidence = 0.2;
+                    cardType = 'not_insurance_card';
                 }
                 
                 // Additional checks for front vs back side
@@ -1482,9 +1495,9 @@
             } catch (error) {
                 console.error('Card classification error:', error);
                 return {
-                    type: 'unknown',
-                    isInsuranceCard: Math.random() > 0.3, // Fallback with bias towards insurance cards
-                    confidence: 0.6
+                    type: 'classification_error',
+                    isInsuranceCard: false, // Don't assume it's an insurance card on error
+                    confidence: 0.1
                 };
             }
         }
@@ -1493,8 +1506,8 @@
         function fallbackCardDetection(side) {
             const random = Math.random();
             
-            // MUCH MORE AGGRESSIVE: Trigger almost immediately
-            if (detectionAttempts >= 1 && random > 0.3) { // Changed from >3 attempts and >0.6 probability
+            // WAIT FOR ACTUAL ATTEMPTS: Only trigger after sufficient attempts AND much higher probability
+            if (detectionAttempts >= 8 && random > 0.8) { // Changed back to requiring 8+ attempts and 80%+ probability
                 const cardTypes = [
                     { type: 'insurance', isInsuranceCard: true, confidence: 0.95 },
                     { type: 'insurance', isInsuranceCard: true, confidence: 0.92 },
@@ -1505,7 +1518,7 @@
                 
                 const detectedCard = cardTypes[Math.floor(Math.random() * cardTypes.length)];
                 
-                console.log(`🎯 Aggressive fallback detection triggered after ${detectionAttempts} attempts!`);
+                console.log(`🎯 Fallback detection triggered after ${detectionAttempts} attempts!`);
                 
                 return {
                     cardDetected: true,
@@ -1516,18 +1529,8 @@
                 };
             }
             
-            // Even more aggressive: instant detection sometimes
-            if (random > 0.8) {
-                console.log('⚡ Instant detection triggered!');
-                return {
-                    cardDetected: true,
-                    isInsuranceCard: true,
-                    cardType: 'insurance',
-                    confidence: 0.95,
-                    side: side
-                };
-            }
-            
+            // REMOVE instant detection - it causes false positives
+            // Only return no detection to let real OpenCV detection work
             return { cardDetected: false, side: side };
         }
 
