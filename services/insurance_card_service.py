@@ -283,8 +283,8 @@ class InsuranceCardService:
             
             # Resize if too small (insurance cards should be readable at decent size)
             width, height = image.size
-            if width < 600:  # Minimum width for good OCR
-                scale_factor = 600 / width
+            if width < 800:  # Increased minimum width for better OCR
+                scale_factor = 800 / width
                 new_width = int(width * scale_factor)
                 new_height = int(height * scale_factor)
                 image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
@@ -299,6 +299,9 @@ class InsuranceCardService:
             # Convert to grayscale for better text detection
             gray = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
             
+            # Apply Gaussian blur to reduce noise
+            gray = cv2.GaussianBlur(gray, (1, 1), 0)
+            
             # Apply adaptive thresholding for better text contrast
             processed = cv2.adaptiveThreshold(
                 gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
@@ -308,6 +311,11 @@ class InsuranceCardService:
             kernel = np.ones((1, 1), np.uint8)
             processed = cv2.morphologyEx(processed, cv2.MORPH_CLOSE, kernel)
             
+            # Dilation and erosion to make text more solid
+            kernel = np.ones((2, 2), np.uint8)
+            processed = cv2.dilate(processed, kernel, iterations=1)
+            processed = cv2.erode(processed, kernel, iterations=1)
+            
             # Convert back to PIL Image
             final_image = Image.fromarray(processed)
             
@@ -315,11 +323,15 @@ class InsuranceCardService:
             # Sharpen text
             final_image = final_image.filter(ImageFilter.SHARPEN)
             
-            # Increase contrast
+            # Increase contrast more aggressively
             enhancer = ImageEnhance.Contrast(final_image)
-            final_image = enhancer.enhance(1.2)
+            final_image = enhancer.enhance(1.5)  # Increased from 1.2 to 1.5
             
-            logger.info("Image preprocessing completed")
+            # Enhance brightness
+            enhancer = ImageEnhance.Brightness(final_image)
+            final_image = enhancer.enhance(1.1)
+            
+            logger.info("Enhanced image preprocessing completed")
             return final_image
             
         except Exception as e:
@@ -341,6 +353,7 @@ class InsuranceCardService:
             }
             
             logger.info(f"Parsing {len(lines)} lines of OCR text")
+            logger.info(f"Raw OCR text: {text[:500]}...")  # Log first 500 chars for debugging
             
             # Enhanced parsing logic for German insurance cards
             for i, line in enumerate(lines):
@@ -350,59 +363,111 @@ class InsuranceCardService:
                 # Skip header lines
                 if any(header in line_lower for header in [
                     'krankenversichertenkarte', 'versichertenkarte', 'european health',
-                    'bundesrepublik', 'deutschland', 'germany'
+                    'bundesrepublik', 'deutschland', 'germany', 'health insurance',
+                    'krankenversicherung', 'gkv', 'pkv'
                 ]):
                     continue
                 
-                # Name detection - look for typical name patterns
+                # Name detection - enhanced patterns for German names
                 if not data["name"] and self._is_likely_name(line_clean):
-                    data["name"] = line_clean
+                    data["name"] = self._clean_name(line_clean)
                     logger.info(f"Found name: {data['name']}")
                     continue
                 
-                # Insurance number - German format (letter + 9 digits or 10 digits)
+                # Insurance number - German format with more patterns
                 if not data["insurance_number"]:
-                    ins_match = re.search(r'([A-Z]\d{9}|\d{10})', line_clean)
-                    if ins_match:
-                        data["insurance_number"] = ins_match.group(1)
-                        logger.info(f"Found insurance number: {data['insurance_number']}")
-                        continue
+                    # Enhanced patterns for German insurance numbers
+                    ins_patterns = [
+                        r'([A-Z]\d{9})',  # A123456789
+                        r'(\d{10})',      # 1234567890
+                        r'([A-Z]\s?\d{3}\s?\d{3}\s?\d{3})',  # A 123 456 789
+                        r'(\d{4}\s?\d{3}\s?\d{3})',          # 1234 567 890
+                        r'([A-Z]\d{3}\.\d{3}\.\d{3})',       # A123.456.789
+                        r'(\d{3}\.\d{3}\.\d{4})'             # 123.456.7890
+                    ]
+                    
+                    for pattern in ins_patterns:
+                        ins_match = re.search(pattern, line_clean)
+                        if ins_match:
+                            number = ins_match.group(1).replace(' ', '').replace('.', '')
+                            if self._is_valid_insurance_number(number):
+                                data["insurance_number"] = number
+                                logger.info(f"Found insurance number: {data['insurance_number']}")
+                                break
                 
-                # Birth date patterns
+                # Birth date patterns - more comprehensive
                 if not data["birth_date"]:
                     birth_patterns = [
                         r'(?:geb\.?:?\s*)?(\d{1,2}\.?\d{1,2}\.?\d{2,4})',
                         r'(?:geboren:?\s*)?(\d{1,2}/\d{1,2}/\d{2,4})',
-                        r'(?:birth:?\s*)?(\d{1,2}-\d{1,2}-\d{2,4})'
+                        r'(?:birth:?\s*)?(\d{1,2}-\d{1,2}-\d{2,4})',
+                        r'(\d{1,2}\.\d{1,2}\.\d{4})',  # DD.MM.YYYY
+                        r'(\d{1,2}/\d{1,2}/\d{4})',   # DD/MM/YYYY
+                        r'(\d{2}\.\d{2}\.\d{2})',     # DD.MM.YY
                     ]
                     for pattern in birth_patterns:
                         birth_match = re.search(pattern, line_clean, re.IGNORECASE)
                         if birth_match:
-                            data["birth_date"] = birth_match.group(1)
-                            logger.info(f"Found birth date: {data['birth_date']}")
-                            break
+                            birth_date = birth_match.group(1)
+                            if self._is_valid_date(birth_date):
+                                data["birth_date"] = birth_date
+                                logger.info(f"Found birth date: {data['birth_date']}")
+                                break
                 
-                # Valid until patterns
+                # Valid until patterns - enhanced
                 if not data["valid_until"]:
                     valid_patterns = [
                         r'(?:gültig bis:?\s*)?(\d{1,2}/\d{2,4})',
                         r'(?:bis:?\s*)?(\d{1,2}\.\d{2,4})',
-                        r'(?:valid until:?\s*)?(\d{1,2}-\d{2,4})'
+                        r'(?:valid until:?\s*)?(\d{1,2}-\d{2,4})',
+                        r'(?:exp\.?:?\s*)?(\d{1,2}/\d{2,4})',
+                        r'(\d{1,2}/\d{4})',   # MM/YYYY
+                        r'(\d{1,2}\.\d{4})',  # MM.YYYY
+                        r'(\d{2}/\d{2})',     # MM/YY
+                        r'(\d{2}\.\d{2})'     # MM.YY
                     ]
                     for pattern in valid_patterns:
                         valid_match = re.search(pattern, line_clean, re.IGNORECASE)
                         if valid_match:
-                            data["valid_until"] = valid_match.group(1)
+                            valid_date = valid_match.group(1)
+                            data["valid_until"] = valid_date
                             logger.info(f"Found valid until: {data['valid_until']}")
                             break
                 
-                # Insurance company detection
+                # Insurance company detection - enhanced
                 if not data["insurance_company"] and self._is_likely_insurance_company(line_clean):
-                    data["insurance_company"] = line_clean
+                    data["insurance_company"] = line_clean[:50]  # Limit length
                     logger.info(f"Found insurance company: {data['insurance_company']}")
                     continue
+                
+                # Additional search in combined lines for missed patterns
+                if i < len(lines) - 1:
+                    combined_line = f"{line_clean} {lines[i+1].strip()}"
+                    
+                    # Try name extraction from combined lines
+                    if not data["name"] and self._is_likely_name(combined_line):
+                        data["name"] = self._clean_name(combined_line)
+                        logger.info(f"Found name in combined line: {data['name']}")
             
-            logger.info(f"OCR parsing result: {data}")
+            # Post-processing: Fill in any missing critical data with improved fallbacks
+            if not data["name"]:
+                # Try to extract any capitalized words that could be names
+                name_candidates = []
+                for line in lines:
+                    words = line.split()
+                    for word in words:
+                        if (word.istitle() and len(word) > 2 and 
+                            re.match(r'^[A-Za-zÄÖÜäöüß\-]+$', word)):
+                            name_candidates.append(word)
+                
+                if len(name_candidates) >= 2:
+                    data["name"] = ' '.join(name_candidates[:3])  # Take first 3 candidates
+                    logger.info(f"Extracted name from candidates: {data['name']}")
+            
+            # Validate and clean extracted data
+            data = self._clean_extracted_data(data)
+            
+            logger.info(f"Enhanced OCR parsing result: {data}")
             return data
             
         except Exception as e:
@@ -414,6 +479,90 @@ class InsuranceCardService:
                 "birth_date": "",
                 "valid_until": ""
             }
+    
+    def _clean_name(self, name: str) -> str:
+        """Clean and format name"""
+        if not name:
+            return ""
+        
+        # Remove extra whitespace and limit length
+        cleaned = re.sub(r'\s+', ' ', name.strip())[:50]
+        
+        # Capitalize properly (first letter of each word)
+        words = cleaned.split()
+        capitalized_words = []
+        for word in words:
+            if re.match(r'^[A-Za-zÄÖÜäöüß\-]+$', word):
+                capitalized_words.append(word.capitalize())
+        
+        return ' '.join(capitalized_words) if capitalized_words else cleaned
+    
+    def _is_valid_insurance_number(self, number: str) -> bool:
+        """Validate German insurance number format"""
+        if not number:
+            return False
+        
+        # Remove spaces and dots
+        clean_number = number.replace(' ', '').replace('.', '')
+        
+        # German insurance numbers: A123456789 (letter + 9 digits) or 1234567890 (10 digits)
+        return (re.match(r'^[A-Z]\d{9}$', clean_number) or 
+                re.match(r'^\d{10}$', clean_number))
+    
+    def _is_valid_date(self, date_str: str) -> bool:
+        """Basic date validation"""
+        if not date_str:
+            return False
+        
+        # Check if it contains reasonable date components
+        date_patterns = [
+            r'^\d{1,2}\.\d{1,2}\.\d{2,4}$',
+            r'^\d{1,2}/\d{1,2}/\d{2,4}$',
+            r'^\d{1,2}-\d{1,2}-\d{2,4}$'
+        ]
+        
+        return any(re.match(pattern, date_str) for pattern in date_patterns)
+    
+    def _clean_extracted_data(self, data: Dict[str, str]) -> Dict[str, str]:
+        """Clean and validate extracted data"""
+        cleaned = {}
+        
+        # Clean name
+        name = data.get("name", "").strip()
+        if name and len(name.split()) >= 2 and len(name) <= 50:
+            cleaned["name"] = name
+        else:
+            cleaned["name"] = "Name nicht erkannt"
+        
+        # Clean insurance number
+        ins_number = data.get("insurance_number", "").strip()
+        if ins_number and self._is_valid_insurance_number(ins_number):
+            cleaned["insurance_number"] = ins_number.replace(' ', '').replace('.', '')
+        else:
+            cleaned["insurance_number"] = "Nummer nicht erkannt"
+        
+        # Clean insurance company
+        company = data.get("insurance_company", "").strip()
+        if company and len(company) >= 3:
+            cleaned["insurance_company"] = company[:50]
+        else:
+            cleaned["insurance_company"] = "Krankenkasse nicht erkannt"
+        
+        # Clean birth date
+        birth_date = data.get("birth_date", "").strip()
+        if birth_date and self._is_valid_date(birth_date):
+            cleaned["birth_date"] = birth_date
+        else:
+            cleaned["birth_date"] = ""
+        
+        # Clean valid until
+        valid_until = data.get("valid_until", "").strip()
+        if valid_until:
+            cleaned["valid_until"] = valid_until
+        else:
+            cleaned["valid_until"] = "Gültigkeitsdatum nicht erkannt"
+        
+        return cleaned
     
     def _is_likely_name(self, text: str) -> bool:
         """Check if text looks like a person's name"""
@@ -444,15 +593,54 @@ class InsuranceCardService:
         if not text or len(text) < 3 or len(text) > 50:
             return False
         
-        # Known German insurance company patterns
+        # Enhanced list of German insurance company patterns
         insurance_keywords = [
+            # Major public insurers (Gesetzliche Krankenkassen)
             'aok', 'tk', 'techniker', 'barmer', 'dak', 'kkh', 'hek', 
-            'pronova', 'bkk', 'ikk', 'knappschaft', 'svlfg', 'continentale',
-            'debeka', 'signal', 'hansemerkur', 'bavaria', 'allianz'
+            'pronova', 'bkk', 'ikk', 'knappschaft', 'svlfg', 
+            'novitas', 'salus', 'mhplus', 'viactiv', 'big',
+            
+            # Regional AOK branches
+            'aok baden', 'aok bayern', 'aok berlin', 'aok bremen',
+            'aok hessen', 'aok niedersachsen', 'aok nordost', 'aok nordwest',
+            'aok plus', 'aok rheinland', 'aok sachsen', 'aok westfalen',
+            
+            # BKK companies
+            'bkk mobil', 'bkk24', 'bkk vbu', 'bkk pfalz', 'bkk dürkopp',
+            'bkk firmus', 'bkk gildemeister', 'bkk mahle', 'bkk melitta',
+            'bkk publicus', 'bkk scheufelen', 'bkk textilgruppe',
+            
+            # IKK companies
+            'ikk classic', 'ikk gesund plus', 'ikk nord', 'ikk südwest',
+            
+            # Private insurers (common ones)
+            'continentale', 'debeka', 'signal', 'hansemerkur', 'bavaria', 
+            'allianz', 'axa', 'generali', 'ergo', 'devk', 'nürnberger',
+            'württembergische', 'central', 'universa', 'hallesche',
+            
+            # Company health funds
+            'audi', 'mercedes', 'bmw', 'siemens', 'bosch', 'volkswagen',
+            'lufthansa', 'deutsche bahn', 'telekom', 'post'
         ]
         
         text_lower = text.lower()
-        return any(keyword in text_lower for keyword in insurance_keywords)
+        
+        # Check for exact matches or partial matches
+        for keyword in insurance_keywords:
+            if keyword in text_lower:
+                return True
+        
+        # Check for generic insurance terms
+        generic_terms = [
+            'krankenkasse', 'krankenversicherung', 'versicherung', 
+            'kasse', 'gesundheit', 'health', 'insurance'
+        ]
+        
+        for term in generic_terms:
+            if term in text_lower and len(text) > 5:
+                return True
+        
+        return False
     
     def _calculate_confidence(self, data: Dict[str, str], raw_text: str) -> float:
         """Calculate confidence score based on extracted data quality"""

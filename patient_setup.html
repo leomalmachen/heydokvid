@@ -2474,21 +2474,34 @@
             try {
                 updateScanStatus(side, 'loading', 'Tesseract OCR wird gestartet...');
                 
-                // Use the simple recognize method without custom workers
+                // IMPROVED: Enhanced Tesseract configuration for German insurance cards
                 const result = await Tesseract.recognize(imageBlob, 'deu', {
                     logger: (m) => {
                         if (m.status === 'recognizing text') {
                             const progress = Math.round(m.progress * 100);
                             updateScanStatus(side, 'loading', `Texterkennung: ${progress}%`);
                         }
-                    }
+                    },
+                    // ENHANCED OCR SETTINGS for insurance cards
+                    tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÜßabcdefghijklmnopqrstuvwxyzäöüß0123456789 ./:,-()[]',
+                    tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK, // Better for card text blocks
+                    tessedit_ocr_engine_mode: Tesseract.OEM.TESSERACT_LSTM_COMBINED,
+                    preserve_interword_spaces: '1',
+                    user_defined_dpi: '150', // Higher DPI for better text recognition
+                    tessjs_create_hocr: '0',
+                    tessjs_create_tsv: '0',
+                    tessjs_create_box: '0',
+                    tessjs_create_unlv: '0',
+                    tessjs_create_osd: '0'
                 });
                 
                 updateScanStatus(side, 'loading', 'Text wird analysiert...');
                 
-                const parsedData = parseInsuranceCardText(result.data.text, side);
+                // Enhanced text parsing
+                const parsedData = parseInsuranceCardTextEnhanced(result.data.text, side);
                 
-                console.log(`✅ Tesseract OCR completed for ${side} side:`, parsedData);
+                console.log(`✅ Enhanced Tesseract OCR completed for ${side} side:`, parsedData);
+                console.log(`📝 Raw OCR text:`, result.data.text);
                 
                 return {
                     success: true,
@@ -2504,6 +2517,181 @@
                     error: error.message
                 };
             }
+        }
+
+        // ENHANCED: Better parsing for German insurance cards
+        function parseInsuranceCardTextEnhanced(text, side) {
+            console.log(`🔍 ENHANCED parsing ${side} side text:`, text);
+            
+            if (!text || text.trim().length < 5) {
+                console.log('⚠️ Text too short for parsing');
+                return getMinimalFallbackData(side);
+            }
+            
+            const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 1);
+            console.log(`📋 Processing ${lines.length} lines:`, lines);
+            
+            const data = {};
+            
+            if (side === 'front') {
+                // Enhanced front side parsing
+                data.name = extractNameEnhanced(lines);
+                data.insurance_number = extractInsuranceNumberEnhanced(lines);
+                data.insurance_company = extractInsuranceCompanyEnhanced(lines);
+                data.birth_date = extractBirthDateEnhanced(lines);
+                
+            } else {
+                // Enhanced back side parsing
+                data.valid_until = extractValidUntilEnhanced(lines);
+                data.birth_date = extractBirthDateEnhanced(lines);
+            }
+            
+            console.log(`✅ Enhanced parsed ${side} side data:`, data);
+            return data;
+        }
+
+        // ENHANCED extraction functions with better patterns
+        function extractNameEnhanced(lines) {
+            console.log('🔍 Looking for name in lines:', lines);
+            
+            for (const line of lines) {
+                // Skip header lines
+                if (/kranken|versichert|insurance|european|health|bundesrepublik/i.test(line)) {
+                    continue;
+                }
+                
+                // Look for name patterns - more flexible
+                const namePatterns = [
+                    /^([A-ZÄÖÜ][a-zäöüß]+(?:\s+[A-ZÄÖÜ][a-zäöüß]+)+)$/,  // Standard: "Max Mustermann"
+                    /^([A-ZÄÖÜ\s]{4,30})$/,  // All caps names
+                    /([A-Za-zÄÖÜäöüß]{2,}\s+[A-Za-zÄÖÜäöüß]{2,})/  // Any case combination
+                ];
+                
+                for (const pattern of namePatterns) {
+                    const match = line.match(pattern);
+                    if (match) {
+                        const name = match[1].trim();
+                        const words = name.split(/\s+/);
+                        
+                        // Validate: 2-4 words, reasonable length
+                        if (words.length >= 2 && words.length <= 4 && name.length >= 4 && name.length <= 50) {
+                            console.log(`✅ Found name: "${name}"`);
+                            return name;
+                        }
+                    }
+                }
+            }
+            
+            console.log('❌ No name found');
+            return 'Name nicht erkannt';
+        }
+
+        function extractInsuranceNumberEnhanced(lines) {
+            console.log('🔍 Looking for insurance number in lines:', lines);
+            
+            for (const line of lines) {
+                // German insurance number patterns
+                const patterns = [
+                    /([A-Z]\d{9})/,           // A123456789
+                    /(\d{10})/,               // 1234567890  
+                    /([A-Z]\s?\d{3}\s?\d{3}\s?\d{3})/,  // A 123 456 789
+                    /(\d{4}\s?\d{3}\s?\d{3})/           // 1234 567 890
+                ];
+                
+                for (const pattern of patterns) {
+                    const match = line.match(pattern);
+                    if (match) {
+                        const number = match[1].replace(/\s/g, ''); // Remove spaces
+                        console.log(`✅ Found insurance number: "${number}"`);
+                        return number;
+                    }
+                }
+            }
+            
+            console.log('❌ No insurance number found');
+            return 'Nummer nicht erkannt';
+        }
+
+        function extractInsuranceCompanyEnhanced(lines) {
+            console.log('🔍 Looking for insurance company in lines:', lines);
+            
+            const companies = [
+                'AOK', 'TK', 'Techniker', 'Barmer', 'DAK', 'KKH', 'HEK', 
+                'BKK', 'IKK', 'Knappschaft', 'SVLFG', 'Continentale',
+                'Debeka', 'Signal', 'HanseMerkur', 'Bavaria', 'Allianz',
+                'Pronova', 'Audi', 'Mercedes', 'Novitas', 'Salus'
+            ];
+            
+            for (const line of lines) {
+                for (const company of companies) {
+                    if (line.toUpperCase().includes(company.toUpperCase())) {
+                        console.log(`✅ Found insurance company: "${line}"`);
+                        return line.trim();
+                    }
+                }
+                
+                // Check for generic insurance terms
+                if (/krankenkasse|versicherung|kasse|gesundheit/i.test(line) && line.length > 5 && line.length < 40) {
+                    console.log(`✅ Found insurance company (generic): "${line}"`);
+                    return line.trim();
+                }
+            }
+            
+            console.log('❌ No insurance company found');
+            return 'Krankenkasse nicht erkannt';
+        }
+
+        function extractBirthDateEnhanced(lines) {
+            console.log('🔍 Looking for birth date in lines:', lines);
+            
+            for (const line of lines) {
+                // Enhanced date patterns
+                const patterns = [
+                    /(?:geb\.?:?\s*)?(\d{1,2}\.?\d{1,2}\.?\d{2,4})/i,
+                    /(?:geboren:?\s*)?(\d{1,2}\/\d{1,2}\/\d{2,4})/i,
+                    /(?:birth:?\s*)?(\d{1,2}-\d{1,2}-\d{2,4})/i,
+                    /(\d{1,2}\.\d{1,2}\.\d{4})/,  // Simple DD.MM.YYYY
+                    /(\d{1,2}\/\d{1,2}\/\d{4})/   // Simple DD/MM/YYYY
+                ];
+                
+                for (const pattern of patterns) {
+                    const match = line.match(pattern);
+                    if (match) {
+                        console.log(`✅ Found birth date: "${match[1]}"`);
+                        return match[1];
+                    }
+                }
+            }
+            
+            console.log('❌ No birth date found');
+            return '';
+        }
+
+        function extractValidUntilEnhanced(lines) {
+            console.log('🔍 Looking for valid until date in lines:', lines);
+            
+            for (const line of lines) {
+                // Enhanced validity patterns
+                const patterns = [
+                    /(?:gültig bis:?\s*)?(\d{1,2}\/\d{2,4})/i,
+                    /(?:bis:?\s*)?(\d{1,2}\.\d{2,4})/i,
+                    /(?:valid until:?\s*)?(\d{1,2}-\d{2,4})/i,
+                    /(?:exp\.?:?\s*)?(\d{1,2}\/\d{2,4})/i,
+                    /(\d{1,2}\/\d{4})/,  // Simple MM/YYYY
+                    /(\d{1,2}\.\d{4})/   // Simple MM.YYYY
+                ];
+                
+                for (const pattern of patterns) {
+                    const match = line.match(pattern);
+                    if (match) {
+                        console.log(`✅ Found valid until: "${match[1]}"`);
+                        return match[1];
+                    }
+                }
+            }
+            
+            console.log('❌ No validity date found');
+            return 'Gültigkeitsdatum nicht erkannt';
         }
 
         // Backend OCR fallback
