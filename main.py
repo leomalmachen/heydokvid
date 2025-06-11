@@ -899,11 +899,18 @@ async def patient_setup():
                 
                 <!-- Step 2: Document Upload -->
                 <div class="step disabled" id="step2">
-                    <h3>Schritt 2: Dokument hochladen (optional)</h3>
-                    <p>Falls vorhanden, können Sie Ihren Krankenkassenschein oder ein anderes Dokument hochladen:</p>
+                    <h3>Schritt 2: Dokumente für den Arzt hochladen (optional)</h3>
+                    
+                    <div style="background: #e3f2fd; border: 1px solid #2196f3; border-radius: 4px; padding: 10px; margin-bottom: 15px;">
+                        <strong style="color: #1976d2;">⚠️ Wichtiger Hinweis:</strong><br>
+                        <span style="color: #333;">Bitte laden Sie <strong>ALLE Dokumente</strong> hoch, die Sie dem Arzt zeigen möchten (Krankenkassenschein, Überweisungen, Befunde, etc.).</span><br>
+                        <span style="color: #d32f2f; font-weight: 500;">Während des Meetings ist kein Upload mehr möglich!</span>
+                    </div>
+                    
+                    <p>Sie können mehrere Dateien nacheinander hochladen:</p>
                     <input type="file" id="documentFile" accept=".pdf,.jpg,.jpeg,.png,.tiff,.doc,.docx">
                     <button onclick="uploadDocument()" disabled id="uploadBtn">Dokument hochladen</button>
-                    <button onclick="skipDocument()" id="skipBtn" style="background: #6c757d; margin-left: 10px;">Überspringen (kein Dokument)</button>
+                    <button onclick="skipDocument()" id="skipBtn" style="background: #6c757d; margin-left: 10px;">Überspringen (keine Dokumente)</button>
                     <div id="uploadStatus"></div>
                 </div>
                 

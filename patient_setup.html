@@ -341,11 +341,36 @@
             <div class="step" id="step2">
                 <div class="step-header">
                     <div class="step-number">2</div>
-                    <div class="step-title">Krankenkassenschein hochladen (optional)</div>
+                    <div class="step-title">Dokumente für den Arzt hochladen (optional)</div>
                 </div>
+                
+                <!-- IMPROVED: Clear instructions for document upload -->
+                <div style="background: #e3f2fd; border: 1px solid #2196f3; border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
+                    <div style="display: flex; align-items: flex-start; gap: 0.5rem;">
+                        <div style="font-size: 1.5rem; color: #2196f3;">ℹ️</div>
+                        <div>
+                            <strong style="color: #1976d2;">Wichtiger Hinweis:</strong><br>
+                            <span style="color: #333;">
+                                Bitte laden Sie <strong>ALLE Dokumente</strong> hoch, die Sie dem Arzt während der Sprechstunde zeigen möchten:
+                            </span>
+                            <ul style="margin: 0.5rem 0 0.5rem 1rem; color: #333;">
+                                <li>Krankenkassenschein</li>
+                                <li>Überweisungen</li>
+                                <li>Befunde, Laborwerte</li>
+                                <li>Röntgenbilder, MRT-Aufnahmen</li>
+                                <li>Medikamentenlisten</li>
+                            </ul>
+                            <span style="color: #d32f2f; font-weight: 500;">
+                                ⚠️ Während des Meetings ist kein Upload mehr möglich!
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                
                 <p style="margin-bottom: 1rem; color: #666;">
-                    Falls vorhanden, können Sie Ihren Krankenkassenschein oder ein anderes relevantes Dokument hochladen.
+                    Sie können mehrere Dateien nacheinander hochladen. Jede Datei wird einzeln verarbeitet.
                 </p>
+                
                 <div class="file-upload" onclick="document.getElementById('documentFile').click()">
                     <div style="font-size: 3rem;">📄</div>
                     <div class="file-upload-text">
@@ -357,7 +382,7 @@
                 <div id="uploadStatus"></div>
                 <div style="margin-top: 1rem;">
                     <button class="btn" id="step2Next" onclick="nextStep(2)" disabled>Weiter</button>
-                    <button class="btn" id="skipDocumentBtn" onclick="skipDocument()" style="background: #6c757d; margin-left: 10px;">Überspringen (kein Dokument)</button>
+                    <button class="btn" id="skipDocumentBtn" onclick="skipDocument()" style="background: #6c757d; margin-left: 10px;">Überspringen (keine Dokumente)</button>
                 </div>
             </div>
 
