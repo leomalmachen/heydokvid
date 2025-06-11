@@ -2342,48 +2342,248 @@
             await captureAndProcessSimplified(side);
         }
 
-        // NEW: Simplified capture and process that avoids OCR problems
+        // NEW: Simplified capture and process that actually reads the card data
         async function captureAndProcessSimplified(side) {
             try {
-                console.log(`📸 Simplified processing for ${side} side`);
+                console.log(`📸 Starting REAL OCR processing for ${side} side`);
                 
                 // Show progress
-                updateScanStatus(side, 'loading', 'Kartendaten werden erfasst...');
+                updateScanStatus(side, 'loading', 'Karte wird erfasst...');
                 
-                // Simulate OCR processing time
-                await new Promise(resolve => setTimeout(resolve, 2000));
+                // Capture the current video frame as image
+                const imageBlob = await captureCardImageFromVideo(side);
                 
-                // Create realistic test data instead of trying complex OCR
-                if (side === 'front') {
-                    frontCardData = {
-                        name: 'Max Mustermann', // Realistic sample data
-                        insurance_number: 'A123456789',
-                        insurance_company: 'AOK Bayern'
-                    };
-                    
-                    console.log('✅ Front side data (sample):', frontCardData);
-                    updateScanStatus('front', 'success', 'Vorderseite erfolgreich gescannt!');
-                    
-                    // Move to back side
-                    currentScanStep = 'back';
-                    await startBackSideScanning();
-                    
+                if (!imageBlob) {
+                    throw new Error('Kein Bild erfasst - bitte erneut versuchen');
+                }
+                
+                // Process with real OCR
+                updateScanStatus(side, 'loading', 'Text wird erkannt...');
+                const ocrResult = await performRealOCR(imageBlob, side);
+                
+                if (ocrResult.success) {
+                    if (side === 'front') {
+                        frontCardData = ocrResult.data;
+                        console.log('✅ Real front side data extracted:', frontCardData);
+                        updateScanStatus('front', 'success', 'Vorderseite erfolgreich gescannt!');
+                        
+                        // Move to back side
+                        currentScanStep = 'back';
+                        await startBackSideScanning();
+                        
+                    } else {
+                        backCardData = ocrResult.data;
+                        console.log('✅ Real back side data extracted:', backCardData);
+                        updateScanStatus('back', 'success', 'Rückseite erfolgreich gescannt!');
+                        
+                        // Combine and show results
+                        combineCardData();
+                    }
                 } else {
-                    backCardData = {
-                        valid_until: '12/2025',
-                        birth_date: '01.01.1990'
-                    };
-                    
-                    console.log('✅ Back side data (sample):', backCardData);
-                    updateScanStatus('back', 'success', 'Rückseite erfolgreich gescannt!');
-                    
-                    // Combine and show results
-                    combineCardData();
+                    throw new Error(ocrResult.error || 'Texterkennung fehlgeschlagen');
                 }
                 
             } catch (error) {
-                console.error(`Simplified processing error for ${side}:`, error);
-                updateScanStatus(side, 'error', 'Scan fehlgeschlagen - bitte erneut versuchen');
+                console.error(`Real OCR processing error for ${side}:`, error);
+                updateScanStatus(side, 'error', `Fehler: ${error.message}`);
+                
+                // Show retry option
+                setTimeout(() => {
+                    updateScanStatus(side, 'ready', `Bereit für ${side === 'front' ? 'Vorderseite' : 'Rückseite'}-Scan. Klicken Sie "Countdown starten" wenn Sie bereit sind.`);
+                }, 3000);
+            }
+        }
+
+        // NEW: Capture image from video stream
+        async function captureCardImageFromVideo(side) {
+            try {
+                const video = document.getElementById(`${side}SideCamera`);
+                
+                if (!video || video.readyState !== video.HAVE_ENOUGH_DATA) {
+                    throw new Error('Video nicht bereit');
+                }
+                
+                // Create a temporary canvas to capture the frame
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d');
+                
+                // Set canvas size to video size
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                
+                // Draw the current video frame to canvas
+                context.drawImage(video, 0, 0, canvas.width, canvas.height);
+                
+                // Convert canvas to blob
+                return new Promise((resolve) => {
+                    canvas.toBlob((blob) => {
+                        console.log(`📸 Captured ${side} side image: ${blob.size} bytes`);
+                        resolve(blob);
+                    }, 'image/jpeg', 0.9);
+                });
+                
+            } catch (error) {
+                console.error('Image capture error:', error);
+                return null;
+            }
+        }
+
+        // NEW: Real OCR implementation with Tesseract.js
+        async function performRealOCR(imageBlob, side) {
+            console.log(`🔍 Starting real OCR for ${side} side...`);
+            
+            try {
+                // Show OCR progress
+                updateScanStatus(side, 'loading', 'OCR-Engine wird gestartet...');
+                
+                // Configure Tesseract for German insurance cards
+                const ocrConfig = {
+                    logger: (m) => {
+                        console.log(`Tesseract ${side} side:`, m);
+                        
+                        if (m.status === 'recognizing text') {
+                            const progress = Math.round(m.progress * 100);
+                            updateScanStatus(side, 'loading', `Texterkennung: ${progress}%`);
+                        }
+                    },
+                    
+                    // Optimized for German insurance cards
+                    tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÜßabcdefghijklmnopqrstuvwxyzäöüß0123456789 ./:,-',
+                    tessedit_pageseg_mode: '6', // Uniform block of text
+                    tessedit_ocr_engine_mode: '1', // Neural net LSTM engine
+                    preserve_interword_spaces: '1'
+                };
+
+                // Perform OCR with Tesseract.js
+                updateScanStatus(side, 'loading', 'Texterkennung läuft...');
+                const result = await Tesseract.recognize(imageBlob, 'deu', ocrConfig);
+                
+                updateScanStatus(side, 'loading', 'Text wird analysiert...');
+                
+                // Parse the OCR result
+                const parsedData = parseInsuranceCardText(result.data.text, side);
+                
+                console.log(`✅ OCR completed for ${side} side:`, parsedData);
+                
+                return {
+                    success: true,
+                    data: parsedData,
+                    confidence: result.data.confidence / 100,
+                    raw_text: result.data.text
+                };
+                
+            } catch (error) {
+                console.error('OCR error:', error);
+                
+                // Fallback: Try to extract any text we can
+                return {
+                    success: false,
+                    error: `Texterkennung fehlgeschlagen: ${error.message}`,
+                    data: getMinimalFallbackData(side)
+                };
+            }
+        }
+
+        // NEW: Parse German insurance card text
+        function parseInsuranceCardText(text, side) {
+            console.log(`🔍 Parsing ${side} side text:`, text);
+            
+            const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 1);
+            const data = {};
+            
+            if (side === 'front') {
+                // Parse front side data
+                data.name = extractName(lines);
+                data.insurance_number = extractInsuranceNumber(lines);
+                data.insurance_company = extractInsuranceCompany(lines);
+                data.birth_date = extractBirthDate(lines);
+                
+            } else {
+                // Parse back side data
+                data.valid_until = extractValidUntil(lines);
+                data.birth_date = extractBirthDate(lines);
+            }
+            
+            console.log(`✅ Parsed ${side} side data:`, data);
+            return data;
+        }
+
+        // NEW: Text extraction functions
+        function extractName(lines) {
+            for (const line of lines) {
+                // Look for name patterns (2-4 words, letters only)
+                if (/^[A-ZÄÖÜ][a-zäöüß]+ [A-ZÄÖÜ][a-zäöüß]+/.test(line)) {
+                    const words = line.split(' ').filter(w => /^[A-Za-zÄÖÜäöüß\-]+$/.test(w));
+                    if (words.length >= 2 && words.length <= 4) {
+                        return words.join(' ');
+                    }
+                }
+            }
+            return 'Name nicht erkannt';
+        }
+
+        function extractInsuranceNumber(lines) {
+            for (const line of lines) {
+                // German insurance numbers: Letter + 9 digits or 10 digits
+                const match = line.match(/([A-Z]\d{9}|\d{10})/);
+                if (match) {
+                    return match[1];
+                }
+            }
+            return 'Nummer nicht erkannt';
+        }
+
+        function extractInsuranceCompany(lines) {
+            const companies = [
+                'AOK', 'TK', 'Techniker', 'Barmer', 'DAK', 'KKH', 'HEK', 
+                'BKK', 'IKK', 'Knappschaft', 'SVLFG', 'Continentale',
+                'Debeka', 'Signal', 'HanseMerkur'
+            ];
+            
+            for (const line of lines) {
+                for (const company of companies) {
+                    if (line.toUpperCase().includes(company.toUpperCase())) {
+                        return line;
+                    }
+                }
+            }
+            return 'Krankenkasse nicht erkannt';
+        }
+
+        function extractBirthDate(lines) {
+            for (const line of lines) {
+                // Date patterns: DD.MM.YYYY or DD/MM/YYYY
+                const match = line.match(/(\d{1,2}[\.\-\/]\d{1,2}[\.\-\/]\d{2,4})/);
+                if (match) {
+                    return match[1];
+                }
+            }
+            return '';
+        }
+
+        function extractValidUntil(lines) {
+            for (const line of lines) {
+                // Look for validity date patterns
+                const match = line.match(/(?:gültig bis:?\s*|bis:?\s*)?(\d{1,2}\/\d{2,4}|\d{1,2}\.\d{2,4})/i);
+                if (match) {
+                    return match[1];
+                }
+            }
+            return 'Gültigkeitsdatum nicht erkannt';
+        }
+
+        function getMinimalFallbackData(side) {
+            if (side === 'front') {
+                return {
+                    name: 'Texterkennung fehlgeschlagen',
+                    insurance_number: 'Bitte manuell eingeben',
+                    insurance_company: 'Nicht erkannt'
+                };
+            } else {
+                return {
+                    valid_until: 'Nicht erkannt',
+                    birth_date: 'Nicht erkannt'
+                };
             }
         }
 
@@ -2445,24 +2645,16 @@
             updateCardFrame('front', 'detected');
             
             try {
-                // Force scan the current frame
-                const imageBlob = await captureCardImage('front');
-                await processSideWithOCR(imageBlob, 'front');
+                // Use real OCR processing
+                await captureAndProcessSimplified('front');
             } catch (error) {
                 console.error('Manual front scan error:', error);
                 updateScanStatus('front', 'error', 'Manueller Scan fehlgeschlagen');
                 
-                // Fallback: Just proceed anyway after showing error briefly
+                // Show retry option
                 setTimeout(() => {
-                    console.log('🔄 Proceeding despite manual scan error');
-                    frontCardData = {
-                        name: 'Manuell erfasst',
-                        insurance_number: 'Nicht erkannt',
-                        insurance_company: 'Bitte manuell prüfen'
-                    };
-                    currentScanStep = 'back';
-                    startBackSideScanning();
-                }, 2000);
+                    updateScanStatus('front', 'ready', 'Bereit für Vorderseite-Scan. Klicken Sie "Countdown starten" wenn Sie bereit sind.');
+                }, 3000);
             }
         }
 
@@ -2477,22 +2669,16 @@
             updateCardFrame('back', 'detected');
             
             try {
-                // Force scan the current frame
-                const imageBlob = await captureCardImage('back');
-                await processSideWithOCR(imageBlob, 'back');
+                // Use real OCR processing
+                await captureAndProcessSimplified('back');
             } catch (error) {
                 console.error('Manual back scan error:', error);
                 updateScanStatus('back', 'error', 'Manueller Scan fehlgeschlagen');
                 
-                // Fallback: Just proceed anyway after showing error briefly
+                // Show retry option
                 setTimeout(() => {
-                    console.log('🔄 Proceeding despite manual scan error');
-                    backCardData = {
-                        valid_until: 'Nicht erkannt',
-                        birth_date: 'Bitte manuell prüfen'
-                    };
-                    combineCardData();
-                }, 2000);
+                    updateScanStatus('back', 'ready', 'Bereit für Rückseite-Scan. Klicken Sie "Countdown starten" wenn Sie bereit sind.');
+                }, 3000);
             }
         }
 
@@ -2708,12 +2894,7 @@
         }
 
         async function captureCardImage(side) {
-            const canvas = side === 'front' ? frontDetectionCanvas : backDetectionCanvas;
-            return new Promise((resolve) => {
-                canvas.toBlob((blob) => {
-                    resolve(blob);
-                }, 'image/jpeg', 0.9);
-            });
+            return await captureCardImageFromVideo(side);
         }
 
         function stopAutomaticDetection() {
