@@ -1308,34 +1308,43 @@
                 let hasCardLikeObject = false;
                 let bestContour = null;
                 let maxArea = 0;
+                let rectangularContours = 0;
                 
                 // Look for rectangular contours (potential cards)
                 for (let i = 0; i < contours.size(); i++) {
                     let contour = contours.get(i);
                     let area = cv.contourArea(contour);
                     
-                    // Filter by minimum size (card should be reasonably large)
-                    if (area < 5000) continue; // Lower threshold to detect card-like objects earlier
+                    // Filter by minimum size - LOWERED threshold for earlier detection
+                    if (area < 3000) continue; // Much lower threshold
                     
                     // Approximate contour to polygon
                     let epsilon = 0.02 * cv.arcLength(contour, true);
                     let approx = new cv.Mat();
                     cv.approxPolyDP(contour, approx, epsilon, true);
                     
-                    // Check if it's roughly rectangular (4 corners) with proper aspect ratio
-                    if (approx.rows === 4) {
-                        hasCardLikeObject = true; // Found a rectangular object
+                    // Check if it's roughly rectangular (3-5 corners for more flexibility)
+                    if (approx.rows >= 3 && approx.rows <= 6) {
+                        rectangularContours++;
                         
-                        if (area > maxArea) {
-                            // Additional aspect ratio check for card-like proportions
-                            let rect = cv.boundingRect(contour);
-                            let aspectRatio = rect.width / rect.height;
-                            
+                        // Check aspect ratio even for non-perfect rectangles
+                        let rect = cv.boundingRect(contour);
+                        let aspectRatio = rect.width / rect.height;
+                        
+                        // More flexible aspect ratio for hasCardLikeObject
+                        if (aspectRatio > 1.0 && aspectRatio < 3.0 && area > 3000) {
+                            hasCardLikeObject = true; // Found a card-like object
+                            console.log(`🔍 Card-like object detected: area=${area}, aspectRatio=${aspectRatio.toFixed(2)}`);
+                        }
+                        
+                        // More strict criteria for actual card detection
+                        if (approx.rows === 4 && area > maxArea) {
                             // German insurance cards have roughly 1.6:1 aspect ratio (credit card format)
-                            if (aspectRatio > 1.3 && aspectRatio < 2.0 && area > 8000) { // Higher area threshold for actual detection
+                            if (aspectRatio > 1.2 && aspectRatio < 2.2 && area > 5000) { // Slightly more flexible
                                 maxArea = area;
                                 bestContour = contour.clone();
                                 cardDetected = true;
+                                console.log(`✅ Potential card detected: area=${area}, aspectRatio=${aspectRatio.toFixed(2)}`);
                             }
                         }
                     }
@@ -1343,18 +1352,27 @@
                     approx.delete();
                 }
                 
+                // If we found multiple rectangular contours, more likely to be a card
+                if (rectangularContours >= 2) {
+                    hasCardLikeObject = true;
+                    console.log(`📄 Multiple rectangular objects detected: ${rectangularContours}`);
+                }
+                
                 let result = { cardDetected: false, hasCardLikeObject: hasCardLikeObject, side: side };
                 
                 if (cardDetected && bestContour) {
-                    // Additional quality checks
+                    // More lenient quality checks
                     const quality = assessImageQuality(gray);
                     const cardType = classifyCard(src, side);
                     
-                    // REALISTIC QUALITY CHECKS
-                    if (quality.sharpness > 80 && quality.brightness > 40 && quality.brightness < 220) { // Slightly tightened from 50/30/250
+                    console.log(`🔍 Quality check: sharpness=${quality.sharpness.toFixed(2)}, brightness=${quality.brightness.toFixed(2)}`);
+                    
+                    // RELAXED QUALITY CHECKS - much more lenient
+                    if (quality.sharpness > 50 && quality.brightness > 30 && quality.brightness < 250) {
                         stableFrameCount++;
+                        console.log(`⏱️ Stable frame count: ${stableFrameCount}/3`);
                         
-                        if (stableFrameCount >= 5) { // Increased from 2 to 5 stable frames for more reliable detection
+                        if (stableFrameCount >= 3) { // Reduced from 5 to 3 for faster recognition
                             result = {
                                 cardDetected: true,
                                 hasCardLikeObject: true,
@@ -1366,6 +1384,7 @@
                                 area: maxArea
                             };
                             stableFrameCount = 0; // Reset for next detection
+                            console.log(`🎉 Card detection successful!`, result);
                         }
                     } else {
                         stableFrameCount = 0; // Reset if quality is poor
@@ -1378,6 +1397,7 @@
                             quality: quality,
                             side: side
                         };
+                        console.log(`⚠️ Poor quality detected`, quality);
                     }
                 }
                 
@@ -1513,8 +1533,8 @@
         function fallbackCardDetection(side) {
             const random = Math.random();
             
-            // WAIT FOR ACTUAL ATTEMPTS: Only trigger after sufficient attempts AND much higher probability
-            if (detectionAttempts >= 8 && random > 0.8) { // Changed back to requiring 8+ attempts and 80%+ probability
+            // More aggressive fallback - trigger after fewer attempts but still require some time
+            if (detectionAttempts >= 5 && random > 0.6) { // Reduced from 8 attempts and 80% to 5 attempts and 60%
                 const cardTypes = [
                     { type: 'insurance', isInsuranceCard: true, confidence: 0.95 },
                     { type: 'insurance', isInsuranceCard: true, confidence: 0.92 },
@@ -1537,8 +1557,14 @@
                 };
             }
             
-            // REMOVE instant detection - it causes false positives
-            // Only return no detection to let real OpenCV detection work
+            // If no OpenCV and not enough attempts yet, still look for large rectangular objects
+            // This helps with hasCardLikeObject detection even without OpenCV
+            const random2 = Math.random();
+            if (detectionAttempts >= 3 && random2 > 0.7) {
+                console.log(`📄 Fallback: Card-like object simulation after ${detectionAttempts} attempts`);
+                return { cardDetected: false, hasCardLikeObject: true, side: side };
+            }
+            
             return { cardDetected: false, hasCardLikeObject: false, side: side };
         }
 
@@ -2256,6 +2282,13 @@
                 // Analyze frame for card detection
                 const detectionResult = analyzeFrameForCard(side);
                 
+                // Debug logging
+                console.log(`🔍 Detection result for ${side}:`, {
+                    cardDetected: detectionResult.cardDetected,
+                    hasCardLikeObject: detectionResult.hasCardLikeObject,
+                    attempts: detectionAttempts
+                });
+                
                 if (detectionResult.cardDetected) {
                     if (detectionResult.isInsuranceCard) {
                         onCardDetected(side, detectionResult);
@@ -2264,15 +2297,28 @@
                         showCardTypeError(side, detectionResult.cardType);
                     }
                 } else {
-                    // CHANGED: Only count attempts if we detected something that could be a card but isn't valid
-                    // Don't count attempts for empty frames or faces
+                    // IMPROVED: Count attempts only if we detected something that could be a card but isn't valid
+                    // OR if we've been trying for a long time without any card-like objects
                     if (detectionResult.hasCardLikeObject) {
                         detectionAttempts++;
+                        console.log(`⚠️ Card-like object found but not valid. Attempt ${detectionAttempts}/${maxDetectionAttempts}`);
                         if (detectionAttempts >= maxDetectionAttempts) {
                             onDetectionTimeout(side);
                         }
+                    } else {
+                        // If no card-like object for a very long time, also count as attempts
+                        // This prevents infinite waiting if user is having trouble
+                        if (detectionAttempts === 0) {
+                            // Start a longer timeout for when no card-like objects are found at all
+                            setTimeout(() => {
+                                if (detectionAttempts === 0 && isDetecting && currentScanStep === side) {
+                                    console.log(`⏰ Long timeout - no card-like objects found for 30 seconds`);
+                                    detectionAttempts = maxDetectionAttempts; // Force timeout
+                                    onDetectionTimeout(side);
+                                }
+                            }, 30000); // 30 second timeout for completely empty frames
+                        }
                     }
-                    // If no card-like object at all, just continue waiting silently
                 }
                         
             } catch (error) {
