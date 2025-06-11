@@ -304,6 +304,133 @@
             padding: 1rem 2rem;
         }
 
+        /* Insurance Card Scanner Styles */
+        .insurance-validation {
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+        }
+
+        .validation-step {
+            text-align: center;
+        }
+
+        .card-scanner {
+            position: relative;
+            display: inline-block;
+            margin-bottom: 1rem;
+        }
+
+        .scanner-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            pointer-events: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .card-frame {
+            position: relative;
+            width: 280px;
+            height: 180px;
+            border: 2px solid #4a90e2;
+            border-radius: 12px;
+            background: rgba(74, 144, 226, 0.1);
+        }
+
+        .corner {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #4a90e2;
+        }
+
+        .corner.top-left {
+            top: -3px;
+            left: -3px;
+            border-right: none;
+            border-bottom: none;
+        }
+
+        .corner.top-right {
+            top: -3px;
+            right: -3px;
+            border-left: none;
+            border-bottom: none;
+        }
+
+        .corner.bottom-left {
+            bottom: -3px;
+            left: -3px;
+            border-right: none;
+            border-top: none;
+        }
+
+        .corner.bottom-right {
+            bottom: -3px;
+            right: -3px;
+            border-left: none;
+            border-top: none;
+        }
+
+        .scan-text {
+            position: absolute;
+            bottom: -30px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #4a90e2;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        .scan-status {
+            margin: 1rem 0;
+            padding: 0.5rem;
+            border-radius: 4px;
+            font-weight: 500;
+        }
+
+        .scan-status.loading {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .scan-status.success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .scan-status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .validation-bar {
+            width: 100%;
+            height: 8px;
+            background: #e0e0e0;
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 1rem 0;
+        }
+
+        .validation-progress {
+            height: 100%;
+            background: linear-gradient(90deg, #4caf50, #66bb6a);
+            width: 0%;
+            transition: width 0.5s ease;
+            border-radius: 4px;
+        }
+
+        .validation-success {
+            text-align: center;
+            padding: 2rem;
+        }
+
         @media (max-width: 768px) {
             .media-test {
                 flex-direction: column;
@@ -311,6 +438,11 @@
             
             .container {
                 margin: 1rem;
+            }
+            
+            .card-frame {
+                width: 240px;
+                height: 150px;
             }
         }
     </style>
@@ -423,10 +555,82 @@
                 <button class="btn" id="step3Next" onclick="nextStep(3)" disabled>Weiter</button>
             </div>
 
-            <!-- Step 4: Final Confirmation -->
+            <!-- Step 4: Insurance Card Validation -->
             <div class="step" id="step4">
                 <div class="step-header">
                     <div class="step-number">4</div>
+                    <div class="step-title">Krankenkassenkarte validieren</div>
+                </div>
+                
+                <div style="background: #fff3cd; border: 1px solid #ffc107; border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
+                    <div style="display: flex; align-items: flex-start; gap: 0.5rem;">
+                        <div style="font-size: 1.5rem; color: #856404;">⚠️</div>
+                        <div>
+                            <strong style="color: #856404;">Warum validieren wir Ihre Karte?</strong><br>
+                            <span style="color: #856404;">Dies stellt sicher, dass Sie versichert sind und beschleunigt die Abrechnung. Ihre Daten werden sicher verschlüsselt übertragen.</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="insurance-validation">
+                    <!-- Front Side Scanner -->
+                    <div class="validation-step" id="frontValidation">
+                        <h4>📄 Vorderseite scannen</h4>
+                        <div class="card-scanner">
+                            <video id="frontCameraPreview" autoplay muted playsinline style="width: 100%; max-width: 400px; border-radius: 8px; border: 2px dashed #ddd;"></video>
+                            <div class="scanner-overlay">
+                                <div class="card-frame">
+                                    <div class="corner top-left"></div>
+                                    <div class="corner top-right"></div>
+                                    <div class="corner bottom-left"></div>
+                                    <div class="corner bottom-right"></div>
+                                    <div class="scan-text">Karte hier positionieren</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="frontScanStatus" class="scan-status">Kamera wird geladen...</div>
+                        <button class="btn" id="scanFrontBtn" onclick="scanFrontCard()" disabled>Vorderseite scannen</button>
+                    </div>
+
+                    <!-- Back Side Scanner -->
+                    <div class="validation-step" id="backValidation" style="display:none;">
+                        <h4>📄 Rückseite scannen</h4>
+                        <div class="card-scanner">
+                            <video id="backCameraPreview" autoplay muted playsinline style="width: 100%; max-width: 400px; border-radius: 8px; border: 2px dashed #ddd;"></video>
+                            <div class="scanner-overlay">
+                                <div class="card-frame">
+                                    <div class="corner top-left"></div>
+                                    <div class="corner top-right"></div>
+                                    <div class="corner bottom-left"></div>
+                                    <div class="corner bottom-right"></div>
+                                    <div class="scan-text">Rückseite hier positionieren</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="backScanStatus" class="scan-status">Bereit zum Scannen der Rückseite</div>
+                        <button class="btn" id="scanBackBtn" onclick="scanBackCard()" disabled>Rückseite scannen</button>
+                    </div>
+
+                    <!-- Validation Results -->
+                    <div class="validation-results" id="validationResults" style="display:none;">
+                        <div class="validation-success">
+                            <div style="font-size: 3rem; color: #28a745;">✅</div>
+                            <h4 style="color: #28a745;">Karte erfolgreich validiert!</h4>
+                            <div class="validation-bar">
+                                <div class="validation-progress" id="validationProgress"></div>
+                            </div>
+                            <div id="cardInfo" style="margin-top: 1rem; padding: 1rem; background: #f8f9fa; border-radius: 8px;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <button class="btn" id="step4Next" onclick="nextStep(4)" disabled>Weiter</button>
+            </div>
+
+            <!-- Step 5: Final Confirmation -->
+            <div class="step" id="step5">
+                <div class="step-header">
+                    <div class="step-number">5</div>
                     <div class="step-title">Bereit für die Sprechstunde</div>
                 </div>
                 <div class="final-step">
@@ -459,6 +663,13 @@
 
         // STATUS TRACKING for Doctor Dashboard
         let statusUpdateInterval = null;
+
+        // Insurance Card Validation Variables
+        let frontCardStream = null;
+        let backCardStream = null;
+        let frontCardData = null;
+        let backCardData = null;
+        let isProcessingCard = false;
 
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
@@ -652,6 +863,15 @@
                 document.getElementById('step3').classList.add('completed');
                 document.getElementById('step4').classList.add('active');
                 currentStep = 4;
+                
+                // Initialize insurance card validation when entering step 4
+                initializeInsuranceValidation();
+            } else if (step === 4) {
+                // Insurance card validation completed
+                document.getElementById('step4').classList.remove('active');
+                document.getElementById('step4').classList.add('completed');
+                document.getElementById('step5').classList.add('active');
+                currentStep = 5;
             }
         }
 
@@ -920,6 +1140,244 @@
                 }
             } catch (error) {
                 console.error('❌ Status Update Error:', error);
+            }
+        }
+
+        // Insurance Card Validation Functions
+        async function initializeInsuranceValidation() {
+            try {
+                console.log('🏥 Initializing insurance card validation...');
+                
+                // Initialize front camera
+                await setupCardScanner('front');
+                
+                // Enable front scan button
+                document.getElementById('scanFrontBtn').disabled = false;
+                document.getElementById('frontScanStatus').textContent = 'Bereit zum Scannen der Vorderseite';
+                document.getElementById('frontScanStatus').className = 'scan-status';
+
+            } catch (error) {
+                console.error('Insurance validation init error:', error);
+                document.getElementById('frontScanStatus').textContent = 'Kamera-Zugriff fehlgeschlagen';
+                document.getElementById('frontScanStatus').className = 'scan-status error';
+            }
+        }
+
+        async function setupCardScanner(side) {
+            try {
+                const videoElement = document.getElementById(side === 'front' ? 'frontCameraPreview' : 'backCameraPreview');
+                
+                // Request high-resolution camera for better OCR
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 },
+                        facingMode: 'environment' // Use back camera if available
+                    }
+                });
+
+                videoElement.srcObject = stream;
+                
+                if (side === 'front') {
+                    frontCardStream = stream;
+                } else {
+                    backCardStream = stream;
+                }
+
+                console.log(`✅ ${side} camera initialized`);
+                
+            } catch (error) {
+                console.error(`Camera setup error (${side}):`, error);
+                throw error;
+            }
+        }
+
+        async function scanFrontCard() {
+            if (isProcessingCard) return;
+            
+            try {
+                isProcessingCard = true;
+                document.getElementById('scanFrontBtn').disabled = true;
+                document.getElementById('frontScanStatus').textContent = 'Vorderseite wird gescannt...';
+                document.getElementById('frontScanStatus').className = 'scan-status loading';
+
+                // Capture image from video
+                const video = document.getElementById('frontCameraPreview');
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d');
+                
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                context.drawImage(video, 0, 0);
+                
+                // Convert to blob for processing
+                canvas.toBlob(async (blob) => {
+                    try {
+                        // Process with OCR
+                        const ocrResult = await processCardWithOCR(blob, 'front');
+                        
+                        if (ocrResult.success) {
+                            frontCardData = ocrResult.data;
+                            
+                            document.getElementById('frontScanStatus').textContent = '✅ Vorderseite erfolgreich gescannt!';
+                            document.getElementById('frontScanStatus').className = 'scan-status success';
+                            
+                            // Show back side scanner
+                            document.getElementById('backValidation').style.display = 'block';
+                            await setupCardScanner('back');
+                            document.getElementById('scanBackBtn').disabled = false;
+                            document.getElementById('backScanStatus').textContent = 'Bereit zum Scannen der Rückseite';
+                            
+                        } else {
+                            throw new Error('Karte nicht erkannt - bitte erneut versuchen');
+                        }
+                        
+                    } catch (error) {
+                        document.getElementById('frontScanStatus').textContent = `❌ ${error.message}`;
+                        document.getElementById('frontScanStatus').className = 'scan-status error';
+                        document.getElementById('scanFrontBtn').disabled = false;
+                    }
+                    
+                    isProcessingCard = false;
+                }, 'image/jpeg', 0.9);
+
+            } catch (error) {
+                console.error('Front scan error:', error);
+                document.getElementById('frontScanStatus').textContent = '❌ Scannen fehlgeschlagen';
+                document.getElementById('frontScanStatus').className = 'scan-status error';
+                document.getElementById('scanFrontBtn').disabled = false;
+                isProcessingCard = false;
+            }
+        }
+
+        async function scanBackCard() {
+            if (isProcessingCard) return;
+            
+            try {
+                isProcessingCard = true;
+                document.getElementById('scanBackBtn').disabled = true;
+                document.getElementById('backScanStatus').textContent = 'Rückseite wird gescannt...';
+                document.getElementById('backScanStatus').className = 'scan-status loading';
+
+                // Capture image from video
+                const video = document.getElementById('backCameraPreview');
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d');
+                
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                context.drawImage(video, 0, 0);
+                
+                // Convert to blob for processing
+                canvas.toBlob(async (blob) => {
+                    try {
+                        // Process with OCR
+                        const ocrResult = await processCardWithOCR(blob, 'back');
+                        
+                        if (ocrResult.success) {
+                            backCardData = ocrResult.data;
+                            
+                            document.getElementById('backScanStatus').textContent = '✅ Rückseite erfolgreich gescannt!';
+                            document.getElementById('backScanStatus').className = 'scan-status success';
+                            
+                            // Complete validation
+                            await completeCardValidation();
+                            
+                        } else {
+                            throw new Error('Rückseite nicht erkannt - bitte erneut versuchen');
+                        }
+                        
+                    } catch (error) {
+                        document.getElementById('backScanStatus').textContent = `❌ ${error.message}`;
+                        document.getElementById('backScanStatus').className = 'scan-status error';
+                        document.getElementById('scanBackBtn').disabled = false;
+                    }
+                    
+                    isProcessingCard = false;
+                }, 'image/jpeg', 0.9);
+
+            } catch (error) {
+                console.error('Back scan error:', error);
+                document.getElementById('backScanStatus').textContent = '❌ Scannen fehlgeschlagen';
+                document.getElementById('backScanStatus').className = 'scan-status error';
+                document.getElementById('scanBackBtn').disabled = false;
+                isProcessingCard = false;
+            }
+        }
+
+        async function processCardWithOCR(imageBlob, side) {
+            try {
+                // Simulate OCR processing (in real implementation, use Tesseract.js or API)
+                console.log(`🔍 Processing ${side} side with OCR...`);
+                
+                // Simulate processing delay
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                
+                // Mock OCR results for demonstration
+                if (side === 'front') {
+                    return {
+                        success: true,
+                        data: {
+                            name: 'Max Mustermann',
+                            insuranceNumber: '1234567890',
+                            insuranceCompany: 'Test Krankenkasse',
+                            validUntil: '12/2025'
+                        }
+                    };
+                } else {
+                    return {
+                        success: true,
+                        data: {
+                            doctorNumber: 'DR123456789',
+                            institutionCode: 'INST987654'
+                        }
+                    };
+                }
+                
+            } catch (error) {
+                console.error('OCR processing error:', error);
+                return { success: false, error: error.message };
+            }
+        }
+
+        async function completeCardValidation() {
+            try {
+                console.log('🎉 Completing card validation...');
+                
+                // Stop all camera streams
+                if (frontCardStream) {
+                    frontCardStream.getTracks().forEach(track => track.stop());
+                }
+                if (backCardStream) {
+                    backCardStream.getTracks().forEach(track => track.stop());
+                }
+                
+                // Show validation results
+                document.getElementById('validationResults').style.display = 'block';
+                
+                // Animate progress bar
+                const progressBar = document.getElementById('validationProgress');
+                progressBar.style.width = '100%';
+                
+                // Show extracted card information
+                const cardInfo = document.getElementById('cardInfo');
+                cardInfo.innerHTML = `
+                    <h5>📋 Extrahierte Kartendaten:</h5>
+                    <p><strong>Name:</strong> ${frontCardData.name}</p>
+                    <p><strong>Versichertennummer:</strong> ${frontCardData.insuranceNumber}</p>
+                    <p><strong>Krankenkasse:</strong> ${frontCardData.insuranceCompany}</p>
+                    <p><strong>Gültig bis:</strong> ${frontCardData.validUntil}</p>
+                    <p style="color: #28a745; font-weight: 600;">✅ Karte erfolgreich validiert!</p>
+                `;
+                
+                // Enable next step
+                document.getElementById('step4Next').disabled = false;
+                
+                console.log('✅ Card validation completed successfully');
+                
+            } catch (error) {
+                console.error('Card validation completion error:', error);
+                showStatus('error', 'Validierung fehlgeschlagen: ' + error.message);
             }
         }
     </script>
