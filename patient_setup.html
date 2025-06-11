@@ -2386,7 +2386,8 @@
         // NEW: Simplified capture and process that actually reads the card data
         async function captureAndProcessSimplified(side) {
             try {
-                console.log(`📸 Starting REAL OCR processing for ${side} side`);
+                console.log(`🚀 [${side}] STARTING REAL OCR PROCESSING`);
+                console.log(`🚀 [${side}] Current meetingId: ${meetingId}`);
                 
                 // Show progress
                 updateScanStatus(side, 'loading', 'Karte wird erfasst...');
@@ -2398,23 +2399,76 @@
                     throw new Error('Kein Bild erfasst - bitte erneut versuchen');
                 }
                 
-                console.log(`📸 SUCCESS: Image captured, size: ${imageBlob.size} bytes`);
+                console.log(`📸 [${side}] SUCCESS: Image captured, size: ${imageBlob.size} bytes`);
+                console.log(`📸 [${side}] Image type: ${imageBlob.type}`);
                 updateScanStatus(side, 'loading', `Bild erfasst (${Math.round(imageBlob.size/1024)}KB) - Text wird erkannt...`);
                 
                 // ENHANCED DEBUG: Show image preview for debugging
                 const imageUrl = URL.createObjectURL(imageBlob);
-                console.log(`🔍 DEBUG: Image captured, preview:`, imageUrl);
+                console.log(`🔍 [${side}] DEBUG: Image captured, preview:`, imageUrl);
                 
-                // Process with real OCR
-                updateScanStatus(side, 'loading', 'Text wird erkannt...');
-                const ocrResult = await performRealOCR(imageBlob, side);
+                // ENHANCED DEBUG: Add image quality check
+                const qualityCheck = await analyzeImageQuality(imageBlob);
+                console.log(`📊 [${side}] Image quality analysis:`, qualityCheck);
                 
-                console.log(`🔍 OCR Result:`, ocrResult);
+                // Process with real OCR - TRY BACKEND FIRST for better results
+                updateScanStatus(side, 'loading', 'OCR-Verarbeitung startet...');
+                console.log(`🔄 [${side}] Starting OCR processing pipeline...`);
+                
+                let ocrResult = null;
+                
+                // STRATEGY 1: Try Backend OCR first (more reliable)
+                try {
+                    console.log(`🌐 [${side}] STRATEGY 1: Trying Backend OCR first...`);
+                    updateScanStatus(side, 'loading', 'Backend-OCR wird verwendet...');
+                    ocrResult = await performBackendOCR(imageBlob, side);
+                    console.log(`🌐 [${side}] Backend OCR result:`, ocrResult);
+                    
+                    if (ocrResult.success && hasUsefulData(ocrResult.data, side)) {
+                        console.log(`✅ [${side}] Backend OCR SUCCESS with useful data!`);
+                        updateScanStatus(side, 'loading', 'Backend-OCR erfolgreich!');
+                    } else {
+                        console.log(`⚠️ [${side}] Backend OCR failed or no useful data, trying Tesseract...`);
+                        throw new Error('Backend OCR lieferte keine verwertbaren Daten');
+                    }
+                } catch (backendError) {
+                    console.error(`❌ [${side}] Backend OCR failed:`, backendError);
+                    
+                    // STRATEGY 2: Fallback to Tesseract.js
+                    try {
+                        console.log(`🔄 [${side}] STRATEGY 2: Falling back to Tesseract.js...`);
+                        updateScanStatus(side, 'loading', 'Tesseract-OCR wird versucht...');
+                        ocrResult = await performSimpleTesseractOCR(imageBlob, side);
+                        console.log(`🔄 [${side}] Tesseract OCR result:`, ocrResult);
+                        
+                        if (ocrResult.success && hasUsefulData(ocrResult.data, side)) {
+                            console.log(`✅ [${side}] Tesseract OCR SUCCESS with useful data!`);
+                            updateScanStatus(side, 'loading', 'Tesseract-OCR erfolgreich!');
+                        } else {
+                            console.log(`⚠️ [${side}] Tesseract OCR also failed or no useful data`);
+                            throw new Error('Auch Tesseract OCR lieferte keine verwertbaren Daten');
+                        }
+                    } catch (tesseractError) {
+                        console.error(`❌ [${side}] Tesseract OCR also failed:`, tesseractError);
+                        
+                        // STRATEGY 3: Use enhanced fallback but log everything
+                        console.log(`🚨 [${side}] STRATEGY 3: Using enhanced fallback with detailed logging`);
+                        ocrResult = {
+                            success: true, // Still proceed to show data
+                            data: getDetailedFallbackData(side, backendError, tesseractError, qualityCheck),
+                            confidence: 0.1,
+                            raw_text: `Multiple OCR failures: Backend: ${backendError.message}, Tesseract: ${tesseractError.message}`,
+                            method: 'enhanced_fallback_with_debug'
+                        };
+                    }
+                }
+                
+                console.log(`🔍 [${side}] FINAL OCR Result:`, ocrResult);
                 
                 // CRITICAL: ALWAYS proceed and show data, regardless of OCR success
                 if (side === 'front') {
                     frontCardData = ocrResult.success ? ocrResult.data : getMinimalFallbackData('front');
-                    console.log('✅ Front side data (success or fallback):', frontCardData);
+                    console.log(`✅ [${side}] Front side data (success or fallback):`, frontCardData);
                     updateScanStatus('front', 'success', `Vorderseite abgeschlossen! Daten erfasst.`);
                     
                     // ALWAYS move to back side - never fail here
@@ -2423,24 +2477,25 @@
                     
                 } else {
                     backCardData = ocrResult.success ? ocrResult.data : getMinimalFallbackData('back');
-                    console.log('✅ Back side data (success or fallback):', backCardData);
+                    console.log(`✅ [${side}] Back side data (success or fallback):`, backCardData);
                     updateScanStatus('back', 'success', `Rückseite abgeschlossen! Daten erfasst.`);
                     
                     // CRITICAL: ALWAYS show data confirmation - this is the key fix!
-                    console.log('🎯 FORCING data confirmation display...');
+                    console.log(`🎯 [${side}] FORCING data confirmation display...`);
                     forceCombineAndShowData();
                 }
                 
             } catch (error) {
-                console.error(`OCR processing error for ${side}:`, error);
+                console.error(`❌ [${side}] CRITICAL ERROR in captureAndProcessSimplified:`, error);
                 
                 // CRITICAL: Even on error, show data to user with fallback
-                console.log('⚠️ Error occurred, but FORCING data confirmation with fallback data...');
+                console.log(`⚠️ [${side}] Error occurred, but FORCING data confirmation with fallback data...`);
                 
                 if (side === 'front') {
                     frontCardData = {
                         ...getMinimalFallbackData('front'),
-                        error_info: `Fehler: ${error.message}`
+                        error_info: `System-Fehler: ${error.message}`,
+                        debug_timestamp: new Date().toISOString()
                     };
                     updateScanStatus('front', 'error', `Fehler aufgetreten, aber Vorderseite erfasst`);
                     
@@ -2453,16 +2508,122 @@
                 } else {
                     backCardData = {
                         ...getMinimalFallbackData('back'),
-                        error_info: `Fehler: ${error.message}`
+                        error_info: `System-Fehler: ${error.message}`,
+                        debug_timestamp: new Date().toISOString()
                     };
                     updateScanStatus('back', 'error', `Fehler aufgetreten, aber Rückseite erfasst`);
                     
                     // CRITICAL: FORCE show data even on error - this ensures user always sees something
                     setTimeout(() => {
-                        console.log('🚨 EMERGENCY: Forcing data display after error...');
+                        console.log(`🚨 [${side}] EMERGENCY: Forcing data display after critical error...`);
                         forceCombineAndShowData();
                     }, 2000);
                 }
+            }
+        }
+        
+        // NEW: Check if OCR data contains useful information
+        function hasUsefulData(data, side) {
+            if (!data || typeof data !== 'object') {
+                console.log(`❌ Data is not an object:`, data);
+                return false;
+            }
+            
+            if (side === 'front') {
+                const hasName = data.name && data.name.length > 3 && !data.name.includes('nicht erkannt') && !data.name.includes('erfasst');
+                const hasNumber = data.insurance_number && data.insurance_number.length > 3 && !data.insurance_number.includes('nicht erkannt') && !data.insurance_number.includes('versucht');
+                const hasCompany = data.insurance_company && data.insurance_company.length > 3 && !data.insurance_company.includes('nicht erkannt') && !data.insurance_company.includes('Text nicht');
+                
+                console.log(`📊 Front data quality check: name=${hasName}, number=${hasNumber}, company=${hasCompany}`);
+                return hasName || hasNumber || hasCompany;
+            } else {
+                const hasValid = data.valid_until && data.valid_until.length > 3 && !data.valid_until.includes('nicht erkannt') && !data.valid_until.includes('erfasst');
+                const hasBirth = data.birth_date && data.birth_date.length > 3 && !data.birth_date.includes('nicht erkannt') && !data.birth_date.includes('versucht');
+                
+                console.log(`📊 Back data quality check: valid=${hasValid}, birth=${hasBirth}`);
+                return hasValid || hasBirth;
+            }
+        }
+        
+        // NEW: Analyze image quality before OCR
+        async function analyzeImageQuality(imageBlob) {
+            try {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                
+                const img = new Image();
+                await new Promise((resolve) => {
+                    img.onload = resolve;
+                    img.src = URL.createObjectURL(imageBlob);
+                });
+                
+                canvas.width = img.width;
+                canvas.height = img.height;
+                ctx.drawImage(img, 0, 0);
+                
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const data = imageData.data;
+                
+                // Calculate basic quality metrics
+                let totalBrightness = 0;
+                let totalContrast = 0;
+                
+                for (let i = 0; i < data.length; i += 4) {
+                    const r = data[i];
+                    const g = data[i + 1];
+                    const b = data[i + 2];
+                    const brightness = (r + g + b) / 3;
+                    totalBrightness += brightness;
+                }
+                
+                const avgBrightness = totalBrightness / (data.length / 4);
+                
+                return {
+                    width: img.width,
+                    height: img.height,
+                    size_bytes: imageBlob.size,
+                    avg_brightness: Math.round(avgBrightness),
+                    is_too_dark: avgBrightness < 60,
+                    is_too_bright: avgBrightness > 200,
+                    is_good_size: img.width >= 400 && img.height >= 250,
+                    is_good_quality: avgBrightness >= 60 && avgBrightness <= 200 && img.width >= 400
+                };
+                
+            } catch (error) {
+                console.error('Image quality analysis failed:', error);
+                return {
+                    error: error.message,
+                    is_good_quality: false
+                };
+            }
+        }
+        
+        // NEW: Enhanced fallback data with detailed debug info
+        function getDetailedFallbackData(side, backendError, tesseractError, qualityCheck) {
+            const timestamp = new Date().toLocaleTimeString();
+            
+            const debugInfo = {
+                timestamp: timestamp,
+                backend_error: backendError ? backendError.message.substring(0, 50) : 'N/A',
+                tesseract_error: tesseractError ? tesseractError.message.substring(0, 50) : 'N/A',
+                image_quality: qualityCheck.is_good_quality ? 'Gut' : 'Problematisch',
+                image_size: qualityCheck.width ? `${qualityCheck.width}x${qualityCheck.height}` : 'Unbekannt',
+                brightness: qualityCheck.avg_brightness || 'Unbekannt'
+            };
+            
+            if (side === 'front') {
+                return {
+                    name: `🔧 OCR-Problem erkannt ${timestamp}`,
+                    insurance_number: `📋 Backend/Tesseract Fehler - bitte manuell eingeben`,
+                    insurance_company: `⚠️ Bildqualität: ${debugInfo.image_quality} (${debugInfo.brightness})`,
+                    debug_info: debugInfo
+                };
+            } else {
+                return {
+                    valid_until: `📅 OCR-Probleme ${timestamp}`,
+                    birth_date: `🔧 Beide Engines fehlgeschlagen - manuell prüfen`,
+                    debug_info: debugInfo
+                };
             }
         }
         

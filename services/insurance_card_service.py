@@ -216,128 +216,371 @@ class InsuranceCardService:
         Process image with OCR using pytesseract with image preprocessing
         """
         try:
+            logger.info(f"🔍 Starting backend OCR processing... (image size: {len(image_data)} bytes)")
+            
             # Load image from bytes
             image = Image.open(io.BytesIO(image_data))
+            logger.info(f"📸 Image loaded: {image.size[0]}x{image.size[1]} pixels, mode: {image.mode}")
             
             # Preprocess image for better OCR
             preprocessed_image = self._preprocess_for_ocr(image)
+            logger.info(f"✅ Image preprocessing completed")
             
-            # Configure Tesseract for German insurance cards
-            custom_config = r'--oem 3 --psm 6 -l deu'
+            # ENHANCED: Try multiple Tesseract configurations for better results
+            ocr_configs = [
+                # Config 1: German with high precision
+                {
+                    'config': r'--oem 3 --psm 6 -l deu',
+                    'description': 'German with PSM 6 (uniform text block)'
+                },
+                # Config 2: German with auto page segmentation
+                {
+                    'config': r'--oem 3 --psm 3 -l deu',
+                    'description': 'German with PSM 3 (fully automatic)'
+                },
+                # Config 3: Fallback with English+German
+                {
+                    'config': r'--oem 3 --psm 6 -l eng+deu',
+                    'description': 'English+German fallback'
+                }
+            ]
             
-            # Extract text using pytesseract
-            try:
-                raw_text = pytesseract.image_to_string(
-                    preprocessed_image, 
-                    config=custom_config
-                )
-            except pytesseract.TesseractNotFoundError:
-                logger.error("Tesseract not found - OCR nicht verfügbar")
+            best_result = None
+            best_confidence = 0
+            all_attempts = []
+            
+            for i, config_info in enumerate(ocr_configs):
+                try:
+                    logger.info(f"🔄 Trying OCR config {i+1}/3: {config_info['description']}")
+                    
+                    # Extract text using pytesseract
+                    raw_text = pytesseract.image_to_string(
+                        preprocessed_image, 
+                        config=config_info['config']
+                    )
+                    
+                    if raw_text and raw_text.strip():
+                        # Calculate basic confidence score
+                        confidence = self._calculate_text_confidence(raw_text)
+                        
+                        attempt = {
+                            'config': i + 1,
+                            'raw_text': raw_text.strip(),
+                            'confidence': confidence,
+                            'text_length': len(raw_text.strip())
+                        }
+                        all_attempts.append(attempt)
+                        
+                        logger.info(f"📊 Config {i+1} result: {len(raw_text.strip())} chars, confidence: {confidence:.2f}")
+                        logger.info(f"📝 Config {i+1} text preview: {raw_text.strip()[:100]}...")
+                        
+                        if confidence > best_confidence:
+                            best_result = attempt
+                            best_confidence = confidence
+                            logger.info(f"✅ New best result: config {i+1}")
+                        
+                        # If we get excellent results, stop early
+                        if confidence > 0.8 and len(raw_text.strip()) > 50:
+                            logger.info(f"🎯 Excellent result found, stopping early")
+                            break
+                            
+                    else:
+                        logger.warning(f"⚠️ Config {i+1} produced no text")
+                        
+                except pytesseract.TesseractNotFoundError:
+                    logger.error("❌ Tesseract not found - OCR not available")
+                    return {
+                        "success": False,
+                        "error": "OCR-Engine nicht installiert. Bitte Administrator kontaktieren."
+                    }
+                except pytesseract.TesseractError as te:
+                    logger.error(f"❌ Tesseract error on config {i+1}: {te}")
+                    continue  # Try next config
+                except Exception as e:
+                    logger.error(f"❌ Config {i+1} failed: {e}")
+                    continue  # Try next config
+            
+            # Log all attempts for debugging
+            logger.info(f"📋 Total OCR attempts: {len(all_attempts)}")
+            for attempt in all_attempts:
+                logger.info(f"   Config {attempt['config']}: {attempt['text_length']} chars, confidence: {attempt['confidence']:.2f}")
+            
+            if not best_result:
+                logger.error("❌ All OCR configurations failed to extract text")
                 return {
                     "success": False,
-                    "error": "OCR-Engine nicht installiert. Bitte Administrator kontaktieren."
-                }
-            except pytesseract.TesseractError as te:
-                logger.error(f"Tesseract error: {te}")
-                return {
-                    "success": False,
-                    "error": "OCR-Verarbeitung fehlgeschlagen. Bitte Bildqualität prüfen."
+                    "error": "Kein Text erkannt - bitte Bildqualität prüfen. Alle OCR-Konfigurationen fehlgeschlagen."
                 }
             
-            logger.info(f"OCR extracted text: {raw_text[:200]}...")  # Log first 200 chars
-            
-            if not raw_text.strip():
-                return {
-                    "success": False,
-                    "error": "Kein Text erkannt - bitte Bildqualität prüfen"
-                }
+            raw_text = best_result['raw_text']
+            logger.info(f"🏆 Using best OCR result: {len(raw_text)} chars, confidence: {best_confidence:.2f}")
             
             # Parse structured data from text
             structured_data = self._parse_ocr_text(raw_text)
+            logger.info(f"📊 Parsed structured data: {structured_data}")
             
-            # Calculate confidence based on extracted data quality
-            confidence = self._calculate_confidence(structured_data, raw_text)
+            # Enhanced confidence calculation
+            final_confidence = self._calculate_final_confidence(structured_data, raw_text, best_confidence)
             
             return {
                 "success": True,
                 "data": structured_data,
-                "raw_text": raw_text.strip(),
-                "confidence": confidence
+                "raw_text": raw_text,
+                "confidence": final_confidence,
+                "ocr_attempts": len(all_attempts),
+                "best_config": best_result['config']
             }
             
         except Exception as e:
-            logger.error(f"OCR processing error: {e}")
+            logger.error(f"❌ OCR processing error: {e}")
             return {
                 "success": False,
                 "error": f"OCR-Verarbeitung fehlgeschlagen: {str(e)}"
             }
+    
+    def _calculate_text_confidence(self, text: str) -> float:
+        """Calculate confidence score based on text characteristics"""
+        if not text or not text.strip():
+            return 0.0
+        
+        text = text.strip()
+        
+        # Base score
+        confidence = 0.3
+        
+        # Length bonus (longer text usually means better OCR)
+        if len(text) > 100:
+            confidence += 0.2
+        elif len(text) > 50:
+            confidence += 0.1
+        
+        # Check for typical German insurance card patterns
+        patterns = [
+            r'[A-ZÄÖÜ][a-zäöüß]+ [A-ZÄÖÜ][a-zäöüß]+',  # Names
+            r'[A-Z]\d{9}',  # KVNR format
+            r'\d{10}',      # Alternative KVNR
+            r'AOK|TK|Barmer|DAK|BKK|IKK',  # Insurance companies
+            r'\d{1,2}[\.\/]\d{1,2}[\.\/]\d{2,4}',  # Dates
+        ]
+        
+        pattern_matches = 0
+        for pattern in patterns:
+            if re.search(pattern, text):
+                pattern_matches += 1
+        
+        # Pattern bonus
+        confidence += (pattern_matches / len(patterns)) * 0.3
+        
+        # German character bonus
+        german_chars = len(re.findall(r'[äöüÄÖÜß]', text))
+        if german_chars > 0:
+            confidence += min(german_chars * 0.02, 0.15)
+        
+        return min(confidence, 1.0)
+    
+    def _calculate_final_confidence(self, structured_data: Dict[str, str], raw_text: str, base_confidence: float) -> float:
+        """Calculate final confidence based on extracted structured data"""
+        
+        data_quality = 0.0
+        
+        # Check quality of extracted fields
+        if structured_data.get("name") and not "nicht erkannt" in structured_data["name"].lower():
+            data_quality += 0.3
+            
+        if structured_data.get("insurance_number") and not "nicht erkannt" in structured_data["insurance_number"].lower():
+            if re.match(r'^[A-Z]\d{9}$|^\d{10}$', structured_data["insurance_number"]):
+                data_quality += 0.4  # High value for valid KVNR
+            else:
+                data_quality += 0.2
+                
+        if structured_data.get("insurance_company") and not "nicht erkannt" in structured_data["insurance_company"].lower():
+            data_quality += 0.2
+            
+        if structured_data.get("birth_date") or structured_data.get("valid_until"):
+            data_quality += 0.1
+        
+        # Combine base confidence with data quality
+        final_confidence = (base_confidence * 0.6) + (data_quality * 0.4)
+        
+        return min(final_confidence, 0.95)  # Cap at 95%
     
     def _preprocess_for_ocr(self, image: Image) -> Image:
         """
         Preprocess image for better OCR results
         """
         try:
+            logger.info(f"🖼️ Starting image preprocessing: {image.size[0]}x{image.size[1]} pixels, mode: {image.mode}")
+            
             # Convert to RGB if needed
             if image.mode != 'RGB':
                 image = image.convert('RGB')
+                logger.info(f"🔄 Converted image to RGB mode")
             
-            # Resize if too small (insurance cards should be readable at decent size)
+            # ENHANCED: Resize for optimal OCR (insurance cards need higher resolution)
             width, height = image.size
-            if width < 800:  # Increased minimum width for better OCR
-                scale_factor = 800 / width
+            target_width = 1200  # Increased from 800 for better OCR accuracy
+            if width < target_width:
+                scale_factor = target_width / width
                 new_width = int(width * scale_factor)
                 new_height = int(height * scale_factor)
                 image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
-                logger.info(f"Resized image from {width}x{height} to {new_width}x{new_height}")
+                logger.info(f"📏 Resized image from {width}x{height} to {new_width}x{new_height}")
             
             # Convert to OpenCV format for advanced preprocessing
             cv_image = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+            logger.info(f"🔄 Converted to OpenCV format")
             
-            # Apply denoising
-            cv_image = cv2.fastNlMeansDenoisingColored(cv_image, None, 10, 10, 7, 21)
+            # ENHANCED: Advanced noise reduction specifically for card text
+            # Stage 1: Color denoising for camera noise
+            cv_image = cv2.fastNlMeansDenoisingColored(cv_image, None, 3, 3, 7, 21)
             
-            # Convert to grayscale for better text detection
+            # Stage 2: Bilateral filter to smooth while preserving edges (good for text)
+            cv_image = cv2.bilateralFilter(cv_image, 9, 75, 75)
+            
+            # Convert to grayscale for text processing
             gray = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
+            logger.info(f"🔄 Converted to grayscale")
             
-            # Apply Gaussian blur to reduce noise
-            gray = cv2.GaussianBlur(gray, (1, 1), 0)
+            # ENHANCED: Adaptive histogram equalization for better contrast
+            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+            gray = clahe.apply(gray)
+            logger.info(f"📈 Applied CLAHE histogram equalization")
             
-            # Apply adaptive thresholding for better text contrast
-            processed = cv2.adaptiveThreshold(
-                gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
-            )
+            # ENHANCED: Multiple preprocessing approaches - choose best one
+            preprocessed_versions = []
             
-            # Apply morphological operations to clean up text
-            kernel = np.ones((1, 1), np.uint8)
-            processed = cv2.morphologyEx(processed, cv2.MORPH_CLOSE, kernel)
+            # Approach 1: Adaptive thresholding (good for varying lighting)
+            try:
+                adaptive_thresh = cv2.adaptiveThreshold(
+                    gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 15, 10
+                )
+                preprocessed_versions.append(("adaptive_gaussian", adaptive_thresh))
+                logger.info(f"✅ Created adaptive Gaussian threshold version")
+            except Exception as e:
+                logger.warning(f"⚠️ Adaptive thresholding failed: {e}")
             
-            # Dilation and erosion to make text more solid
-            kernel = np.ones((2, 2), np.uint8)
-            processed = cv2.dilate(processed, kernel, iterations=1)
-            processed = cv2.erode(processed, kernel, iterations=1)
+            # Approach 2: Otsu's thresholding (good for bimodal images)
+            try:
+                # Apply slight Gaussian blur before Otsu
+                blurred = cv2.GaussianBlur(gray, (3, 3), 0)
+                _, otsu_thresh = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+                preprocessed_versions.append(("otsu", otsu_thresh))
+                logger.info(f"✅ Created Otsu threshold version")
+            except Exception as e:
+                logger.warning(f"⚠️ Otsu thresholding failed: {e}")
+            
+            # Approach 3: Enhanced contrast with manual threshold
+            try:
+                # Enhance contrast more aggressively
+                enhanced = cv2.convertScaleAbs(gray, alpha=1.5, beta=20)
+                # Apply Gaussian blur
+                enhanced = cv2.GaussianBlur(enhanced, (1, 1), 0)
+                # Manual threshold
+                _, manual_thresh = cv2.threshold(enhanced, 140, 255, cv2.THRESH_BINARY)
+                preprocessed_versions.append(("manual_enhanced", manual_thresh))
+                logger.info(f"✅ Created manual enhanced threshold version")
+            except Exception as e:
+                logger.warning(f"⚠️ Manual thresholding failed: {e}")
+            
+            # Choose the best preprocessing approach based on text clarity
+            if preprocessed_versions:
+                best_version = self._select_best_preprocessing(preprocessed_versions)
+                processed = best_version[1]
+                logger.info(f"🏆 Selected best preprocessing: {best_version[0]}")
+            else:
+                # Fallback to simple processing
+                processed = cv2.adaptiveThreshold(
+                    gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
+                )
+                logger.warning(f"⚠️ Using fallback preprocessing")
+            
+            # ENHANCED: Morphological operations to clean up text
+            # Define different kernels for different operations
+            kernel_close = np.ones((2, 2), np.uint8)  # For closing gaps in text
+            kernel_open = np.ones((1, 1), np.uint8)   # For removing noise
+            
+            # Close small gaps in characters
+            processed = cv2.morphologyEx(processed, cv2.MORPH_CLOSE, kernel_close)
+            
+            # Remove small noise
+            processed = cv2.morphologyEx(processed, cv2.MORPH_OPEN, kernel_open)
+            
+            # ENHANCED: Dilation and erosion to make text more solid (but preserve character boundaries)
+            kernel_dilate = np.ones((1, 1), np.uint8)
+            processed = cv2.dilate(processed, kernel_dilate, iterations=1)
+            processed = cv2.erode(processed, kernel_dilate, iterations=1)
+            
+            logger.info(f"🧹 Applied morphological operations")
             
             # Convert back to PIL Image
             final_image = Image.fromarray(processed)
             
-            # Additional PIL enhancements
-            # Sharpen text
-            final_image = final_image.filter(ImageFilter.SHARPEN)
+            # ENHANCED: Additional PIL-based enhancements
+            # Sharpen text more aggressively
+            enhancer = ImageEnhance.Sharpness(final_image)
+            final_image = enhancer.enhance(2.0)  # Increased sharpening
             
-            # Increase contrast more aggressively
+            # Final contrast boost
             enhancer = ImageEnhance.Contrast(final_image)
-            final_image = enhancer.enhance(1.5)  # Increased from 1.2 to 1.5
+            final_image = enhancer.enhance(1.8)  # Increased from 1.5
             
-            # Enhance brightness
-            enhancer = ImageEnhance.Brightness(final_image)
-            final_image = enhancer.enhance(1.1)
+            logger.info(f"✅ Image preprocessing completed successfully")
+            logger.info(f"📊 Final image: {final_image.size[0]}x{final_image.size[1]} pixels")
             
-            logger.info("Enhanced image preprocessing completed")
             return final_image
             
         except Exception as e:
-            logger.error(f"Image preprocessing error: {e}")
+            logger.error(f"❌ Image preprocessing error: {e}")
+            logger.warning(f"🔄 Falling back to original image")
             # Return original image if preprocessing fails
             return image
+    
+    def _select_best_preprocessing(self, versions: list) -> tuple:
+        """Select the best preprocessing version based on text clarity metrics"""
+        try:
+            best_score = 0
+            best_version = versions[0]  # Default fallback
+            
+            for name, processed_img in versions:
+                # Calculate a simple text clarity score
+                score = self._calculate_text_clarity(processed_img)
+                logger.info(f"📊 Preprocessing '{name}' score: {score:.3f}")
+                
+                if score > best_score:
+                    best_score = score
+                    best_version = (name, processed_img)
+            
+            return best_version
+            
+        except Exception as e:
+            logger.error(f"❌ Error selecting best preprocessing: {e}")
+            return versions[0] if versions else ("fallback", versions[0][1])
+    
+    def _calculate_text_clarity(self, processed_img) -> float:
+        """Calculate a text clarity score for processed image"""
+        try:
+            # Calculate edge strength (higher = more defined text edges)
+            sobelx = cv2.Sobel(processed_img, cv2.CV_64F, 1, 0, ksize=3)
+            sobely = cv2.Sobel(processed_img, cv2.CV_64F, 0, 1, ksize=3)
+            edge_strength = np.mean(np.sqrt(sobelx**2 + sobely**2))
+            
+            # Calculate text-to-background ratio
+            text_pixels = np.sum(processed_img == 0)  # Black pixels (text)
+            total_pixels = processed_img.size
+            text_ratio = text_pixels / total_pixels
+            
+            # Optimal text ratio is around 10-30% for typical documents
+            text_ratio_score = 1.0 - abs(text_ratio - 0.2) / 0.2
+            text_ratio_score = max(0, text_ratio_score)
+            
+            # Combine metrics (edge strength weighted more heavily)
+            clarity_score = (edge_strength * 0.7) + (text_ratio_score * 0.3)
+            
+            return clarity_score
+            
+        except Exception as e:
+            logger.error(f"❌ Error calculating text clarity: {e}")
+            return 0.0
     
     def _parse_ocr_text(self, text: str) -> Dict[str, str]:
         """Parse OCR text to extract structured data from German insurance cards"""
@@ -641,37 +884,6 @@ class InsuranceCardService:
                 return True
         
         return False
-    
-    def _calculate_confidence(self, data: Dict[str, str], raw_text: str) -> float:
-        """Calculate confidence score based on extracted data quality"""
-        confidence = 0.0
-        
-        # Base confidence from text length and clarity
-        if len(raw_text.strip()) > 50:
-            confidence += 0.3
-        
-        # Confidence boost for each successfully extracted field
-        if data.get("name") and data["name"] != "Nicht erkannt":
-            confidence += 0.25
-        
-        if data.get("insurance_number") and data["insurance_number"] != "Nicht erkannt":
-            # Validate insurance number format
-            if re.match(r'^[A-Z]\d{9}$|^\d{10}$', data["insurance_number"]):
-                confidence += 0.25
-            else:
-                confidence += 0.1
-        
-        if data.get("insurance_company") and data["insurance_company"] != "Nicht erkannt":
-            confidence += 0.15
-        
-        if data.get("birth_date"):
-            confidence += 0.1
-        
-        if data.get("valid_until"):
-            confidence += 0.1
-        
-        # Cap confidence at reasonable maximum
-        return min(confidence, 0.95)
     
     def validate_extracted_data(self, data: Dict[str, str]) -> Dict[str, str]:
         """Validate and clean extracted data"""
