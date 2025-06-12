@@ -936,22 +936,113 @@ class InsuranceCardService:
                 "valid_until": ""
             }
     
+    def _is_likely_name(self, text: str) -> bool:
+        """Check if text looks like a person's name"""
+        if not text or len(text) < 3 or len(text) > 50:
+            return False
+        
+        # Should contain only letters, spaces, common German characters, and hyphens
+        if not re.match(r'^[A-Za-zÄÖÜäöüß\s\-\.]+$', text):
+            return False
+        
+        words = text.split()
+        if len(words) < 2 or len(words) > 4:
+            return False
+        
+        # Each word should be reasonable name length
+        for word in words:
+            if len(word) < 2 or len(word) > 20:
+                return False
+        
+        # At least one word should start with uppercase (typical for names)
+        if not any(word[0].isupper() for word in words):
+            return False
+        
+        # Filter out common false positives
+        false_positives = [
+            'versichert', 'versicherung', 'krankenversicherung', 'krankenkasse',
+            'gültig bis', 'geburtsdatum', 'geboren', 'nummer', 'karte',
+            'deutschland', 'germany', 'bundesrepublik', 'european health',
+            'in si gesund', 'si gesund', 'gesund', 'health', 'insurance',
+            'card', 'krankenversichertenkarte', 'versichertenkarte'
+        ]
+        
+        text_lower = text.lower()
+        for fp in false_positives:
+            if fp in text_lower:
+                return False
+        
+        # Check if it looks like a valid German name pattern
+        # German names often have recognizable patterns
+        german_name_patterns = [
+            r'^[A-ZÄÖÜ][a-zäöüß]+ [A-ZÄÖÜ][a-zäöüß]+$',  # "Max Müller"
+            r'^[A-ZÄÖÜ][a-zäöüß]+ [A-ZÄÖÜ][a-zäöüß]+ [A-ZÄÖÜ][a-zäöüß]+$',  # "Max Peter Müller"
+            r'^[A-ZÄÖÜ][a-zäöüß]+\-[A-ZÄÖÜ][a-zäöüß]+ [A-ZÄÖÜ][a-zäöüß]+$',  # "Anne-Marie Müller"
+        ]
+        
+        for pattern in german_name_patterns:
+            if re.match(pattern, text):
+                return True
+        
+        return True  # Default to True if basic checks pass
+    
     def _clean_name(self, name: str) -> str:
-        """Clean and format name"""
+        """Clean and format name with enhanced OCR error correction"""
         if not name:
             return ""
         
         # Remove extra whitespace and limit length
         cleaned = re.sub(r'\s+', ' ', name.strip())[:50]
         
+        # Common OCR corrections for German names
+        ocr_corrections = {
+            'in si gesund': '',  # Common false positive
+            'si gesund': '',
+            'ln ': 'In ',  # l/I confusion
+            ' ln ': ' In ',
+            'rn': 'tn',  # rn/tn confusion
+            '0': 'O',   # 0/O confusion in names
+            '1': 'I',   # 1/I confusion
+            '5': 'S',   # 5/S confusion
+            '6': 'G',   # 6/G confusion
+            '8': 'B',   # 8/B confusion
+        }
+        
+        # Apply corrections
+        for mistake, correction in ocr_corrections.items():
+            cleaned = cleaned.replace(mistake, correction)
+        
+        # Remove if it's clearly a false positive after corrections
+        if not cleaned or len(cleaned) < 3:
+            return ""
+        
         # Capitalize properly (first letter of each word)
         words = cleaned.split()
         capitalized_words = []
         for word in words:
-            if re.match(r'^[A-Za-zÄÖÜäöüß\-]+$', word):
-                capitalized_words.append(word.capitalize())
+            if re.match(r'^[A-Za-zÄÖÜäöüß\-]+$', word) and len(word) > 1:
+                # Handle hyphenated names
+                if '-' in word:
+                    parts = word.split('-')
+                    capitalized_parts = [part.capitalize() for part in parts if part]
+                    capitalized_words.append('-'.join(capitalized_parts))
+                else:
+                    capitalized_words.append(word.capitalize())
         
-        return ' '.join(capitalized_words) if capitalized_words else cleaned
+        result = ' '.join(capitalized_words) if capitalized_words else cleaned
+        
+        # Final validation - if result is still suspicious, return empty
+        suspicious_patterns = [
+            r'^[0-9]+$',  # Only numbers
+            r'^[^A-Za-zÄÖÜäöüß\s\-]+$',  # No letters at all
+            r'^\s*$',  # Only whitespace
+        ]
+        
+        for pattern in suspicious_patterns:
+            if re.match(pattern, result):
+                return ""
+        
+        return result
     
     def _is_valid_insurance_number(self, number: str) -> bool:
         """Validate German insurance number format"""
@@ -1019,30 +1110,6 @@ class InsuranceCardService:
             cleaned["valid_until"] = "Gültigkeitsdatum nicht erkannt"
         
         return cleaned
-    
-    def _is_likely_name(self, text: str) -> bool:
-        """Check if text looks like a person's name"""
-        if not text or len(text) < 3 or len(text) > 50:
-            return False
-        
-        # Should contain only letters, spaces, common German characters, and hyphens
-        if not re.match(r'^[A-Za-zÄÖÜäöüß\s\-\.]+$', text):
-            return False
-        
-        words = text.split()
-        if len(words) < 2 or len(words) > 4:
-            return False
-        
-        # Each word should be reasonable name length
-        for word in words:
-            if len(word) < 2 or len(word) > 20:
-                return False
-        
-        # At least one word should start with uppercase (typical for names)
-        if not any(word[0].isupper() for word in words):
-            return False
-        
-        return True
     
     def _is_likely_insurance_company(self, text: str) -> bool:
         """Check if text looks like an insurance company name"""
