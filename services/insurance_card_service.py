@@ -14,6 +14,8 @@ import numpy as np
 import cv2
 import pytesseract
 import re
+import time
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -213,114 +215,165 @@ class InsuranceCardService:
     
     def _process_with_ocr(self, image_data: bytes) -> Dict[str, Any]:
         """
-        Process image with OCR using pytesseract with image preprocessing
+        Process image with OCR using pytesseract with ENHANCED image preprocessing and debugging
         """
         try:
-            logger.info(f"🔍 Starting backend OCR processing... (image size: {len(image_data)} bytes)")
+            logger.info(f"🔍 ENHANCED OCR: Starting deep analysis... (image size: {len(image_data)} bytes)")
+            start_time = time.time()
             
             # Load image from bytes
             image = Image.open(io.BytesIO(image_data))
             logger.info(f"📸 Image loaded: {image.size[0]}x{image.size[1]} pixels, mode: {image.mode}")
             
-            # Preprocess image for better OCR
-            preprocessed_image = self._preprocess_for_ocr(image)
-            logger.info(f"✅ Image preprocessing completed")
+            # SAVE ORIGINAL IMAGE FOR DEBUGGING
+            debug_dir = "/tmp/ocr_debug"
+            if not os.path.exists(debug_dir):
+                os.makedirs(debug_dir)
             
-            # ENHANCED: Try multiple Tesseract configurations for better results
+            timestamp = int(time.time())
+            original_path = f"{debug_dir}/original_{timestamp}.png"
+            image.save(original_path)
+            logger.info(f"💾 Original image saved: {original_path}")
+            
+            # ENHANCED: Multiple preprocessing approaches with different strategies
+            preprocessed_versions = self._create_multiple_preprocessed_versions(image, debug_dir, timestamp)
+            logger.info(f"✅ Created {len(preprocessed_versions)} preprocessed versions")
+            
+            # ENHANCED: Extended OCR configurations for better results
             ocr_configs = [
-                # Config 1: German with high precision
-                {
-                    'config': r'--oem 3 --psm 6 -l deu',
-                    'description': 'German with PSM 6 (uniform text block)'
-                },
-                # Config 2: German with auto page segmentation
-                {
-                    'config': r'--oem 3 --psm 3 -l deu',
-                    'description': 'German with PSM 3 (fully automatic)'
-                },
-                # Config 3: Fallback with English+German
-                {
-                    'config': r'--oem 3 --psm 6 -l eng+deu',
-                    'description': 'English+German fallback'
-                }
+                # High precision configs
+                {'config': r'--oem 3 --psm 6 -l deu', 'description': 'German PSM 6 (uniform text)', 'weight': 1.0},
+                {'config': r'--oem 3 --psm 8 -l deu', 'description': 'German PSM 8 (single word)', 'weight': 0.8},
+                {'config': r'--oem 3 --psm 7 -l deu', 'description': 'German PSM 7 (single text line)', 'weight': 0.9},
+                {'config': r'--oem 3 --psm 3 -l deu', 'description': 'German PSM 3 (auto)', 'weight': 0.7},
+                {'config': r'--oem 3 --psm 4 -l deu', 'description': 'German PSM 4 (single column)', 'weight': 0.8},
+                # Fallback configs
+                {'config': r'--oem 3 --psm 6 -l eng+deu', 'description': 'German+English PSM 6', 'weight': 0.6},
+                {'config': r'--oem 1 --psm 6 -l deu', 'description': 'German LSTM PSM 6', 'weight': 0.7},
+                {'config': r'--oem 3 --psm 13 -l deu', 'description': 'German PSM 13 (raw line)', 'weight': 0.5},
             ]
             
             best_result = None
-            best_confidence = 0
+            best_score = 0
             all_attempts = []
             
-            for i, config_info in enumerate(ocr_configs):
-                try:
-                    logger.info(f"🔄 Trying OCR config {i+1}/3: {config_info['description']}")
-                    
-                    # Extract text using pytesseract
-                    raw_text = pytesseract.image_to_string(
-                        preprocessed_image, 
-                        config=config_info['config']
-                    )
-                    
-                    if raw_text and raw_text.strip():
-                        # Calculate basic confidence score
-                        confidence = self._calculate_text_confidence(raw_text)
-                        
-                        attempt = {
-                            'config': i + 1,
-                            'raw_text': raw_text.strip(),
-                            'confidence': confidence,
-                            'text_length': len(raw_text.strip())
-                        }
-                        all_attempts.append(attempt)
-                        
-                        logger.info(f"📊 Config {i+1} result: {len(raw_text.strip())} chars, confidence: {confidence:.2f}")
-                        logger.info(f"📝 Config {i+1} text preview: {raw_text.strip()[:100]}...")
-                        
-                        if confidence > best_confidence:
-                            best_result = attempt
-                            best_confidence = confidence
-                            logger.info(f"✅ New best result: config {i+1}")
-                        
-                        # If we get excellent results, stop early
-                        if confidence > 0.8 and len(raw_text.strip()) > 50:
-                            logger.info(f"🎯 Excellent result found, stopping early")
-                            break
-                            
-                    else:
-                        logger.warning(f"⚠️ Config {i+1} produced no text")
-                        
-                except pytesseract.TesseractNotFoundError:
-                    logger.error("❌ Tesseract not found - OCR not available")
-                    return {
-                        "success": False,
-                        "error": "OCR-Engine nicht installiert. Bitte Administrator kontaktieren."
-                    }
-                except pytesseract.TesseractError as te:
-                    logger.error(f"❌ Tesseract error on config {i+1}: {te}")
-                    continue  # Try next config
-                except Exception as e:
-                    logger.error(f"❌ Config {i+1} failed: {e}")
-                    continue  # Try next config
+            # Try each preprocessing version with each OCR config
+            total_combinations = len(preprocessed_versions) * len(ocr_configs)
+            current_attempt = 0
             
-            # Log all attempts for debugging
-            logger.info(f"📋 Total OCR attempts: {len(all_attempts)}")
-            for attempt in all_attempts:
-                logger.info(f"   Config {attempt['config']}: {attempt['text_length']} chars, confidence: {attempt['confidence']:.2f}")
+            logger.info(f"🧠 Starting {total_combinations} OCR attempts (this will take 5-15 seconds)...")
+            
+            for preprocess_name, preprocessed_image in preprocessed_versions:
+                for i, config_info in enumerate(ocr_configs):
+                    current_attempt += 1
+                    try:
+                        logger.info(f"🔄 Attempt {current_attempt}/{total_combinations}: {preprocess_name} + {config_info['description']}")
+                        
+                        # Add small delay to prevent overwhelming the system
+                        time.sleep(0.1)
+                        
+                        # Extract text using pytesseract
+                        raw_text = pytesseract.image_to_string(
+                            preprocessed_image, 
+                            config=config_info['config']
+                        )
+                        
+                        if raw_text and raw_text.strip():
+                            # Calculate weighted confidence score
+                            base_confidence = self._calculate_text_confidence(raw_text)
+                            weighted_score = base_confidence * config_info['weight']
+                            
+                            attempt = {
+                                'preprocessing': preprocess_name,
+                                'config': config_info['description'],
+                                'raw_text': raw_text.strip(),
+                                'confidence': base_confidence,
+                                'weighted_score': weighted_score,
+                                'text_length': len(raw_text.strip()),
+                                'attempt_num': current_attempt
+                            }
+                            all_attempts.append(attempt)
+                            
+                            logger.info(f"📊 Attempt {current_attempt}: {len(raw_text.strip())} chars, confidence: {base_confidence:.2f}, score: {weighted_score:.2f}")
+                            logger.info(f"📝 Text preview: {raw_text.strip()[:80]}...")
+                            
+                            if weighted_score > best_score:
+                                best_result = attempt
+                                best_score = weighted_score
+                                logger.info(f"✅ NEW BEST RESULT: {preprocess_name} + {config_info['description']} (score: {weighted_score:.2f})")
+                            
+                            # If we get excellent results, still continue but log it
+                            if weighted_score > 0.8 and len(raw_text.strip()) > 100:
+                                logger.info(f"🎯 Excellent result found, but continuing full analysis...")
+                                
+                        else:
+                            logger.debug(f"⚠️ Attempt {current_attempt} produced no text")
+                            
+                    except pytesseract.TesseractNotFoundError:
+                        logger.error("❌ Tesseract not found - OCR not available")
+                        return {
+                            "success": False,
+                            "error": "OCR-Engine nicht installiert. Bitte Administrator kontaktieren."
+                        }
+                    except pytesseract.TesseractError as te:
+                        logger.warning(f"⚠️ Tesseract error on attempt {current_attempt}: {te}")
+                        continue  # Try next config
+                    except Exception as e:
+                        logger.warning(f"⚠️ Attempt {current_attempt} failed: {e}")
+                        continue  # Try next config
+            
+            total_time = time.time() - start_time
+            
+            # Log comprehensive results
+            logger.info(f"📋 ANALYSIS COMPLETE: {len(all_attempts)} successful attempts out of {total_combinations} total ({total_time:.1f}s)")
+            
+            # Sort attempts by score for analysis
+            sorted_attempts = sorted(all_attempts, key=lambda x: x['weighted_score'], reverse=True)
+            logger.info("🏆 TOP 3 RESULTS:")
+            for i, attempt in enumerate(sorted_attempts[:3]):
+                logger.info(f"   #{i+1}: {attempt['preprocessing']} + {attempt['config']} (score: {attempt['weighted_score']:.2f})")
             
             if not best_result:
-                logger.error("❌ All OCR configurations failed to extract text")
+                logger.error(f"❌ ALL {total_combinations} OCR ATTEMPTS FAILED")
+                # Save debug info
+                debug_info = {
+                    "total_attempts": total_combinations,
+                    "preprocessing_versions": len(preprocessed_versions),
+                    "ocr_configs": len(ocr_configs),
+                    "analysis_time": total_time,
+                    "original_image_path": original_path
+                }
                 return {
                     "success": False,
-                    "error": "Kein Text erkannt - bitte Bildqualität prüfen. Alle OCR-Konfigurationen fehlgeschlagen."
+                    "error": f"Keine Texterkennung möglich nach {total_combinations} Versuchen. Debug-Bilder gespeichert in {debug_dir}",
+                    "debug_info": debug_info
                 }
             
             raw_text = best_result['raw_text']
-            logger.info(f"🏆 Using best OCR result: {len(raw_text)} chars, confidence: {best_confidence:.2f}")
+            logger.info(f"🏆 FINAL RESULT: {best_result['preprocessing']} + {best_result['config']}")
+            logger.info(f"📊 Best score: {best_score:.2f}, Text length: {len(raw_text)} chars")
+            logger.info(f"📄 COMPLETE TEXT:\n{raw_text}")
             
-            # Parse structured data from text
+            # Parse structured data from best text
             structured_data = self._parse_ocr_text(raw_text)
             logger.info(f"📊 Parsed structured data: {structured_data}")
             
             # Enhanced confidence calculation
-            final_confidence = self._calculate_final_confidence(structured_data, raw_text, best_confidence)
+            final_confidence = self._calculate_final_confidence(structured_data, raw_text, best_result['confidence'])
+            
+            # Save successful result for debugging
+            success_path = f"{debug_dir}/success_{timestamp}.txt"
+            with open(success_path, 'w', encoding='utf-8') as f:
+                f.write(f"SUCCESSFUL OCR RESULT\n")
+                f.write(f"Method: {best_result['preprocessing']} + {best_result['config']}\n")
+                f.write(f"Score: {best_score:.2f}\n")
+                f.write(f"Final Confidence: {final_confidence:.2f}\n")
+                f.write(f"Analysis Time: {total_time:.1f}s\n")
+                f.write(f"Attempts: {len(all_attempts)}/{total_combinations}\n\n")
+                f.write(f"RAW TEXT:\n{raw_text}\n\n")
+                f.write(f"STRUCTURED DATA:\n{structured_data}")
+            
+            logger.info(f"💾 Success log saved: {success_path}")
             
             return {
                 "success": True,
@@ -328,15 +381,139 @@ class InsuranceCardService:
                 "raw_text": raw_text,
                 "confidence": final_confidence,
                 "ocr_attempts": len(all_attempts),
-                "best_config": best_result['config']
+                "total_combinations": total_combinations,
+                "best_method": f"{best_result['preprocessing']} + {best_result['config']}",
+                "analysis_time": total_time,
+                "debug_info": {
+                    "debug_dir": debug_dir,
+                    "original_image": original_path,
+                    "success_log": success_path
+                }
             }
             
         except Exception as e:
-            logger.error(f"❌ OCR processing error: {e}")
+            logger.error(f"❌ CRITICAL OCR ERROR: {e}")
+            import traceback
+            logger.error(f"❌ Traceback: {traceback.format_exc()}")
             return {
                 "success": False,
-                "error": f"OCR-Verarbeitung fehlgeschlagen: {str(e)}"
+                "error": f"Kritischer OCR-Fehler: {str(e)}"
             }
+    
+    def _create_multiple_preprocessed_versions(self, image: Image, debug_dir: str, timestamp: int) -> list:
+        """Create multiple preprocessed versions of the image for better OCR success"""
+        versions = []
+        
+        try:
+            # Convert to OpenCV format
+            cv_image = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+            
+            # Version 1: Original preprocessing (existing method)
+            try:
+                processed_1 = self._preprocess_for_ocr(image)
+                processed_1.save(f"{debug_dir}/preprocess_original_{timestamp}.png")
+                versions.append(("original_method", processed_1))
+                logger.info("✅ Created: Original preprocessing")
+            except Exception as e:
+                logger.warning(f"⚠️ Original preprocessing failed: {e}")
+            
+            # Version 2: High contrast + sharpening
+            try:
+                gray = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
+                # Increase contrast dramatically
+                contrast_enhanced = cv2.convertScaleAbs(gray, alpha=2.0, beta=30)
+                # Apply strong sharpening
+                kernel = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
+                sharpened = cv2.filter2D(contrast_enhanced, -1, kernel)
+                # Adaptive threshold
+                thresh = cv2.adaptiveThreshold(sharpened, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
+                
+                processed_2 = Image.fromarray(thresh)
+                processed_2.save(f"{debug_dir}/preprocess_contrast_{timestamp}.png")
+                versions.append(("high_contrast", processed_2))
+                logger.info("✅ Created: High contrast version")
+            except Exception as e:
+                logger.warning(f"⚠️ High contrast preprocessing failed: {e}")
+            
+            # Version 3: Noise reduction + morphology
+            try:
+                gray = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
+                # Strong noise reduction
+                denoised = cv2.fastNlMeansDenoising(gray, None, 10, 7, 21)
+                # Otsu thresholding
+                _, otsu = cv2.threshold(denoised, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+                # Morphological operations
+                kernel = np.ones((2,2), np.uint8)
+                morphed = cv2.morphologyEx(otsu, cv2.MORPH_CLOSE, kernel)
+                morphed = cv2.morphologyEx(morphed, cv2.MORPH_OPEN, kernel)
+                
+                processed_3 = Image.fromarray(morphed)
+                processed_3.save(f"{debug_dir}/preprocess_morphology_{timestamp}.png")
+                versions.append(("morphology_enhanced", processed_3))
+                logger.info("✅ Created: Morphology enhanced version")
+            except Exception as e:
+                logger.warning(f"⚠️ Morphology preprocessing failed: {e}")
+            
+            # Version 4: Edge enhancement
+            try:
+                gray = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
+                # Gaussian blur first
+                blurred = cv2.GaussianBlur(gray, (3, 3), 0)
+                # Edge enhancement
+                edges = cv2.Canny(blurred, 50, 150)
+                # Dilate edges
+                dilated_edges = cv2.dilate(edges, np.ones((2,2), np.uint8), iterations=1)
+                # Combine with original
+                enhanced = cv2.bitwise_or(blurred, dilated_edges)
+                # Final threshold
+                _, thresh = cv2.threshold(enhanced, 127, 255, cv2.THRESH_BINARY)
+                
+                processed_4 = Image.fromarray(thresh)
+                processed_4.save(f"{debug_dir}/preprocess_edges_{timestamp}.png")
+                versions.append(("edge_enhanced", processed_4))
+                logger.info("✅ Created: Edge enhanced version")
+            except Exception as e:
+                logger.warning(f"⚠️ Edge preprocessing failed: {e}")
+            
+            # Version 5: Conservative approach (minimal processing)
+            try:
+                # Convert to RGB if needed
+                if image.mode != 'RGB':
+                    rgb_image = image.convert('RGB')
+                else:
+                    rgb_image = image
+                
+                # Only resize and convert to grayscale
+                width, height = rgb_image.size
+                if width < 1000:
+                    new_width = 1000
+                    new_height = int(height * (new_width / width))
+                    resized = rgb_image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+                else:
+                    resized = rgb_image
+                
+                # Simple grayscale conversion
+                gray_simple = resized.convert('L')
+                gray_simple.save(f"{debug_dir}/preprocess_simple_{timestamp}.png")
+                versions.append(("simple_grayscale", gray_simple))
+                logger.info("✅ Created: Simple grayscale version")
+            except Exception as e:
+                logger.warning(f"⚠️ Simple preprocessing failed: {e}")
+                
+        except Exception as e:
+            logger.error(f"❌ Error creating preprocessed versions: {e}")
+        
+        # Ensure we have at least the original image
+        if not versions:
+            logger.warning("⚠️ No preprocessing succeeded, using original image")
+            try:
+                image.save(f"{debug_dir}/fallback_original_{timestamp}.png")
+                versions.append(("fallback_original", image))
+            except Exception as e:
+                logger.error(f"❌ Even fallback failed: {e}")
+        
+        logger.info(f"📊 Created {len(versions)} preprocessed versions for analysis")
+        return versions
     
     def _calculate_text_confidence(self, text: str) -> float:
         """Calculate confidence score based on text characteristics"""
