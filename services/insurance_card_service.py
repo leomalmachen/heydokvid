@@ -19,6 +19,39 @@ import os
 
 logger = logging.getLogger(__name__)
 
+# Set TESSDATA_PREFIX for Heroku deployment
+if not os.environ.get('TESSDATA_PREFIX'):
+    # Try multiple common locations
+    tessdata_paths = [
+        '/usr/share/tesseract-ocr/5/tessdata',
+        '/usr/share/tesseract-ocr/4/tessdata', 
+        '/usr/share/tessdata',
+        '/opt/homebrew/share/tessdata',  # macOS
+        '/usr/local/share/tessdata'
+    ]
+    
+    for path in tessdata_paths:
+        if os.path.exists(path):
+            os.environ['TESSDATA_PREFIX'] = path
+            logger.info(f"🔧 Set TESSDATA_PREFIX to: {path}")
+            break
+    else:
+        logger.warning("⚠️ Could not find tessdata directory, using default")
+
+# Also try to set pytesseract command path explicitly
+try:
+    # Check if tesseract is available
+    import subprocess
+    result = subprocess.run(['which', 'tesseract'], capture_output=True, text=True)
+    if result.returncode == 0:
+        tesseract_cmd = result.stdout.strip()
+        pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
+        logger.info(f"🔧 Set tesseract command path to: {tesseract_cmd}")
+    else:
+        logger.warning("⚠️ tesseract command not found in PATH")
+except Exception as e:
+    logger.warning(f"⚠️ Could not set tesseract command path: {e}")
+
 class InsuranceCardService:
     """Service for automatic insurance card detection and processing"""
     

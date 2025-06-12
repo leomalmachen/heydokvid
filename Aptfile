@@ -1,3 +1,6 @@
 tesseract-ocr
 tesseract-ocr-deu
-libtesseract-dev 
+tesseract-ocr-eng
+tesseract-ocr-osd
+libtesseract-dev
+libleptonica-dev 
