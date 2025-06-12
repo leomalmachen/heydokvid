@@ -19,36 +19,50 @@ import os
 
 logger = logging.getLogger(__name__)
 
-# Set TESSDATA_PREFIX for Heroku deployment
-if not os.environ.get('TESSDATA_PREFIX'):
-    # Try multiple common locations
-    tessdata_paths = [
-        '/usr/share/tesseract-ocr/5/tessdata',
-        '/usr/share/tesseract-ocr/4/tessdata', 
-        '/usr/share/tessdata',
-        '/opt/homebrew/share/tessdata',  # macOS
-        '/usr/local/share/tessdata'
-    ]
-    
-    for path in tessdata_paths:
-        if os.path.exists(path):
-            os.environ['TESSDATA_PREFIX'] = path
-            logger.info(f"🔧 Set TESSDATA_PREFIX to: {path}")
-            break
-    else:
-        logger.warning("⚠️ Could not find tessdata directory, using default")
-
 # Also try to set pytesseract command path explicitly
 try:
-    # Check if tesseract is available
+    # Check if tesseract is available - try Heroku APT buildpack location first
     import subprocess
-    result = subprocess.run(['which', 'tesseract'], capture_output=True, text=True)
-    if result.returncode == 0:
-        tesseract_cmd = result.stdout.strip()
-        pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
-        logger.info(f"🔧 Set tesseract command path to: {tesseract_cmd}")
+    
+    # Try Heroku APT buildpack location first
+    heroku_tesseract_path = '/app/.apt/usr/bin/tesseract'
+    if os.path.exists(heroku_tesseract_path):
+        pytesseract.pytesseract.tesseract_cmd = heroku_tesseract_path
+        logger.info(f"🔧 Set tesseract command path to Heroku APT location: {heroku_tesseract_path}")
     else:
-        logger.warning("⚠️ tesseract command not found in PATH")
+        # Fallback to system search
+        result = subprocess.run(['which', 'tesseract'], capture_output=True, text=True)
+        if result.returncode == 0:
+            tesseract_cmd = result.stdout.strip()
+            pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
+            logger.info(f"🔧 Set tesseract command path to system location: {tesseract_cmd}")
+        else:
+            logger.warning("⚠️ tesseract command not found in PATH")
+            
+    # Also set TESSDATA_PREFIX if not already set
+    if not os.environ.get('TESSDATA_PREFIX'):
+        heroku_tessdata_path = '/app/.apt/usr/share/tesseract-ocr/5/tessdata'
+        if os.path.exists(heroku_tessdata_path):
+            os.environ['TESSDATA_PREFIX'] = heroku_tessdata_path
+            logger.info(f"🔧 Set TESSDATA_PREFIX to Heroku APT location: {heroku_tessdata_path}")
+        else:
+            # Try multiple common locations
+            tessdata_paths = [
+                '/usr/share/tesseract-ocr/5/tessdata',
+                '/usr/share/tesseract-ocr/4/tessdata', 
+                '/usr/share/tessdata',
+                '/opt/homebrew/share/tessdata',  # macOS
+                '/usr/local/share/tessdata'
+            ]
+            
+            for path in tessdata_paths:
+                if os.path.exists(path):
+                    os.environ['TESSDATA_PREFIX'] = path
+                    logger.info(f"🔧 Set TESSDATA_PREFIX to: {path}")
+                    break
+            else:
+                logger.warning("⚠️ Could not find tessdata directory, using default")
+                
 except Exception as e:
     logger.warning(f"⚠️ Could not set tesseract command path: {e}")
 
@@ -273,18 +287,7 @@ class InsuranceCardService:
             logger.info(f"✅ Created {len(preprocessed_versions)} preprocessed versions")
             
             # ENHANCED: Extended OCR configurations for better results
-            ocr_configs = [
-                # High precision configs
-                {'config': r'--oem 3 --psm 6 -l deu', 'description': 'German PSM 6 (uniform text)', 'weight': 1.0},
-                {'config': r'--oem 3 --psm 8 -l deu', 'description': 'German PSM 8 (single word)', 'weight': 0.8},
-                {'config': r'--oem 3 --psm 7 -l deu', 'description': 'German PSM 7 (single text line)', 'weight': 0.9},
-                {'config': r'--oem 3 --psm 3 -l deu', 'description': 'German PSM 3 (auto)', 'weight': 0.7},
-                {'config': r'--oem 3 --psm 4 -l deu', 'description': 'German PSM 4 (single column)', 'weight': 0.8},
-                # Fallback configs
-                {'config': r'--oem 3 --psm 6 -l eng+deu', 'description': 'German+English PSM 6', 'weight': 0.6},
-                {'config': r'--oem 1 --psm 6 -l deu', 'description': 'German LSTM PSM 6', 'weight': 0.7},
-                {'config': r'--oem 3 --psm 13 -l deu', 'description': 'German PSM 13 (raw line)', 'weight': 0.5},
-            ]
+            ocr_configs = self._build_ocr_configs(self._get_available_languages())
             
             best_result = None
             best_score = 0
@@ -1162,4 +1165,51 @@ class InsuranceCardService:
             
         except Exception as e:
             logger.error(f"Get validation status error: {e}")
-            return {"error": str(e)} 
+            return {"error": str(e)}
+    
+    def _get_available_languages(self) -> list:
+        """Detect available Tesseract languages at runtime"""
+        try:
+            # Try to get available languages
+            result = pytesseract.get_languages(config='')
+            logger.info(f"🔍 Available Tesseract languages: {result}")
+            return result
+        except Exception as e:
+            logger.warning(f"⚠️ Could not detect languages: {e}")
+            return ['eng']  # Default fallback
+    
+    def _build_ocr_configs(self, available_languages: list) -> list:
+        """Build OCR configurations based on available languages"""
+        configs = []
+        
+        # Determine best language to use
+        if 'deu' in available_languages:
+            primary_lang = 'deu'
+            logger.info("🇩🇪 Using German language for OCR")
+        elif 'eng' in available_languages:
+            primary_lang = 'eng'
+            logger.info("🇺🇸 Using English language for OCR")
+        else:
+            primary_lang = None
+            logger.warning("⚠️ No suitable language found, using default")
+        
+        # Build configurations
+        if primary_lang:
+            configs.extend([
+                {'config': f'--oem 3 --psm 6 -l {primary_lang}', 'description': f'{primary_lang.upper()} PSM 6 (uniform text)', 'weight': 1.0},
+                {'config': f'--oem 3 --psm 8 -l {primary_lang}', 'description': f'{primary_lang.upper()} PSM 8 (single word)', 'weight': 0.8},
+                {'config': f'--oem 3 --psm 7 -l {primary_lang}', 'description': f'{primary_lang.upper()} PSM 7 (single text line)', 'weight': 0.9},
+                {'config': f'--oem 3 --psm 3 -l {primary_lang}', 'description': f'{primary_lang.upper()} PSM 3 (auto)', 'weight': 0.7},
+                {'config': f'--oem 3 --psm 4 -l {primary_lang}', 'description': f'{primary_lang.upper()} PSM 4 (single column)', 'weight': 0.8},
+            ])
+        
+        # Add fallback configs without language specification
+        configs.extend([
+            {'config': r'--oem 3 --psm 6', 'description': 'Default PSM 6 (no language)', 'weight': 0.9},
+            {'config': r'--oem 3 --psm 8', 'description': 'Default PSM 8 (no language)', 'weight': 0.7},
+            {'config': r'--oem 3 --psm 3', 'description': 'Default PSM 3 (no language)', 'weight': 0.6},
+            {'config': r'--oem 1 --psm 6', 'description': 'LSTM PSM 6 (no language)', 'weight': 0.5},
+        ])
+        
+        logger.info(f"📋 Built {len(configs)} OCR configurations")
+        return configs 
