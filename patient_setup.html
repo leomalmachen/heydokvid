@@ -1013,6 +1013,14 @@
                 </div>
 
                 <div class="insurance-validation">
+                    <!-- NEU: Toggle/Tab-Selector für Scan vs. Manuelle Eingabe -->
+                    <div style="display: flex; justify-content: center; margin-bottom: 2rem; gap: 1rem;">
+                        <button id="toggleScan" class="btn btn-success" type="button" onclick="showScanMode()" style="min-width: 160px;">Scannen</button>
+                        <button id="toggleManual" class="btn" type="button" onclick="showManualMode()" style="min-width: 160px; background: #6c757d;">Manuell eingeben</button>
+                    </div>
+
+                    <!-- Scan-Workflow (Standard) -->
+                    <div id="scanWorkflow">
                     <!-- Step-by-Step Card Scanning Process -->
                     <div class="card-scanning-steps" id="cardScanningSteps">
                         
@@ -1235,6 +1243,46 @@
                 </div>
 
                 <button class="btn" id="step4Next" onclick="nextStep(4)" disabled>Weiter</button>
+            </div>
+
+            <!-- Manuelle Eingabe (versteckt, bis aktiviert) -->
+            <form id="manualInputForm" style="display: none; max-width: 400px; margin: 0 auto;">
+                <div class="form-group">
+                    <label for="manualKvnr">Krankenversichertennummer (KVNR):</label>
+                    <input type="text" id="manualKvnr" name="manualKvnr" required pattern="[A-Za-z0-9]{10,12}" placeholder="z.B. X1234567890">
+                </div>
+                <div class="form-group">
+                    <label for="manualName">Name des Versicherten:</label>
+                    <input type="text" id="manualName" name="manualName" required minlength="2" pattern="[A-Za-zÄÖÜäöüß\-\s]+" placeholder="Max Mustermann">
+                </div>
+                <div class="form-group">
+                    <label for="manualBirthdate">Geburtsdatum:</label>
+                    <input type="date" id="manualBirthdate" name="manualBirthdate" required max="9999-12-31">
+                </div>
+                <div class="form-group">
+                    <label for="manualInsurance">Krankenkasse (Kostenträger):</label>
+                    <input type="text" id="manualInsurance" name="manualInsurance" required placeholder="z.B. TK, AOK, Barmer">
+                </div>
+                <div style="text-align: center; margin-top: 1.5rem;">
+                    <button class="btn btn-success" type="submit" style="min-width: 180px;">Daten bestätigen</button>
+                </div>
+            </form>
+
+            <!-- Bestätigungsansicht für manuelle Eingabe (initial versteckt) -->
+            <div id="manualConfirmBox" class="data-confirmation" style="display: none; max-width: 400px; margin: 2rem auto;">
+                <div class="confirmation-header">
+                    <h4 style="color: #28a745; margin-bottom: 1rem;">✅ Manuelle Eingabe bestätigen</h4>
+                </div>
+                <div class="extracted-data" id="manualConfirmData"></div>
+                <div style="background: #fff3cd; padding: 1rem; border-radius: 8px; margin: 1rem 0;">
+                    <p style="margin: 0; color: #856404; font-size: 0.9rem;">
+                        <strong>💡 Hinweis:</strong> Bitte prüfen Sie Ihre Eingaben sorgfältig.
+                    </p>
+                </div>
+                <div class="confirmation-buttons">
+                    <button class="btn" id="manualConfirmBtn" style="background: #28a745;">✅ Daten bestätigen</button>
+                    <button class="btn" id="manualEditBtn" style="background: #dc3545;">🔄 Bearbeiten</button>
+                </div>
             </div>
 
             <!-- Step 5: Final Confirmation -->
@@ -4040,7 +4088,24 @@
         function updateScanStatus(side, type, message) {
             const statusDiv = document.getElementById(`${side}SideStatus`);
             if (statusDiv) {
-                statusDiv.textContent = message;
+                // Mapping für alle Statusmeldungen
+                let displayMessage = message;
+                if (type === 'ready') {
+                    displayMessage = side === 'front'
+                        ? 'Bitte halten Sie die Vorderseite Ihrer Karte bereit und klicken Sie auf "Countdown starten".'
+                        : 'Bitte drehen Sie die Karte um, halten Sie die Rückseite bereit und klicken Sie auf "Countdown starten".';
+                } else if (type === 'detecting') {
+                    displayMessage = 'Countdown läuft...';
+                } else if (type === 'loading') {
+                    displayMessage = 'Ihre Karte wird erfasst. Bitte halten Sie die Karte ruhig.';
+                } else if (type === 'success') {
+                    displayMessage = side === 'front'
+                        ? 'Vielen Dank, Sie können die Karte jetzt entfernen.'
+                        : 'Vielen Dank, Ihre Karte wurde gelesen.';
+                } else if (type === 'error') {
+                    displayMessage = 'Es ist ein Fehler aufgetreten. Bitte versuchen Sie es erneut.';
+                }
+                statusDiv.textContent = displayMessage;
                 statusDiv.className = `scan-status ${type}`;
             }
         }
@@ -4894,6 +4959,74 @@
                 }
             }, 15000);
         }
+
+        // Umschalt-Logik für Scan/Manuell
+        function showScanMode() {
+            document.getElementById('scanWorkflow').style.display = '';
+            document.getElementById('manualInputForm').style.display = 'none';
+            document.getElementById('manualConfirmBox').style.display = 'none';
+            document.getElementById('toggleScan').classList.add('btn-success');
+            document.getElementById('toggleManual').classList.remove('btn-success');
+            document.getElementById('toggleManual').style.background = '#6c757d';
+            document.getElementById('toggleScan').style.background = '';
+        }
+        function showManualMode() {
+            document.getElementById('scanWorkflow').style.display = 'none';
+            document.getElementById('manualInputForm').style.display = '';
+            document.getElementById('manualConfirmBox').style.display = 'none';
+            document.getElementById('toggleManual').classList.add('btn-success');
+            document.getElementById('toggleScan').classList.remove('btn-success');
+            document.getElementById('toggleScan').style.background = '#6c757d';
+            document.getElementById('toggleManual').style.background = '';
+        }
+        // Initial: Scan-Mode aktiv
+        document.addEventListener('DOMContentLoaded', function() {
+            showScanMode();
+            // Manuelles Formular-Handling
+            document.getElementById('manualInputForm').onsubmit = function(e) {
+                e.preventDefault();
+                // Validierung durch HTML5-Attribute, zusätzliche Checks möglich
+                const kvnr = document.getElementById('manualKvnr').value.trim();
+                const name = document.getElementById('manualName').value.trim();
+                const birthdate = document.getElementById('manualBirthdate').value;
+                const insurance = document.getElementById('manualInsurance').value.trim();
+                if (!kvnr || !name || !birthdate || !insurance) {
+                    alert('Bitte alle Felder ausfüllen!');
+                    return false;
+                }
+                // Daten in Bestätigungsansicht anzeigen
+                const confirmData = `
+                    <div class='data-field'><span class='data-label'>KVNR:</span><span class='data-value'>${kvnr}</span></div>
+                    <div class='data-field'><span class='data-label'>Name:</span><span class='data-value'>${name}</span></div>
+                    <div class='data-field'><span class='data-label'>Geburtsdatum:</span><span class='data-value'>${birthdate}</span></div>
+                    <div class='data-field'><span class='data-label'>Krankenkasse:</span><span class='data-value'>${insurance}</span></div>
+                `;
+                document.getElementById('manualConfirmData').innerHTML = confirmData;
+                document.getElementById('manualInputForm').style.display = 'none';
+                document.getElementById('manualConfirmBox').style.display = '';
+                return false;
+            };
+            // Bestätigen-Button
+            document.getElementById('manualConfirmBtn').onclick = function() {
+                document.getElementById('step4Next').disabled = false;
+                document.getElementById('manualConfirmBox').style.display = 'none';
+                // Optional: Feedback anzeigen oder Step 4 als abgeschlossen markieren
+            };
+            // Bearbeiten-Button
+            document.getElementById('manualEditBtn').onclick = function() {
+                document.getElementById('manualConfirmBox').style.display = 'none';
+                document.getElementById('manualInputForm').style.display = '';
+            };
+            // Passe die statischen Hinweise im Scan-Workflow an
+            const frontScanHint = document.querySelector('#frontSideStep p');
+            if (frontScanHint) {
+                frontScanHint.textContent = 'Bitte halten Sie die Vorderseite Ihrer Karte bereit und klicken Sie auf "Countdown starten".';
+            }
+            const backScanHint = document.querySelector('#backSideStep p');
+            if (backScanHint) {
+                backScanHint.textContent = 'Bitte drehen Sie die Karte um, halten Sie die Rückseite bereit und klicken Sie auf "Countdown starten".';
+            }
+        });
     </script>
 </body>
 </html> 
