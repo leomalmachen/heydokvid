@@ -1055,7 +1055,6 @@
                                         <div class="corner bottom-left"></div>
                                         <div class="corner bottom-right"></div>
                                         <div class="scan-text" id="frontCardFrameText">Vorderseite hier positionieren</div>
-                                        <div class="card-side-indicator">VORDERSEITE</div>
                                     </div>
                                 </div>
                                 
@@ -1146,7 +1145,6 @@
                                         <div class="corner bottom-left"></div>
                                         <div class="corner bottom-right"></div>
                                         <div class="scan-text" id="backCardFrameText">Rückseite hier positionieren</div>
-                                        <div class="card-side-indicator">RÜCKSEITE</div>
                                     </div>
                                 </div>
                                 
@@ -5017,6 +5015,70 @@
                 document.getElementById('manualConfirmBox').style.display = 'none';
                 document.getElementById('manualInputForm').style.display = '';
             };
+            // Passe die statischen Hinweise im Scan-Workflow an
+            const frontScanHint = document.querySelector('#frontSideStep p');
+            if (frontScanHint) {
+                frontScanHint.textContent = 'Bitte halten Sie die Vorderseite Ihrer Karte bereit und klicken Sie auf "Countdown starten".';
+            }
+            const backScanHint = document.querySelector('#backSideStep p');
+            if (backScanHint) {
+                backScanHint.textContent = 'Bitte drehen Sie die Karte um, halten Sie die Rückseite bereit und klicken Sie auf "Countdown starten".';
+            }
+        });
+
+        // Entferne das KI-Badge im Scan-Rahmen nach dem Laden
+        function removeKIBadge() {
+            document.querySelectorAll('.card-side-indicator').forEach(function(el) {
+                if (el.textContent && el.textContent.toLowerCase().includes('ki')) {
+                    el.style.display = 'none';
+                }
+            });
+        }
+        // Blende technische Visualisierungen aus
+        function removeTechVisuals() {
+            document.querySelectorAll('.enhanced-detection').forEach(function(el) {
+                el.classList.remove('enhanced-detection');
+            });
+        }
+        // Im manuellen Modus: Blende den Weiter-Button oben aus
+        function hideStep4NextIfManual() {
+            const manualForm = document.getElementById('manualInputForm');
+            const step4Next = document.getElementById('step4Next');
+            if (manualForm && step4Next) {
+                if (manualForm.style.display !== 'none') {
+                    step4Next.style.display = 'none';
+                } else {
+                    step4Next.style.display = '';
+                }
+            }
+        }
+        // Hooke in die Umschalt-Logik ein
+        function showScanMode() {
+            document.getElementById('scanWorkflow').style.display = '';
+            document.getElementById('manualInputForm').style.display = 'none';
+            document.getElementById('manualConfirmBox').style.display = 'none';
+            document.getElementById('toggleScan').classList.add('btn-success');
+            document.getElementById('toggleManual').classList.remove('btn-success');
+            document.getElementById('toggleManual').style.background = '#6c757d';
+            document.getElementById('toggleScan').style.background = '';
+            hideStep4NextIfManual();
+        }
+        function showManualMode() {
+            document.getElementById('scanWorkflow').style.display = 'none';
+            document.getElementById('manualInputForm').style.display = '';
+            document.getElementById('manualConfirmBox').style.display = 'none';
+            document.getElementById('toggleManual').classList.add('btn-success');
+            document.getElementById('toggleScan').classList.remove('btn-success');
+            document.getElementById('toggleScan').style.background = '#6c757d';
+            document.getElementById('toggleManual').style.background = '';
+            hideStep4NextIfManual();
+        }
+        document.addEventListener('DOMContentLoaded', function() {
+            // ... bestehender Code ...
+            removeKIBadge();
+            removeTechVisuals();
+            hideStep4NextIfManual();
+            // ... bestehender Code ...
             // Passe die statischen Hinweise im Scan-Workflow an
             const frontScanHint = document.querySelector('#frontSideStep p');
             if (frontScanHint) {
