@@ -2027,13 +2027,15 @@
         }
 
         function checkMediaTestCompletion() {
-            const confirmWorking = document.getElementById('confirmWorking').checked;
-
-            if (confirmWorking) {
-                // Automatically submit media test when patient confirms
-                submitMediaTest();
+            const checkbox = document.getElementById('confirmWorking');
+            const nextButton = document.getElementById('step3Next');
+            
+            if (checkbox.checked) {
+                nextButton.disabled = false;
+                // Entferne die Erfolgsmeldung hier
+                // showStatus('success', '✅ Media-Test erfolgreich! Sie können nun der Sprechstunde beitreten.');
             } else {
-                document.getElementById('step3Next').disabled = true;
+                nextButton.disabled = true;
             }
         }
 
