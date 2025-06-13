@@ -582,12 +582,27 @@
             z-index: 1;
         }
 
-        .scan-status {
-            margin: 1rem 0;
-            padding: 0.5rem;
-            border-radius: 4px;
-            font-weight: 500;
-            transition: all 0.3s ease;
+        .scan-status, .scan-status.loading, .scan-status.success {
+          animation: none !important;
+          transform: none !important;
+          transition: none !important;
+          display: flex;
+          flex-direction: row;
+          align-items: center;
+          justify-content: center;
+          margin: 24px auto 16px auto;
+          max-width: 350px;
+          width: 100%;
+          white-space: normal;
+          word-break: keep-all;
+          text-align: center;
+          position: relative;
+          z-index: 2;
+        }
+        .scan-status .scan-check {
+          font-size: 2.2rem;
+          margin-right: 0.75rem;
+          flex-shrink: 0;
         }
 
         .scan-status.loading {
@@ -926,18 +941,6 @@
             margin-top: 1rem;
             margin-bottom: 1.5rem;
             text-align: center;
-        }
-
-        /* Entferne Animationen und Keyframes für Statusanzeigen */
-        .scan-status, .scan-status.loading, .scan-status.success {
-          animation: none !important;
-          transform: none !important;
-          transition: none !important;
-        }
-        .countdown-indicator, .countdown-circle, .auto-processing, .quality-guidance {
-          animation: none !important;
-          transform: none !important;
-          transition: none !important;
         }
     </style>
 </head>
