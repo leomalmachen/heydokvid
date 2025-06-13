@@ -858,19 +858,6 @@
             position: relative;
         }
 
-        .enhanced-detection::after {
-            content: '🤖 KI-Erkennung aktiv';
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            background: rgba(74, 144, 226, 0.9);
-            color: white;
-            padding: 4px 8px;
-            border-radius: 12px;
-            font-size: 0.7rem;
-            font-weight: 600;
-        }
-
         /* Countdown indicator styles */
         .countdown-indicator {
             transition: all 0.3s ease;
@@ -1066,7 +1053,7 @@
                                 <canvas id="frontDetectionCanvas" style="display: none;"></canvas>
                                 
                                 <div class="scanner-overlay">
-                                    <div class="card-frame enhanced-detection" id="frontCardFrame">
+                                    <div class="card-frame" id="frontCardFrame">
                                         <div class="corner top-left"></div>
                                         <div class="corner top-right"></div>
                                         <div class="corner bottom-left"></div>
@@ -1147,7 +1134,7 @@
                                 <canvas id="backDetectionCanvas" style="display: none;"></canvas>
                                 
                                 <div class="scanner-overlay">
-                                    <div class="card-frame enhanced-detection" id="backCardFrame">
+                                    <div class="card-frame" id="backCardFrame">
                                         <div class="corner top-left"></div>
                                         <div class="corner top-right"></div>
                                         <div class="corner bottom-left"></div>
@@ -5069,8 +5056,8 @@
         }
         document.addEventListener('DOMContentLoaded', function() {
             // ... bestehender Code ...
-            removeKIBadge();
-            removeTechVisuals();
+            // removeKIBadge();  // Diese Zeile entfernen
+            // removeTechVisuals();  // Diese Zeile entfernen
             hideStep4NextIfManual();
             // ... bestehender Code ...
             // Passe die statischen Hinweise im Scan-Workflow an
