@@ -508,14 +508,13 @@
         }
 
         .scan-text {
-            position: absolute;
-            bottom: -30px;
-            left: 50%;
-            transform: translateX(-50%);
+            position: static !important;
+            display: block;
+            margin-top: 16px;
             color: #4a90e2;
             font-weight: 600;
-            font-size: 0.9rem;
-            transition: all 0.3s ease;
+            font-size: 1.1rem;
+            text-align: center;
         }
 
         .card-frame.detecting .scan-text {
@@ -885,6 +884,15 @@
                 height: 150px;
             }
         }
+
+        .countdown-hint {
+            font-size: 1.15rem;
+            font-weight: bold;
+            color: #333;
+            margin-top: 1rem;
+            margin-bottom: 1.5rem;
+            text-align: center;
+        }
     </style>
 </head>
 <body>
@@ -1072,14 +1080,7 @@
                                 <button class="btn" onclick="startCardCountdown('front')" style="background: #28a745; font-size: 1.1rem; padding: 1rem 2rem;">
                                     ⏰ Countdown starten (5 Sek.)
                                 </button>
-                                <p style="font-size: 0.85rem; color: #666; margin-top: 0.5rem;">
-                                    Karte bereithalten, dann Countdown starten
-                                </p>
-                                
-                                <!-- DEBUG: Test screenshot button -->
-                                <button class="btn" onclick="testScreenshot('front')" style="background: #6c757d; margin-left: 10px; font-size: 0.9rem; padding: 0.5rem 1rem;">
-                                    🧪 Screenshot testen
-                                </button>
+                                <p class="countdown-hint">Karte bereithalten, dann Countdown starten</p>
                             </div>
                             
                             <!-- Automatic Processing Indicator -->
@@ -1162,14 +1163,7 @@
                                 <button class="btn" onclick="startCardCountdown('back')" style="background: #28a745; font-size: 1.1rem; padding: 1rem 2rem;">
                                     ⏰ Countdown starten (5 Sek.)
                                 </button>
-                                <p style="font-size: 0.85rem; color: #666; margin-top: 0.5rem;">
-                                    Karte bereithalten, dann Countdown starten
-                                </p>
-                                
-                                <!-- DEBUG: Test screenshot button -->
-                                <button class="btn" onclick="testScreenshot('back')" style="background: #6c757d; margin-left: 10px; font-size: 0.9rem; padding: 0.5rem 1rem;">
-                                    🧪 Screenshot testen
-                                </button>
+                                <p class="countdown-hint">Karte bereithalten, dann Countdown starten</p>
                             </div>
                             
                             <!-- Automatic Processing Indicator -->
