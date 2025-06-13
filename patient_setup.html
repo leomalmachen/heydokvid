@@ -1851,15 +1851,11 @@
                 document.getElementById('step3').classList.add('active');
                 currentStep = 3;
             } else if (step === 3) {
-                if (!mediaTestId) {
-                    showStatus('error', 'Bitte führen Sie den Media-Test durch.');
-                    return;
-                }
+                // Entferne die Blockade und Fehlermeldung
                 document.getElementById('step3').classList.remove('active');
                 document.getElementById('step3').classList.add('completed');
                 document.getElementById('step4').classList.add('active');
                 currentStep = 4;
-                
                 // Initialize insurance card validation when entering step 4
                 initializeInsuranceValidation();
             } else if (step === 4) {
