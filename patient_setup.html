@@ -582,81 +582,45 @@
             z-index: 1;
         }
 
-        .scan-status, .scan-status.loading, .scan-status.success {
-          animation: none !important;
-          transform: none !important;
-          transition: none !important;
+        .scan-status {
           display: flex;
-          flex-direction: row;
           align-items: center;
           justify-content: center;
-          margin: 24px auto 16px auto;
-          max-width: 350px;
-          width: 100%;
-          white-space: normal;
-          word-break: keep-all;
-          text-align: center;
-          position: relative;
-          z-index: 2;
+          background: #ffffff;
+          border: 2px solid #28a745;
+          border-radius: 8px;
+          padding: 16px 24px;
+          margin: 24px auto;
+          max-width: 400px;
+          width: calc(100% - 48px);
+          box-shadow: 0 2px 8px rgba(40,167,69,0.1);
         }
+
         .scan-status .scan-check {
-          font-size: 2.2rem;
-          margin-right: 0.75rem;
-          flex-shrink: 0;
+          font-size: 24px;
+          margin-right: 12px;
+          line-height: 1;
+        }
+
+        .scan-status .scan-text {
+          color: #218838;
+          font-size: 18px;
+          font-weight: 500;
+          white-space: nowrap;
+          margin: 0;
         }
 
         .scan-status.loading {
-            background: #e6f4ea;
-            color: #218838;
-            border: 2px solid #28a745;
-            font-size: 1.25rem;
-            font-weight: 600;
-            text-align: center;
-            margin: 1.5rem auto;
-            max-width: 350px;
-            box-shadow: 0 2px 12px rgba(40,167,69,0.08);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 1rem;
-            border-radius: 12px;
-            padding: 1.2rem 1rem;
-        }
-        .scan-status.loading .scan-check {
-            font-size: 2.2rem;
-            margin-right: 0.5rem;
-        }
-
-        .scan-status.detecting {
-            background: #fff3cd;
-            color: #856404;
+          background: #e6f4ea;
         }
 
         .scan-status.success {
-            background: #e6f4ea;
-            color: #218838;
-            border: 2px solid #28a745;
-            font-size: 1.25rem;
-            font-weight: 600;
-            text-align: center;
-            margin: 1.5rem auto;
-            max-width: 350px;
-            box-shadow: 0 2px 12px rgba(40,167,69,0.08);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 1rem;
-            border-radius: 12px;
-            padding: 1.2rem 1rem;
-        }
-        .scan-status.success .scan-check {
-            font-size: 2.2rem;
-            margin-right: 0.5rem;
+          background: #e6f4ea;
         }
 
         .scan-status.error {
-            background: #f8d7da;
-            color: #721c24;
+          background: #f8d7da;
+          color: #721c24;
         }
 
         /* Card type info */
@@ -1125,7 +1089,9 @@
                                 <button class="btn" onclick="startCardCountdown('front')" style="background: #28a745; font-size: 1.1rem; padding: 1rem 2rem;">
                                     ⏰ Countdown starten (5 Sek.)
                                 </button>
-                                <p class="countdown-hint">Karte bereithalten, dann Countdown starten</p>
+                                <p style="text-align: center; margin: 24px 0; font-size: 16px;">
+                                  Bitte halten Sie die Vorderseite Ihrer Karte bereit und klicken Sie auf "Countdown starten".
+                                </p>
                             </div>
                             
                             <!-- Automatic Processing Indicator -->
@@ -1204,7 +1170,9 @@
                                 <button class="btn" onclick="startCardCountdown('back')" style="background: #28a745; font-size: 1.1rem; padding: 1rem 2rem;">
                                     ⏰ Countdown starten (5 Sek.)
                                 </button>
-                                <p class="countdown-hint">Karte bereithalten, dann Countdown starten</p>
+                                <p style="text-align: center; margin: 24px 0; font-size: 16px;">
+                                  Bitte halten Sie die Vorderseite Ihrer Karte bereit und klicken Sie auf "Countdown starten".
+                                </p>
                             </div>
                             
                             <!-- Automatic Processing Indicator -->
@@ -4118,33 +4086,20 @@
         }
 
         // Updated helper functions
-        function updateScanStatus(side, type, message) {
-            const statusDiv = document.getElementById(`${side}SideStatus`);
-            if (statusDiv) {
-                // Mapping für alle Statusmeldungen
-                let displayMessage = message;
-                if (type === 'ready') {
-                    displayMessage = side === 'front'
-                        ? 'Bitte halten Sie die Vorderseite Ihrer Karte bereit und klicken Sie auf "Countdown starten".'
-                        : 'Bitte drehen Sie die Karte um, halten Sie die Rückseite bereit und klicken Sie auf "Countdown starten".';
-                } else if (type === 'detecting') {
-                    displayMessage = 'Countdown läuft...';
-                } else if (type === 'loading') {
-                    displayMessage = '<span class="scan-check">✅</span>Ihre Karte wird erfasst. Bitte halten Sie die Karte ruhig.';
-                } else if (type === 'success') {
-                    displayMessage = side === 'front'
-                        ? '<span class="scan-check">✅</span>Vielen Dank, Sie können die Karte jetzt entfernen.'
-                        : '<span class="scan-check">✅</span>Vielen Dank, Ihre Karte wurde gelesen.';
-                    statusDiv.innerHTML = displayMessage;
-                    statusDiv.className = `scan-status ${type}`;
-                    setTimeout(() => { statusDiv.style.display = 'none'; }, 3000);
-                    return;
-                } else if (type === 'error') {
-                    displayMessage = 'Es ist ein Fehler aufgetreten. Bitte versuchen Sie es erneut.';
-                }
-                statusDiv.innerHTML = displayMessage;
-                statusDiv.className = `scan-status ${type}`;
-            }
+        function updateScanStatus(type, side) {
+          const statusDiv = document.getElementById(`${side}ScanStatus`);
+          let displayMessage = '';
+          
+          if (type === 'loading') {
+            displayMessage = '<span class="scan-check">✓</span><span class="scan-text">Ihre Karte wird erfasst. Bitte halten Sie die Karte ruhig.</span>';
+          } else if (type === 'success') {
+            displayMessage = '<span class="scan-check">✓</span><span class="scan-text">' + 
+              (side === 'front' ? 'Vielen Dank, Sie können die Karte jetzt entfernen.' : 'Vielen Dank, Ihre Karte wurde gelesen.') + 
+              '</span>';
+          }
+          
+          statusDiv.innerHTML = displayMessage;
+          statusDiv.className = `scan-status ${type}`;
         }
 
         function updateCardFrame(side, state) {
