@@ -927,6 +927,18 @@
             margin-bottom: 1.5rem;
             text-align: center;
         }
+
+        /* Entferne Animationen und Keyframes für Statusanzeigen */
+        .scan-status, .scan-status.loading, .scan-status.success {
+          animation: none !important;
+          transform: none !important;
+          transition: none !important;
+        }
+        .countdown-indicator, .countdown-circle, .auto-processing, .quality-guidance {
+          animation: none !important;
+          transform: none !important;
+          transition: none !important;
+        }
     </style>
 </head>
 <body>
