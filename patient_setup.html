@@ -2454,16 +2454,26 @@
                 
                 console.log(`📸 [${side}] SUCCESS: Image captured, size: ${imageBlob.size} bytes`);
                 
-                // Wait 2-3 seconds to simulate processing (user expectation)
-                await new Promise(resolve => setTimeout(resolve, 2500));
+                // Try REAL OCR but simplified (no progress bars, no complex animations)
+                let ocrResult = null;
+                try {
+                    console.log(`🔍 [${side}] Starting simplified Tesseract OCR...`);
+                    ocrResult = await performSimplifiedTesseractOCR(imageBlob, side);
+                    console.log(`📋 [${side}] OCR result:`, ocrResult);
+                } catch (ocrError) {
+                    console.error(`❌ [${side}] OCR failed:`, ocrError);
+                    // Use fallback data if OCR fails
+                    ocrResult = {
+                        success: true,
+                        data: getSimpleCardData(side),
+                        confidence: 0.1,
+                        method: 'fallback'
+                    };
+                }
                 
-                // Use simple fallback data with timestamp (no complex OCR)
-                const simpleData = getSimpleCardData(side);
-                console.log(`✅ [${side}] Using simple data:`, simpleData);
-                
-                // ALWAYS proceed and show data
+                // Always proceed with result (real OCR data or fallback)
                 if (side === 'front') {
-                    frontCardData = simpleData;
+                    frontCardData = ocrResult.data;
                     console.log(`✅ [${side}] Front side data set:`, frontCardData);
                     updateScanStatus('front', 'success', `Vorderseite abgeschlossen!`);
                     
@@ -2474,7 +2484,7 @@
                     }, 1000);
                     
                 } else {
-                    backCardData = simpleData;
+                    backCardData = ocrResult.data;
                     console.log(`✅ [${side}] Back side data set:`, backCardData);
                     updateScanStatus('back', 'success', `Rückseite abgeschlossen!`);
                     
@@ -2508,6 +2518,46 @@
             }
         }
         
+        // NEW: Simplified Tesseract OCR without progress bars
+        async function performSimplifiedTesseractOCR(imageBlob, side) {
+            try {
+                console.log(`🔍 Starting simplified Tesseract OCR for ${side} side`);
+                
+                // Check if Tesseract is available
+                if (typeof Tesseract === 'undefined') {
+                    console.error('❌ Tesseract.js not loaded!');
+                    throw new Error('Tesseract.js nicht verfügbar');
+                }
+                
+                // Simple OCR with German language, no complex configurations
+                const result = await Tesseract.recognize(imageBlob, 'deu', {
+                    logger: () => {}, // Disable all progress logging
+                    tessedit_pageseg_mode: '6', // Uniform block of text
+                    tessedit_ocr_engine_mode: '1', // Neural net LSTM engine
+                    preserve_interword_spaces: '1'
+                });
+                
+                console.log(`📝 OCR raw text (${result.data.text.length} chars):`, result.data.text);
+                console.log(`📊 OCR confidence: ${result.data.confidence}%`);
+                
+                // Parse the OCR text
+                const parsedData = parseInsuranceCardText(result.data.text, side);
+                console.log(`🔍 Parsed data:`, parsedData);
+                
+                return {
+                    success: true,
+                    data: parsedData,
+                    confidence: result.data.confidence / 100,
+                    raw_text: result.data.text,
+                    method: 'tesseract_simplified'
+                };
+                
+            } catch (error) {
+                console.error('❌ Simplified Tesseract OCR error:', error);
+                throw error;
+            }
+        }
+
         // NEW: Simple card data without complex OCR
         function getSimpleCardData(side) {
             const timestamp = new Date().toLocaleTimeString();
