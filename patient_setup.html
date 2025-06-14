@@ -1076,11 +1076,7 @@
                                 <button class="btn" onclick="startCardCountdown('front')" style="background: #28a745; font-size: 1.1rem; padding: 1rem 2rem;">
                                     ⏰ Countdown starten (5 Sek.)
                                 </button>
-                                <p style="text-align: center; margin: 24px 0; font-size: 16px;">
-                                  Halten Sie Ihre Krankenkassenkarte bereit.<br>
-                                  Drücken Sie auf "Countdown starten".<br>
-                                  Halten Sie in der Zeit schonmal die Karte in die Kamera.
-                                </p>
+                                <div style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 1.5rem; margin: 1rem 0; text-align: left;"><h4 style="margin-bottom: 1rem; color: #495057;">📋 So läuft der Scan ab:</h4><div style="line-height: 1.6;"><p style="margin: 0.5rem 0;"><strong>Schritt 1:</strong> Halten Sie Ihre Krankenkassenkarte bereit</p><p style="margin: 0.5rem 0;"><strong>Schritt 2:</strong> Drücken Sie auf "Countdown starten"</p><p style="margin: 0.5rem 0;"><strong>Schritt 3:</strong> Halten Sie die Karte in die Kamera während des Countdowns</p><p style="margin: 0.5rem 0;"><strong>Schritt 4:</strong> Nach dem Scan werden Ihre Daten gelesen</p></div></div>
                             </div>
                             
                             <!-- Automatic Processing Indicator -->
@@ -1152,11 +1148,7 @@
                                 <button class="btn" onclick="startCardCountdown('back')" style="background: #28a745; font-size: 1.1rem; padding: 1rem 2rem;">
                                     ⏰ Countdown starten (5 Sek.)
                                 </button>
-                                <p style="text-align: center; margin: 24px 0; font-size: 16px;">
-                                  Halten Sie Ihre Krankenkassenkarte bereit.<br>
-                                  Drücken Sie auf "Countdown starten".<br>
-                                  Halten Sie in der Zeit schonmal die Karte in die Kamera.
-                                </p>
+                                <div style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 1.5rem; margin: 1rem 0; text-align: left;"><h4 style="margin-bottom: 1rem; color: #495057;">📋 So läuft der Scan ab:</h4><div style="line-height: 1.6;"><p style="margin: 0.5rem 0;"><strong>Schritt 1:</strong> Halten Sie Ihre Krankenkassenkarte bereit</p><p style="margin: 0.5rem 0;"><strong>Schritt 2:</strong> Drücken Sie auf "Countdown starten"</p><p style="margin: 0.5rem 0;"><strong>Schritt 3:</strong> Halten Sie die Karte in die Kamera während des Countdowns</p><p style="margin: 0.5rem 0;"><strong>Schritt 4:</strong> Nach dem Scan werden Ihre Daten gelesen</p></div></div>
                             </div>
                             
                             <!-- Automatic Processing Indicator -->
@@ -4089,10 +4081,10 @@
                 const sideText = side === 'front' ? 'Vorderseite' : 'Rückseite';
                 switch (state) {
                     case 'detecting':
-                        textDiv.textContent = `Suche nach ${sideText}...`;
+                        textDiv.textContent = `Krankenkassenkarte positionieren`;
                         break;
                     case 'detected':
-                        textDiv.textContent = `${sideText} erkannt!`;
+                        textDiv.textContent = `Scan läuft...`;
                         break;
                     case 'error':
                         textDiv.textContent = 'Bitte erneut versuchen';
