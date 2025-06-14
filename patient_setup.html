@@ -764,7 +764,7 @@
             align-items: center;
             justify-content: center;
             position: relative;
-            animation: pulse 1s infinite;
+            /* REMOVED: animation: pulse 1s infinite; */
         }
 
         .countdown-number {
@@ -861,14 +861,24 @@
         /* Countdown indicator styles */
         .countdown-indicator {
             transition: all 0.3s ease;
-            animation: countdownPulse 1s ease-in-out infinite;
+            /* REMOVED: animation: countdownPulse 1s ease-in-out infinite; */
         }
 
+        /* DEACTIVATED: Störende Pulse-Animation
         @keyframes countdownPulse {
             0% { transform: scale(1); opacity: 0.9; }
             50% { transform: scale(1.05); opacity: 1; }
             100% { transform: scale(1); opacity: 0.9; }
         }
+        */
+
+        /* DEACTIVATED: Störende Pulse-Animation
+        @keyframes pulse {
+            0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(40, 167, 69, 0.7); }
+            70% { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(40, 167, 69, 0); }
+            100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(40, 167, 69, 0); }
+        }
+        */
 
         @media (max-width: 768px) {
             .media-test {
@@ -1047,6 +1057,23 @@
                                 </div>
                             </div>
                             
+                            <!-- ANLEITUNG JETZT ÜBER DEM SCAN -->
+                            <div style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 1.5rem; margin: 1rem 0; text-align: left;">
+                                <h4 style="margin-bottom: 1rem; color: #495057;">📋 So scannen Sie die Vorderseite:</h4>
+                                <div style="line-height: 1.8; color: #333;">
+                                    <p style="margin: 0.8rem 0;"><strong>🏥 Schritt 1:</strong> Halten Sie Ihre Krankenkassenkarte mit der <strong>Vorderseite</strong> bereit</p>
+                                    <p style="margin: 0.8rem 0;"><strong>⏰ Schritt 2:</strong> Drücken Sie auf den grünen Button "Countdown starten"</p>
+                                    <p style="margin: 0.8rem 0;"><strong>📱 Schritt 3:</strong> Halten Sie die Karte sofort gut sichtbar in die Kamera</p>
+                                    <p style="margin: 0.8rem 0;"><strong>⏱️ Schritt 4:</strong> Warten Sie 5 Sekunden - die Karte wird automatisch erfasst</p>
+                                    <p style="margin: 0.8rem 0;"><strong>✅ Schritt 5:</strong> Nach dem Scan werden Ihre Daten automatisch gelesen</p>
+                                </div>
+                                <div style="background: #e3f2fd; padding: 0.8rem; border-radius: 6px; margin-top: 1rem;">
+                                    <p style="margin: 0; color: #1976d2; font-size: 0.9rem;">
+                                        <strong>💡 Tipp:</strong> Sorgen Sie für gute Beleuchtung und halten Sie die Karte ruhig in den grünen Rahmen.
+                                    </p>
+                                </div>
+                            </div>
+                            
                             <div class="card-scanner">
                                 <video id="frontSideCamera" autoplay muted playsinline 
                                        style="width: 100%; max-width: 400px; border-radius: 8px;"></video>
@@ -1071,16 +1098,12 @@
 
                             <div id="frontSideStatus" class="scan-status">Kamera wird initialisiert...</div>
                             
-                            <!-- Manual Scan Button - Always Visible -->
+                            <!-- Manual Scan Button -->
                             <div style="text-align: center; margin: 1rem 0;">
                                 <button class="btn" onclick="startCardCountdown('front')" style="background: #28a745; font-size: 1.1rem; padding: 1rem 2rem;">
                                     ⏰ Countdown starten (5 Sek.)
                                 </button>
-                                <div style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 1.5rem; margin: 1rem 0; text-align: left;"><h4 style="margin-bottom: 1rem; color: #495057;">📋 So läuft der Scan ab:</h4><div style="line-height: 1.6;"><p style="margin: 0.5rem 0;"><strong>Schritt 1:</strong> Halten Sie Ihre Krankenkassenkarte bereit</p><p style="margin: 0.5rem 0;"><strong>Schritt 2:</strong> Drücken Sie auf "Countdown starten"</p><p style="margin: 0.5rem 0;"><strong>Schritt 3:</strong> Halten Sie die Karte in die Kamera während des Countdowns</p><p style="margin: 0.5rem 0;"><strong>Schritt 4:</strong> Nach dem Scan werden Ihre Daten gelesen</p></div></div>
                             </div>
-                            
-                            <!-- Automatic Processing Indicator -->
-                            <!-- <div id="frontAutoProcessing" class="auto-processing" style="display: none;"> ... </div> -->
                             
                             <!-- Quality Guidance -->
                             <div id="frontQualityGuidance" class="quality-guidance" style="display: none;">
@@ -1119,6 +1142,23 @@
                                 </div>
                             </div>
                             
+                            <!-- ANLEITUNG JETZT ÜBER DEM SCAN -->
+                            <div style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 1.5rem; margin: 1rem 0; text-align: left;">
+                                <h4 style="margin-bottom: 1rem; color: #495057;">📋 So scannen Sie die Rückseite:</h4>
+                                <div style="line-height: 1.8; color: #333;">
+                                    <p style="margin: 0.8rem 0;"><strong>🔄 Schritt 1:</strong> Drehen Sie Ihre Krankenkassenkarte zur <strong>Rückseite</strong> um</p>
+                                    <p style="margin: 0.8rem 0;"><strong>⏰ Schritt 2:</strong> Drücken Sie auf den grünen Button "Countdown starten"</p>
+                                    <p style="margin: 0.8rem 0;"><strong>📱 Schritt 3:</strong> Halten Sie die Rückseite sofort gut sichtbar in die Kamera</p>
+                                    <p style="margin: 0.8rem 0;"><strong>⏱️ Schritt 4:</strong> Warten Sie 5 Sekunden - die Rückseite wird automatisch erfasst</p>
+                                    <p style="margin: 0.8rem 0;"><strong>✅ Schritt 5:</strong> Nach dem Scan sind alle Daten vollständig erfasst</p>
+                                </div>
+                                <div style="background: #e3f2fd; padding: 0.8rem; border-radius: 6px; margin-top: 1rem;">
+                                    <p style="margin: 0; color: #1976d2; font-size: 0.9rem;">
+                                        <strong>💡 Tipp:</strong> Die Rückseite enthält wichtige Gültigkeits-Informationen. Halten Sie sie gerade und gut beleuchtet.
+                                    </p>
+                                </div>
+                            </div>
+                            
                             <div class="card-scanner">
                                 <video id="backSideCamera" autoplay muted playsinline 
                                        style="width: 100%; max-width: 400px; border-radius: 8px;"></video>
@@ -1143,16 +1183,12 @@
 
                             <div id="backSideStatus" class="scan-status">Kamera wird initialisiert...</div>
                             
-                            <!-- Manual Scan Button - Always Visible -->
+                            <!-- Manual Scan Button -->
                             <div style="text-align: center; margin: 1rem 0;">
                                 <button class="btn" onclick="startCardCountdown('back')" style="background: #28a745; font-size: 1.1rem; padding: 1rem 2rem;">
                                     ⏰ Countdown starten (5 Sek.)
                                 </button>
-                                <div style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 1.5rem; margin: 1rem 0; text-align: left;"><h4 style="margin-bottom: 1rem; color: #495057;">📋 So läuft der Scan ab:</h4><div style="line-height: 1.6;"><p style="margin: 0.5rem 0;"><strong>Schritt 1:</strong> Halten Sie Ihre Krankenkassenkarte bereit</p><p style="margin: 0.5rem 0;"><strong>Schritt 2:</strong> Drücken Sie auf "Countdown starten"</p><p style="margin: 0.5rem 0;"><strong>Schritt 3:</strong> Halten Sie die Karte in die Kamera während des Countdowns</p><p style="margin: 0.5rem 0;"><strong>Schritt 4:</strong> Nach dem Scan werden Ihre Daten gelesen</p></div></div>
                             </div>
-                            
-                            <!-- Automatic Processing Indicator -->
-                            <!-- <div id="backAutoProcessing" class="auto-processing" style="display: none;"> ... </div> -->
                             
                             <!-- Quality Guidance -->
                             <div id="backQualityGuidance" class="quality-guidance" style="display: none;">
@@ -3764,11 +3800,11 @@
             const numberElement = document.getElementById(`${side}CountdownNumber`);
             if (numberElement) {
                 numberElement.textContent = number;
-                // Add a little pulse animation
-                numberElement.style.transform = 'scale(1.2)';
-                setTimeout(() => {
-                    if (numberElement) numberElement.style.transform = 'scale(1)';
-                }, 200);
+                // REMOVED: Scale animation - was causing disruptive movement
+                // numberElement.style.transform = 'scale(1.2)';
+                // setTimeout(() => {
+                //     if (numberElement) numberElement.style.transform = 'scale(1)';
+                // }, 200);
             }
         }
 
