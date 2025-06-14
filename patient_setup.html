@@ -566,7 +566,7 @@
             height: 100%;
             background: linear-gradient(90deg, #007bff, #0056b3);
             width: 0%;
-            transition: width 0.3s ease;
+            /* DISABLED: transition: width 0.3s ease; */
             border-radius: 10px;
         }
 
@@ -4256,8 +4256,8 @@
             const progressElement = document.getElementById(`${side}OcrProgress`);
             const progressText = document.getElementById(`${side}OcrProgressText`);
             
-            // Show progress bar
-            if (progressBar) progressBar.style.display = 'block';
+            // DISABLED: OCR Progress Bar (was causing spinning animation)
+            // if (progressBar) progressBar.style.display = 'block';
             
             try {
                 // Enhanced Tesseract configuration for German insurance cards
@@ -4265,6 +4265,8 @@
                     logger: (m) => {
                         console.log(`Tesseract ${side} side:`, m);
                         
+                        // DISABLED: Progress bar updates (was causing animation)
+                        /*
                         if (progressElement && progressText) {
                             if (m.status === 'loading tesseract core') {
                                 progressElement.style.width = '10%';
@@ -4287,6 +4289,7 @@
                                 updateScanStatus(side, 'loading', `OCR-Texterkennung: ${progress}%`);
                             }
                         }
+                        */
                     },
                     
                     // MORE PERMISSIVE configuration for German insurance cards
@@ -4306,17 +4309,17 @@
                 };
 
                 // Single-pass OCR with better fallback
-                progressText.textContent = 'Texterkennung läuft...';
+                // DISABLED: progressText.textContent = 'Texterkennung läuft...';
                 const result = await Tesseract.recognize(imageBlob, 'deu', tesseractConfig);
                 
-                progressText.textContent = 'Ergebnisse analysieren...';
-                progressElement.style.width = '95%';
+                // DISABLED: progressText.textContent = 'Ergebnisse analysieren...';
+                // DISABLED: progressElement.style.width = '95%';
                 
                 // MUCH MORE LENIENT parsing - accept any reasonable text
                 const combinedResult = parseOCRResultLenient(result.data.text, side, result.data.confidence);
                 
-                progressElement.style.width = '100%';
-                progressText.textContent = 'OCR abgeschlossen!';
+                // DISABLED: progressElement.style.width = '100%';
+                // DISABLED: progressText.textContent = 'OCR abgeschlossen!';
                 
                 console.log('✅ Lenient OCR completed:', combinedResult);
                 return combinedResult;
@@ -4324,7 +4327,8 @@
             } catch (error) {
                 console.error('OCR error:', error);
                 
-                if (progressBar) progressBar.style.display = 'none';
+                // DISABLED: Progress bar hiding (was causing animation)
+                // if (progressBar) progressBar.style.display = 'none';
                 
                 // FALLBACK: Return success with minimal data to avoid blocking user
                 console.log('🔄 OCR failed, using fallback success to continue workflow');
