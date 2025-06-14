@@ -1077,19 +1077,14 @@
                                     ⏰ Countdown starten (5 Sek.)
                                 </button>
                                 <p style="text-align: center; margin: 24px 0; font-size: 16px;">
-                                  Bitte halten Sie die Vorderseite Ihrer Karte bereit und klicken Sie auf "Countdown starten".
+                                  Halten Sie Ihre Krankenkassenkarte bereit.<br>
+                                  Drücken Sie auf "Countdown starten".<br>
+                                  Halten Sie in der Zeit schonmal die Karte in die Kamera.
                                 </p>
                             </div>
                             
                             <!-- Automatic Processing Indicator -->
-                            <div id="frontAutoProcessing" class="auto-processing" style="display: none;">
-                                <div class="auto-scan-countdown">
-                                    <div class="countdown-circle">
-                                        <div class="countdown-number" id="frontCountdownNumber">3</div>
-                                    </div>
-                                    <p>Automatischer Scan in <span id="frontCountdownText">3</span> Sekunden...</p>
-                                </div>
-                            </div>
+                            <!-- <div id="frontAutoProcessing" class="auto-processing" style="display: none;"> ... </div> -->
                             
                             <!-- Quality Guidance -->
                             <div id="frontQualityGuidance" class="quality-guidance" style="display: none;">
@@ -1158,19 +1153,14 @@
                                     ⏰ Countdown starten (5 Sek.)
                                 </button>
                                 <p style="text-align: center; margin: 24px 0; font-size: 16px;">
-                                  Bitte halten Sie die Vorderseite Ihrer Karte bereit und klicken Sie auf "Countdown starten".
+                                  Halten Sie Ihre Krankenkassenkarte bereit.<br>
+                                  Drücken Sie auf "Countdown starten".<br>
+                                  Halten Sie in der Zeit schonmal die Karte in die Kamera.
                                 </p>
                             </div>
                             
                             <!-- Automatic Processing Indicator -->
-                            <div id="backAutoProcessing" class="auto-processing" style="display: none;">
-                                <div class="auto-scan-countdown">
-                                    <div class="countdown-circle">
-                                        <div class="countdown-number" id="backCountdownNumber">3</div>
-                                    </div>
-                                    <p>Automatischer Scan in <span id="backCountdownText">3</span> Sekunden...</p>
-                                </div>
-                            </div>
+                            <!-- <div id="backAutoProcessing" class="auto-processing" style="display: none;"> ... </div> -->
                             
                             <!-- Quality Guidance -->
                             <div id="backQualityGuidance" class="quality-guidance" style="display: none;">
@@ -4079,7 +4069,7 @@
           }
           let displayMessage = '';
           if (type === 'loading') {
-            displayMessage = '<div style="text-align:center;font-size:1.3rem;font-weight:bold;padding:16px 0;">Hey, Ihre Karte wird gerade verarbeitet, bitte haben Sie einen Moment Geduld.</div>';
+            displayMessage = '<div style="text-align:center;font-size:1.3rem;font-weight:bold;padding:16px 0;">Vielen Dank, Ihre Daten werden gelesen. Einen Moment bitte.</div>';
           } else if (type === 'success') {
             displayMessage = '<div style="text-align:center;font-size:1.3rem;font-weight:bold;padding:16px 0;">Scan abgeschlossen.</div>';
           } else {
