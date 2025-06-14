@@ -292,14 +292,16 @@
             border: 3px solid #f3f3f3;
             border-top: 3px solid #4a90e2;
             border-radius: 50%;
-            animation: spin 1s linear infinite;
+            /* DISABLED: animation: spin 1s linear infinite; */
             margin-right: 0.5rem;
         }
 
+        /* DISABLED: Spin animation that was causing the rotating spinner
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+        */
 
         .final-step {
             text-align: center;
@@ -2469,50 +2471,33 @@
                 
                 let ocrResult = null;
                 
-                // STRATEGY 1: Try Backend OCR first (more reliable)
+                // DISABLED: Backend OCR as first strategy (was causing "Backend OCR wird verwendet..." message)
+                // STRATEGY 1: Use Tesseract.js directly (cleaner, no backend dependency)
                 try {
-                    console.log(`🌐 [${side}] STRATEGY 1: Trying Backend OCR first...`);
-                    updateScanStatus(side, 'loading', 'Backend-OCR wird verwendet...');
-                    ocrResult = await performBackendOCR(imageBlob, side);
-                    console.log(`🌐 [${side}] Backend OCR result:`, ocrResult);
+                    console.log(`🔄 [${side}] STRATEGY 1: Using Tesseract.js OCR...`);
+                    updateScanStatus(side, 'loading', 'Daten werden gelesen...');
+                    ocrResult = await performSimpleTesseractOCR(imageBlob, side);
+                    console.log(`🔄 [${side}] Tesseract OCR result:`, ocrResult);
                     
                     if (ocrResult.success && hasUsefulData(ocrResult.data, side)) {
-                        console.log(`✅ [${side}] Backend OCR SUCCESS with useful data!`);
-                        updateScanStatus(side, 'loading', 'Backend-OCR erfolgreich!');
+                        console.log(`✅ [${side}] Tesseract OCR SUCCESS with useful data!`);
+                        updateScanStatus(side, 'loading', 'Text erfolgreich erkannt!');
                     } else {
-                        console.log(`⚠️ [${side}] Backend OCR failed or no useful data, trying Tesseract...`);
-                        throw new Error('Backend OCR lieferte keine verwertbaren Daten');
+                        console.log(`⚠️ [${side}] Tesseract OCR result not optimal, but proceeding...`);
+                        // Don't throw error - proceed with result
                     }
-                } catch (backendError) {
-                    console.error(`❌ [${side}] Backend OCR failed:`, backendError);
+                } catch (tesseractError) {
+                    console.error(`❌ [${side}] Tesseract OCR failed:`, tesseractError);
                     
-                    // STRATEGY 2: Fallback to Tesseract.js
-                    try {
-                        console.log(`🔄 [${side}] STRATEGY 2: Falling back to Tesseract.js...`);
-                        updateScanStatus(side, 'loading', 'Tesseract-OCR wird versucht...');
-                        ocrResult = await performSimpleTesseractOCR(imageBlob, side);
-                        console.log(`🔄 [${side}] Tesseract OCR result:`, ocrResult);
-                        
-                        if (ocrResult.success && hasUsefulData(ocrResult.data, side)) {
-                            console.log(`✅ [${side}] Tesseract OCR SUCCESS with useful data!`);
-                            updateScanStatus(side, 'loading', 'Tesseract-OCR erfolgreich!');
-                        } else {
-                            console.log(`⚠️ [${side}] Tesseract OCR also failed or no useful data`);
-                            throw new Error('Auch Tesseract OCR lieferte keine verwertbaren Daten');
-                        }
-                    } catch (tesseractError) {
-                        console.error(`❌ [${side}] Tesseract OCR also failed:`, tesseractError);
-                        
-                        // STRATEGY 3: Use enhanced fallback but log everything
-                        console.log(`🚨 [${side}] STRATEGY 3: Using enhanced fallback with detailed logging`);
-                        ocrResult = {
-                            success: true, // Still proceed to show data
-                            data: getDetailedFallbackData(side, backendError, tesseractError, qualityCheck),
-                            confidence: 0.1,
-                            raw_text: `Multiple OCR failures: Backend: ${backendError.message}, Tesseract: ${tesseractError.message}`,
-                            method: 'enhanced_fallback_with_debug'
-                        };
-                    }
+                    // STRATEGY 2: Use enhanced fallback 
+                    console.log(`🚨 [${side}] STRATEGY 2: Using enhanced fallback with detailed logging`);
+                    ocrResult = {
+                        success: true, // Still proceed to show data
+                        data: getDetailedFallbackData(side, null, tesseractError, qualityCheck),
+                        confidence: 0.1,
+                        raw_text: `OCR failure: ${tesseractError.message}`,
+                        method: 'enhanced_fallback_with_debug'
+                    };
                 }
                 
                 console.log(`🔍 [${side}] FINAL OCR Result:`, ocrResult);
@@ -2977,7 +2962,7 @@
         async function performSimpleTesseractOCR(imageBlob, side) {
             try {
                 console.log(`🔍 Starting Tesseract OCR for ${side} side (image size: ${imageBlob.size} bytes)`);
-                updateScanStatus(side, 'loading', 'Tesseract OCR wird gestartet...');
+                updateScanStatus(side, 'loading', 'Vielen Dank! Ihre Daten werden gelesen. Einen Moment bitte...');
                 
                 // Check if Tesseract is available
                 if (typeof Tesseract === 'undefined') {
