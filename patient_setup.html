@@ -2383,7 +2383,7 @@
             }
             
             // Update status and show countdown
-            updateScanStatus(side, 'detecting', `Positionieren Sie jetzt Ihre Karte im Rahmen - Scan in 5 Sekunden...`);
+            updateScanStatus(side, 'detecting', `Halten Sie Ihre Krankenkassenkarte bereit`);
             updateCardFrame(side, 'detecting');
             
             // Show small countdown indicator
@@ -2392,7 +2392,7 @@
             // 5 second countdown with status updates
             for (let i = 5; i > 0; i--) {
                 updateCountdownDisplay(side, i);
-                updateScanStatus(side, 'detecting', `Karte positionieren - Scan in ${i} Sekunde${i > 1 ? 'n' : ''}...`);
+                updateScanStatus(side, 'detecting', `Halten Sie in der Zeit schonmal die Karte in die Kamera - Scan in ${i} Sekunde${i > 1 ? 'n' : ''}...`);
                 await new Promise(resolve => setTimeout(resolve, 1000));
             }
             
@@ -2400,7 +2400,7 @@
             hideCountdownOverlay(side);
             
             // Update status for capture
-            updateScanStatus(side, 'loading', 'Karte wird jetzt gescannt...');
+            updateScanStatus(side, 'loading', 'Vielen Dank! Ihre Daten werden gelesen. Einen Moment bitte...');
             updateCardFrame(side, 'detected');
             
             // Capture and process - but use simplified approach
