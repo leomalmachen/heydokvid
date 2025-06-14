@@ -4097,7 +4097,8 @@
           }
           let displayMessage = '';
           if (type === 'loading') {
-            displayMessage = '<div style="text-align:center;font-size:1.3rem;font-weight:bold;padding:16px 0;">Vielen Dank, Ihre Daten werden gelesen. Einen Moment bitte.</div>';
+            // FIXED: Use the passed message instead of hardcoded text
+            displayMessage = `<div style="text-align:center;font-size:1.1rem;padding:12px 0;">${message}</div>`;
           } else if (type === 'success') {
             displayMessage = '<div style="text-align:center;font-size:1.3rem;font-weight:bold;padding:16px 0;">Scan abgeschlossen.</div>';
           } else {
