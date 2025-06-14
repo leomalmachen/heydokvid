@@ -4071,19 +4071,21 @@
         }
 
         // Updated helper functions
-        function updateScanStatus(type, side) {
-          const statusDiv = document.getElementById(`${side}ScanStatus`);
+        function updateScanStatus(side, type, message) {
+          const statusDiv = document.getElementById(`${side}SideStatus`);
+          if (!statusDiv) {
+            console.warn(`Status-Element für ${side} nicht gefunden!`);
+            return;
+          }
           let displayMessage = '';
-          
           if (type === 'loading') {
             displayMessage = '<span class="scan-check">✓</span><span class="scan-text">Ihre Karte wird erfasst. Bitte halten Sie die Karte ruhig.</span>';
           } else if (type === 'success') {
-            displayMessage = '<span class="scan-check">✓</span><span class="scan-text">' + 
-              (side === 'front' ? 'Vielen Dank, Sie können die Karte jetzt entfernen.' : 'Vielen Dank, Ihre Karte wurde gelesen.') + 
+            displayMessage = '<span class="scan-check">✓</span><span class="scan-text">' +
+              (side === 'front' ? 'Vielen Dank, Sie können die Karte jetzt entfernen.' : 'Vielen Dank, Ihre Karte wurde gelesen.') +
               '</span>';
           }
-          
-          statusDiv.innerHTML = displayMessage;
+          statusDiv.innerHTML = displayMessage || message;
           statusDiv.className = `scan-status ${type}`;
         }
 
