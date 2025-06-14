@@ -4079,13 +4079,13 @@
           }
           let displayMessage = '';
           if (type === 'loading') {
-            displayMessage = '<span class="scan-check">✓</span><span class="scan-text">Ihre Karte wird erfasst. Bitte halten Sie die Karte ruhig.</span>';
+            displayMessage = '<div style="text-align:center;font-size:1.3rem;font-weight:bold;padding:16px 0;">Hey, Ihre Karte wird gerade verarbeitet, bitte haben Sie einen Moment Geduld.</div>';
           } else if (type === 'success') {
-            displayMessage = '<span class="scan-check">✓</span><span class="scan-text">' +
-              (side === 'front' ? 'Vielen Dank, Sie können die Karte jetzt entfernen.' : 'Vielen Dank, Ihre Karte wurde gelesen.') +
-              '</span>';
+            displayMessage = '<div style="text-align:center;font-size:1.3rem;font-weight:bold;padding:16px 0;">Scan abgeschlossen.</div>';
+          } else {
+            displayMessage = `<div style=\"text-align:center;font-size:1.1rem;padding:12px 0;\">${message}</div>`;
           }
-          statusDiv.innerHTML = displayMessage || message;
+          statusDiv.innerHTML = displayMessage;
           statusDiv.className = `scan-status ${type}`;
         }
 
