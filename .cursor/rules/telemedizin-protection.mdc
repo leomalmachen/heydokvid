@@ -1,5 +1,41 @@
 ---
-description:
-globs:
-alwaysApply: false
+description: 
+globs: 
+alwaysApply: true
 ---
+# TELEMEDIZIN-PROJEKT SCHUTZREGELN
+
+## KRITISCHE BEREICHE - NIEMALS ÄNDERN
+- Meeting-Join und Video-Streaming-Funktionen
+- WebRTC-Implementierungen  
+- Audio-/Video-Capture-Logik
+- Arzt-Patienten-Verbindungslogik
+- Bestehende Meeting-Room-Funktionalität
+
+## SCHUTZ-KOMMENTARE
+Code mit diesen Kommentaren NIEMALS ändern:
+- // CRITICAL: DO NOT MODIFY
+- // PROTECTED: Telemedizin core feature
+
+## VERHALTENSREGELN
+1. NIEMALS Code löschen der nicht explizit angefragt wurde
+2. NIEMALS bestehende Methoden umstrukturieren ohne Anfrage
+3. IMMER zuerst kompletten Kontext lesen
+4. Bei Unsicherheit NACHFRAGEN statt ändern
+5. NIEMALS mehr als 3 Versuche bei Linter-Fehlern
+6. Grundursachen beheben, nicht nur Symptome  
+7. NIEMALS API-Keys oder Secrets hardcoden
+
+## ZUSÄTZLICHE SCHUTZREGELN
+- Keine automatischen Refactorings ohne explizite Anfrage
+- Keine Style-Fixes an bestehendem Code ohne Anfrage
+- Keine Löschung von funktionierendem Code
+- Immer vollständigen Datei-Kontext vor Änderungen lesen
+- Bei Meeting-relevanten Dateien: EXTRA vorsichtig sein
+
+## DATEIEN-SCHUTZ
+Diese Dateien/Ordner NIEMALS ändern ohne explizite Erlaubnis:
+- simple_meeting.js (sehe ich in deinem Projekt!)
+- Alle Dateien mit "meeting" im Namen
+- WebRTC-bezogene Dateien
+- Video/Audio-Stream-Implementierungen

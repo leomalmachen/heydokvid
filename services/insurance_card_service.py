@@ -796,43 +796,36 @@ class InsuranceCardService:
             return 0.0
     
     def _parse_ocr_text(self, text: str) -> Dict[str, str]:
-        """Parse OCR text to extract structured data from German insurance cards"""
+        """Parse OCR text to extract the 3 ESSENTIAL fields from German insurance cards (front side only)"""
         try:
             lines = [line.strip() for line in text.split('\n') if line.strip()]
             
+            # FOCUS: Only extract the 3 most important fields for billing
             data = {
                 "name": "",
                 "insurance_number": "",
-                "insurance_company": "",
-                "birth_date": "",
-                "valid_until": ""
+                "insurance_company": ""
             }
             
-            logger.info(f"Parsing {len(lines)} lines of OCR text")
+            logger.info(f"Parsing {len(lines)} lines of OCR text for 3 essential fields")
             logger.info(f"Raw OCR text: {text[:500]}...")  # Log first 500 chars for debugging
             
-            # Enhanced parsing logic for German insurance cards
+            # Enhanced parsing logic - PRIORITIZED for front side only
             for i, line in enumerate(lines):
                 line_clean = line.strip()
                 line_lower = line_clean.lower()
                 
-                # Skip header lines
+                # Skip header lines and common false positives
                 if any(header in line_lower for header in [
                     'krankenversichertenkarte', 'versichertenkarte', 'european health',
                     'bundesrepublik', 'deutschland', 'germany', 'health insurance',
-                    'krankenversicherung', 'gkv', 'pkv'
+                    'krankenversicherung', 'gkv', 'pkv', 'geburtsdatum', 'gültig bis'
                 ]):
                     continue
                 
-                # Name detection - enhanced patterns for German names
-                if not data["name"] and self._is_likely_name(line_clean):
-                    data["name"] = self._clean_name(line_clean)
-                    logger.info(f"Found name: {data['name']}")
-                    continue
-                
-                # Insurance number - German format with more patterns
+                # PRIORITY 1: Insurance number - most critical for billing
                 if not data["insurance_number"]:
-                    # Enhanced patterns for German insurance numbers
+                    # Enhanced patterns for German insurance numbers (front side focus)
                     ins_patterns = [
                         r'([A-Z]\d{9})',  # A123456789
                         r'(\d{10})',      # 1234567890
@@ -848,64 +841,35 @@ class InsuranceCardService:
                             number = ins_match.group(1).replace(' ', '').replace('.', '')
                             if self._is_valid_insurance_number(number):
                                 data["insurance_number"] = number
-                                logger.info(f"Found insurance number: {data['insurance_number']}")
+                                logger.info(f"✅ PRIORITY 1: Found insurance number: {data['insurance_number']}")
                                 break
                 
-                # Birth date patterns - more comprehensive
-                if not data["birth_date"]:
-                    birth_patterns = [
-                        r'(?:geb\.?:?\s*)?(\d{1,2}\.?\d{1,2}\.?\d{2,4})',
-                        r'(?:geboren:?\s*)?(\d{1,2}/\d{1,2}/\d{2,4})',
-                        r'(?:birth:?\s*)?(\d{1,2}-\d{1,2}-\d{2,4})',
-                        r'(\d{1,2}\.\d{1,2}\.\d{4})',  # DD.MM.YYYY
-                        r'(\d{1,2}/\d{1,2}/\d{4})',   # DD/MM/YYYY
-                        r'(\d{2}\.\d{2}\.\d{2})',     # DD.MM.YY
-                    ]
-                    for pattern in birth_patterns:
-                        birth_match = re.search(pattern, line_clean, re.IGNORECASE)
-                        if birth_match:
-                            birth_date = birth_match.group(1)
-                            if self._is_valid_date(birth_date):
-                                data["birth_date"] = birth_date
-                                logger.info(f"Found birth date: {data['birth_date']}")
-                                break
-                
-                # Valid until patterns - enhanced
-                if not data["valid_until"]:
-                    valid_patterns = [
-                        r'(?:gültig bis:?\s*)?(\d{1,2}/\d{2,4})',
-                        r'(?:bis:?\s*)?(\d{1,2}\.\d{2,4})',
-                        r'(?:valid until:?\s*)?(\d{1,2}-\d{2,4})',
-                        r'(?:exp\.?:?\s*)?(\d{1,2}/\d{2,4})',
-                        r'(\d{1,2}/\d{4})',   # MM/YYYY
-                        r'(\d{1,2}\.\d{4})',  # MM.YYYY
-                        r'(\d{2}/\d{2})',     # MM/YY
-                        r'(\d{2}\.\d{2})'     # MM.YY
-                    ]
-                    for pattern in valid_patterns:
-                        valid_match = re.search(pattern, line_clean, re.IGNORECASE)
-                        if valid_match:
-                            valid_date = valid_match.group(1)
-                            data["valid_until"] = valid_date
-                            logger.info(f"Found valid until: {data['valid_until']}")
-                            break
-                
-                # Insurance company detection - enhanced
+                # PRIORITY 2: Insurance company - critical for billing route
                 if not data["insurance_company"] and self._is_likely_insurance_company(line_clean):
                     data["insurance_company"] = line_clean[:50]  # Limit length
-                    logger.info(f"Found insurance company: {data['insurance_company']}")
+                    logger.info(f"✅ PRIORITY 2: Found insurance company: {data['insurance_company']}")
                     continue
+                
+                # PRIORITY 3: Name - important for patient identification
+                if not data["name"] and self._is_likely_name(line_clean):
+                    cleaned_name = self._clean_name(line_clean)
+                    if cleaned_name:  # Only if cleaning was successful
+                        data["name"] = cleaned_name
+                        logger.info(f"✅ PRIORITY 3: Found name: {data['name']}")
+                        continue
                 
                 # Additional search in combined lines for missed patterns
                 if i < len(lines) - 1:
                     combined_line = f"{line_clean} {lines[i+1].strip()}"
                     
-                    # Try name extraction from combined lines
-                    if not data["name"] and self._is_likely_name(combined_line):
-                        data["name"] = self._clean_name(combined_line)
-                        logger.info(f"Found name in combined line: {data['name']}")
+                    # Try name extraction from combined lines (higher priority)
+                    if not data["name"]:
+                        cleaned_combined = self._clean_name(combined_line)
+                        if cleaned_combined and self._is_likely_name(cleaned_combined):
+                            data["name"] = cleaned_combined
+                            logger.info(f"✅ Found name in combined line: {data['name']}")
             
-            # Post-processing: Fill in any missing critical data with improved fallbacks
+            # POST-PROCESSING: Improve quality of critical fields
             if not data["name"]:
                 # Try to extract any capitalized words that could be names
                 name_candidates = []
@@ -913,17 +877,29 @@ class InsuranceCardService:
                     words = line.split()
                     for word in words:
                         if (word.istitle() and len(word) > 2 and 
-                            re.match(r'^[A-Za-zÄÖÜäöüß\-]+$', word)):
+                            re.match(r'^[A-Za-zÄÖÜäöüß\-]+$', word) and
+                            word.lower() not in ['versichert', 'karte', 'kranken', 'deutschland']):
                             name_candidates.append(word)
                 
                 if len(name_candidates) >= 2:
-                    data["name"] = ' '.join(name_candidates[:3])  # Take first 3 candidates
-                    logger.info(f"Extracted name from candidates: {data['name']}")
+                    potential_name = ' '.join(name_candidates[:3])  # Take first 3 candidates
+                    cleaned_potential = self._clean_name(potential_name)
+                    if cleaned_potential:
+                        data["name"] = cleaned_potential
+                        logger.info(f"✅ Extracted name from candidates: {data['name']}")
+            
+            # Enhanced insurance company detection if not found
+            if not data["insurance_company"]:
+                for line in lines:
+                    if any(keyword in line.lower() for keyword in ['aok', 'tk', 'barmer', 'dak', 'bkk', 'ikk']):
+                        data["insurance_company"] = line.strip()[:50]
+                        logger.info(f"✅ Found insurance company by keyword: {data['insurance_company']}")
+                        break
             
             # Validate and clean extracted data
-            data = self._clean_extracted_data(data)
+            data = self._clean_extracted_data_essential(data)
             
-            logger.info(f"Enhanced OCR parsing result: {data}")
+            logger.info(f"🎯 FOCUSED OCR parsing result (3 essential fields): {data}")
             return data
             
         except Exception as e:
@@ -931,10 +907,43 @@ class InsuranceCardService:
             return {
                 "name": "Parsing-Fehler",
                 "insurance_number": "Nicht erkannt",
-                "insurance_company": "Nicht erkannt",
-                "birth_date": "",
-                "valid_until": ""
+                "insurance_company": "Nicht erkannt"
             }
+    
+    def _clean_extracted_data_essential(self, data: Dict[str, str]) -> Dict[str, str]:
+        """Clean and validate the 3 essential extracted data fields"""
+        cleaned = {}
+        
+        # Clean name - highest priority for user experience
+        name = data.get("name", "").strip()
+        if name and len(name.split()) >= 2 and len(name) <= 50:
+            # Additional filtering for obvious false positives
+            if not any(fp in name.lower() for fp in ['versichert', 'kranken', 'nummer', 'karte']):
+                cleaned["name"] = name
+            else:
+                cleaned["name"] = "Name nicht erkannt"
+        else:
+            cleaned["name"] = "Name nicht erkannt"
+        
+        # Clean insurance number - critical for billing
+        ins_number = data.get("insurance_number", "").strip()
+        if ins_number and self._is_valid_insurance_number(ins_number):
+            cleaned["insurance_number"] = ins_number.replace(' ', '').replace('.', '')
+        else:
+            cleaned["insurance_number"] = "Nummer nicht erkannt"
+        
+        # Clean insurance company - critical for billing route
+        company = data.get("insurance_company", "").strip()
+        if company and len(company) >= 3:
+            # Remove obvious false positives
+            if not any(fp in company.lower() for fp in ['deutschland', 'germany', 'european', 'health']):
+                cleaned["insurance_company"] = company[:50]
+            else:
+                cleaned["insurance_company"] = "Krankenkasse nicht erkannt"
+        else:
+            cleaned["insurance_company"] = "Krankenkasse nicht erkannt"
+        
+        return cleaned
     
     def _is_likely_name(self, text: str) -> bool:
         """Check if text looks like a person's name"""
@@ -1070,47 +1079,6 @@ class InsuranceCardService:
         
         return any(re.match(pattern, date_str) for pattern in date_patterns)
     
-    def _clean_extracted_data(self, data: Dict[str, str]) -> Dict[str, str]:
-        """Clean and validate extracted data"""
-        cleaned = {}
-        
-        # Clean name
-        name = data.get("name", "").strip()
-        if name and len(name.split()) >= 2 and len(name) <= 50:
-            cleaned["name"] = name
-        else:
-            cleaned["name"] = "Name nicht erkannt"
-        
-        # Clean insurance number
-        ins_number = data.get("insurance_number", "").strip()
-        if ins_number and self._is_valid_insurance_number(ins_number):
-            cleaned["insurance_number"] = ins_number.replace(' ', '').replace('.', '')
-        else:
-            cleaned["insurance_number"] = "Nummer nicht erkannt"
-        
-        # Clean insurance company
-        company = data.get("insurance_company", "").strip()
-        if company and len(company) >= 3:
-            cleaned["insurance_company"] = company[:50]
-        else:
-            cleaned["insurance_company"] = "Krankenkasse nicht erkannt"
-        
-        # Clean birth date
-        birth_date = data.get("birth_date", "").strip()
-        if birth_date and self._is_valid_date(birth_date):
-            cleaned["birth_date"] = birth_date
-        else:
-            cleaned["birth_date"] = ""
-        
-        # Clean valid until
-        valid_until = data.get("valid_until", "").strip()
-        if valid_until:
-            cleaned["valid_until"] = valid_until
-        else:
-            cleaned["valid_until"] = "Gültigkeitsdatum nicht erkannt"
-        
-        return cleaned
-    
     def _is_likely_insurance_company(self, text: str) -> bool:
         """Check if text looks like an insurance company name"""
         if not text or len(text) < 3 or len(text) > 50:
@@ -1166,38 +1134,60 @@ class InsuranceCardService:
         return False
     
     def validate_extracted_data(self, data: Dict[str, str]) -> Dict[str, str]:
-        """Validate and clean extracted data"""
+        """Validate and clean the 3 essential extracted data fields"""
         try:
             validated = {}
             
-            # Name validation
-            name = data.get("name", "").strip()
-            if name and len(name.split()) >= 2:
-                validated["name"] = name
-            else:
-                validated["name"] = ""
-            
-            # Insurance number validation (German format)
+            # PRIORITY 1: Insurance number validation (critical for billing)
             ins_number = data.get("insurance_number", "").strip()
-            if ins_number and len(ins_number) == 10 and ins_number[0].isalpha():
-                validated["insurance_number"] = ins_number
+            if ins_number and self._is_valid_insurance_number(ins_number):
+                validated["insurance_number"] = ins_number.replace(' ', '').replace('.', '')
+                logger.info(f"✅ Validated insurance number: {validated['insurance_number']}")
             else:
                 validated["insurance_number"] = ""
+                logger.warning(f"⚠️ Invalid insurance number: {ins_number}")
             
-            # Insurance company
-            validated["insurance_company"] = data.get("insurance_company", "").strip()
+            # PRIORITY 2: Name validation (important for patient identification)
+            name = data.get("name", "").strip()
+            if name and len(name.split()) >= 2 and len(name) <= 50:
+                # Additional check for common false positives
+                if not any(fp in name.lower() for fp in ['versichert', 'kranken', 'nummer', 'karte', 'deutschland']):
+                    validated["name"] = name
+                    logger.info(f"✅ Validated name: {validated['name']}")
+                else:
+                    validated["name"] = ""
+                    logger.warning(f"⚠️ Name appears to be false positive: {name}")
+            else:
+                validated["name"] = ""
+                logger.warning(f"⚠️ Invalid name format: {name}")
             
-            # Birth date
-            validated["birth_date"] = data.get("birth_date", "").strip()
+            # PRIORITY 3: Insurance company (critical for billing route)
+            company = data.get("insurance_company", "").strip()
+            if company and len(company) >= 3:
+                # Filter out obvious false positives
+                if not any(fp in company.lower() for fp in ['deutschland', 'germany', 'european', 'health', 'versichert']):
+                    validated["insurance_company"] = company[:50]
+                    logger.info(f"✅ Validated insurance company: {validated['insurance_company']}")
+                else:
+                    validated["insurance_company"] = ""
+                    logger.warning(f"⚠️ Insurance company appears to be false positive: {company}")
+            else:
+                validated["insurance_company"] = ""
+                logger.warning(f"⚠️ Invalid insurance company: {company}")
             
-            # Valid until
-            validated["valid_until"] = data.get("valid_until", "").strip()
+            # Success metrics
+            filled_fields = sum(1 for v in validated.values() if v)
+            logger.info(f"📊 Validation complete: {filled_fields}/3 essential fields extracted successfully")
             
             return validated
             
         except Exception as e:
             logger.error(f"Data validation error: {e}")
-            return data
+            return {
+                "name": "",
+                "insurance_number": "",
+                "insurance_company": ""
+            }
     
     def create_validation_record(self, meeting_id: str, extracted_data: Dict[str, Any]) -> str:
         """
