@@ -4883,6 +4883,127 @@
             // Show confirmation
             showDataConfirmation();
         }
+
+        // Kamera Setup für beide Seiten
+        async function setupCamera(side) {
+            console.log(`📹 Setting up camera for ${side} side`);
+            
+            try {
+                // Stop any existing streams first
+                await stopAllCameras();
+                
+                const video = document.getElementById(`${side}SideCamera`);
+                if (!video) {
+                    console.error(`❌ Video element not found for ${side} side`);
+                    throw new Error(`Video element for ${side} not found`);
+                }
+                
+                // Request camera with high quality settings
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        width: { ideal: 1920, min: 640 },
+                        height: { ideal: 1080, min: 480 },
+                        facingMode: 'environment' // Prefer back camera
+                    }
+                });
+                
+                // Assign stream to video element
+                video.srcObject = stream;
+                
+                // Wait for video to be ready
+                await new Promise((resolve, reject) => {
+                    video.onloadedmetadata = () => {
+                        console.log(`✅ [${side}] Camera stream ready: ${video.videoWidth}x${video.videoHeight}`);
+                        resolve();
+                    };
+                    video.onerror = (error) => {
+                        console.error(`❌ [${side}] Video error:`, error);
+                        reject(error);
+                    };
+                    
+                    // Timeout after 10 seconds
+                    setTimeout(() => {
+                        reject(new Error('Camera timeout'));
+                    }, 10000);
+                });
+                
+                // Start video playback
+                await video.play();
+                
+                // Update status to show camera is ready
+                const simpleStatus = document.getElementById(`${side}SimpleStatus`);
+                if (simpleStatus) {
+                    simpleStatus.innerHTML = '📸 Kamera bereit - Karte bereithalten und auf "Countdown starten" drücken';
+                }
+                
+                console.log(`✅ Camera setup successful for ${side} side`);
+                return true;
+                
+            } catch (error) {
+                console.error(`❌ Camera setup failed for ${side}:`, error);
+                
+                // Show error in status
+                const simpleStatus = document.getElementById(`${side}SimpleStatus`);
+                if (simpleStatus) {
+                    simpleStatus.innerHTML = `❌ Kamera-Fehler: ${error.message} - Seite neu laden`;
+                }
+                
+                // Also show error in main UI
+                alert(`Kamera konnte nicht aktiviert werden: ${error.message}`);
+                return false;
+            }
+        }
+        
+        // Stop all camera streams
+        async function stopAllCameras() {
+            console.log('🛑 Stopping all camera streams...');
+            
+            ['front', 'back'].forEach(side => {
+                const video = document.getElementById(`${side}SideCamera`);
+                if (video && video.srcObject) {
+                    const tracks = video.srcObject.getTracks();
+                    tracks.forEach(track => {
+                        track.stop();
+                        console.log(`🛑 Stopped ${side} camera track`);
+                    });
+                    video.srcObject = null;
+                }
+            });
+        }
+
+        // Initialize card scanning when DOM is loaded
+        document.addEventListener('DOMContentLoaded', async function() {
+            console.log('🚀 Card scanning initialization started');
+            
+            try {
+                // Show front side card immediately
+                document.getElementById('frontSideCard').style.display = 'block';
+                document.getElementById('backSideCard').style.display = 'none';
+                
+                // Check if we have camera support
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    throw new Error('Kamera wird von diesem Browser nicht unterstützt');
+                }
+                
+                // Start with front side
+                console.log('📹 Starting camera setup...');
+                await setupCamera('front');
+                
+                console.log('✅ Card scanning system ready with camera');
+                
+            } catch (error) {
+                console.error('❌ Card scanning initialization failed:', error);
+                
+                // Show front card even if camera fails
+                document.getElementById('frontSideCard').style.display = 'block';
+                
+                // Show error to user in status
+                const frontStatus = document.getElementById('frontSimpleStatus');
+                if (frontStatus) {
+                    frontStatus.innerHTML = `❌ Initialisierung fehlgeschlagen: ${error.message}`;
+                }
+            }
+        });
     </script>
 </body>
 </html> 
