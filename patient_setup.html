@@ -1074,17 +1074,68 @@
                             </div>
                             
                             <div class="card-scanner">
-                                <video id="frontSideCamera" autoplay muted playsinline 
-                                       style="width: 100%; max-width: 400px; border-radius: 8px;"></video>
-                                <canvas id="frontDetectionCanvas" style="display: none;"></canvas>
-                                
-                                <div class="scanner-overlay">
-                                    <div class="card-frame" id="frontCardFrame">
-                                        <div class="corner top-left"></div>
-                                        <div class="corner top-right"></div>
-                                        <div class="corner bottom-left"></div>
-                                        <div class="corner bottom-right"></div>
-                                        <div class="scan-text" id="frontCardFrameText">Vorderseite hier positionieren</div>
+                                <!-- Camera Preview with Overlay -->
+                                <div style="position: relative; border-radius: 12px; overflow: hidden; background: #000;">
+                                    <video id="frontSideCamera" autoplay muted playsinline style="width: 100%; height: 300px; object-fit: cover; border-radius: 12px;"></video>
+                                    
+                                    <!-- CLEAR: Processing Overlay (covers camera during OCR) -->
+                                    <div id="frontProcessingOverlay" style="
+                                        position: absolute;
+                                        top: 0;
+                                        left: 0;
+                                        right: 0;
+                                        bottom: 0;
+                                        background: rgba(40, 167, 69, 0.95);
+                                        color: white;
+                                        display: none;
+                                        flex-direction: column;
+                                        align-items: center;
+                                        justify-content: center;
+                                        text-align: center;
+                                        border-radius: 12px;
+                                        backdrop-filter: blur(3px);
+                                    ">
+                                        <div style="font-size: 1.2rem; font-weight: 600; margin-bottom: 1rem;">
+                                            📸 Ihre Daten werden gelesen
+                                        </div>
+                                        <div style="font-size: 1rem; opacity: 0.9; line-height: 1.4;">
+                                            Bitte haben Sie einen Moment Geduld.<br>
+                                            Dies kann 10-20 Sekunden dauern.
+                                        </div>
+                                        <div style="margin-top: 1.5rem;">
+                                            <div class="spinner-border text-light" role="status" style="width: 2rem; height: 2rem;">
+                                                <span class="visually-hidden">Loading...</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Green Detection Frame -->
+                                    <div id="frontDetectionFrame" style="
+                                        position: absolute;
+                                        top: 20px;
+                                        left: 20px;
+                                        right: 20px;
+                                        bottom: 20px;
+                                        border: 3px solid #28a745;
+                                        border-radius: 8px;
+                                        pointer-events: none;
+                                    "></div>
+                                    
+                                    <!-- CLEAR: Simple Status Messages -->
+                                    <div id="frontSimpleStatus" style="
+                                         position: absolute;
+                                         bottom: 10px;
+                                         left: 10px;
+                                         right: 10px;
+                                         background: rgba(0, 0, 0, 0.8);
+                                         color: white;
+                                         padding: 8px 12px;
+                                         border-radius: 6px;
+                                         text-align: center;
+                                         font-size: 0.9rem;
+                                         display: block;
+                                     ">
+                                        📸 Karte bereithalten und auf "Countdown starten" drücken
                                     </div>
                                 </div>
                                 
@@ -1099,8 +1150,14 @@
                             
                             <!-- Manual Scan Button -->
                             <div style="text-align: center; margin: 1rem 0;">
-                                <button class="btn" onclick="startCardCountdown('front')" style="background: #28a745; font-size: 1.1rem; padding: 1rem 2rem;">
-                                    ⏰ Countdown starten (5 Sek.)
+                                <button id="frontScanButton" onclick="startClearCardScan('front')" class="btn btn-success btn-lg w-100" style="
+                                    margin-top: 1rem;
+                                    padding: 1rem;
+                                    font-size: 1.1rem;
+                                    border-radius: 12px;
+                                    box-shadow: 0 4px 15px rgba(40, 167, 69, 0.3);
+                                ">
+                                    🎯 Countdown starten (5 Sek.)
                                 </button>
                             </div>
                             
@@ -1159,17 +1216,68 @@
                             </div>
                             
                             <div class="card-scanner">
-                                <video id="backSideCamera" autoplay muted playsinline 
-                                       style="width: 100%; max-width: 400px; border-radius: 8px;"></video>
-                                <canvas id="backDetectionCanvas" style="display: none;"></canvas>
-                                
-                                <div class="scanner-overlay">
-                                    <div class="card-frame" id="backCardFrame">
-                                        <div class="corner top-left"></div>
-                                        <div class="corner top-right"></div>
-                                        <div class="corner bottom-left"></div>
-                                        <div class="corner bottom-right"></div>
-                                        <div class="scan-text" id="backCardFrameText">Rückseite hier positionieren</div>
+                                <!-- Camera Preview with Overlay -->
+                                <div style="position: relative; border-radius: 12px; overflow: hidden; background: #000;">
+                                    <video id="backSideCamera" autoplay muted playsinline style="width: 100%; height: 300px; object-fit: cover; border-radius: 12px;"></video>
+                                    
+                                    <!-- CLEAR: Processing Overlay (covers camera during OCR) -->
+                                    <div id="backProcessingOverlay" style="
+                                        position: absolute;
+                                        top: 0;
+                                        left: 0;
+                                        right: 0;
+                                        bottom: 0;
+                                        background: rgba(40, 167, 69, 0.95);
+                                        color: white;
+                                        display: none;
+                                        flex-direction: column;
+                                        align-items: center;
+                                        justify-content: center;
+                                        text-align: center;
+                                        border-radius: 12px;
+                                        backdrop-filter: blur(3px);
+                                    ">
+                                        <div style="font-size: 1.2rem; font-weight: 600; margin-bottom: 1rem;">
+                                            📸 Ihre Daten werden gelesen
+                                        </div>
+                                        <div style="font-size: 1rem; opacity: 0.9; line-height: 1.4;">
+                                            Bitte haben Sie einen Moment Geduld.<br>
+                                            Dies kann 10-20 Sekunden dauern.
+                                        </div>
+                                        <div style="margin-top: 1.5rem;">
+                                            <div class="spinner-border text-light" role="status" style="width: 2rem; height: 2rem;">
+                                                <span class="visually-hidden">Loading...</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Green Detection Frame -->
+                                    <div id="backDetectionFrame" style="
+                                        position: absolute;
+                                        top: 20px;
+                                        left: 20px;
+                                        right: 20px;
+                                        bottom: 20px;
+                                        border: 3px solid #28a745;
+                                        border-radius: 8px;
+                                        pointer-events: none;
+                                    "></div>
+                                    
+                                    <!-- CLEAR: Simple Status Messages -->
+                                    <div id="backSimpleStatus" style="
+                                         position: absolute;
+                                         bottom: 10px;
+                                         left: 10px;
+                                         right: 10px;
+                                         background: rgba(0, 0, 0, 0.8);
+                                         color: white;
+                                         padding: 8px 12px;
+                                         border-radius: 6px;
+                                         text-align: center;
+                                         font-size: 0.9rem;
+                                         display: block;
+                                     ">
+                                        📸 Karte bereithalten und auf "Countdown starten" drücken
                                     </div>
                                 </div>
                                 
@@ -1184,8 +1292,14 @@
                             
                             <!-- Manual Scan Button -->
                             <div style="text-align: center; margin: 1rem 0;">
-                                <button class="btn" onclick="startCardCountdown('back')" style="background: #28a745; font-size: 1.1rem; padding: 1rem 2rem;">
-                                    ⏰ Countdown starten (5 Sek.)
+                                <button id="backScanButton" onclick="startClearCardScan('back')" class="btn btn-success btn-lg w-100" style="
+                                    margin-top: 1rem;
+                                    padding: 1rem;
+                                    font-size: 1.1rem;
+                                    border-radius: 12px;
+                                    box-shadow: 0 4px 15px rgba(40, 167, 69, 0.3);
+                                ">
+                                    🎯 Countdown starten (5 Sek.)
                                 </button>
                             </div>
                             
@@ -4607,6 +4721,167 @@
                     birth_date: `Daten erfasst (${timestamp})`
                 };
             }
+        }
+
+        // ... existing code ...
+        
+        // CLEAR: New simplified card scanning process
+        async function startClearCardScan(side) {
+            console.log(`🚀 Starting CLEAR scan process for ${side} side`);
+            
+            try {
+                // STEP 1: Update button and status
+                const button = document.getElementById(`${side}ScanButton`);
+                const simpleStatus = document.getElementById(`${side}SimpleStatus`);
+                
+                button.disabled = true;
+                button.innerHTML = '⏰ Countdown läuft...';
+                simpleStatus.innerHTML = '📸 Ihre Karte wird in 5 Sekunden gescannt!';
+                
+                // STEP 2: 5 second countdown
+                for (let i = 5; i > 0; i--) {
+                    simpleStatus.innerHTML = `📸 Aufnahme in ${i} Sekunden - Karte bereithalten!`;
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+                
+                // STEP 3: Take screenshot
+                simpleStatus.innerHTML = '📸 Aufnahme erfolgt - Sie können die Karte jetzt wegnehmen!';
+                
+                const imageBlob = await captureHighQualityScreenshot(side);
+                if (!imageBlob) {
+                    throw new Error('Screenshot capture failed');
+                }
+                
+                console.log(`📸 [${side}] Screenshot captured: ${imageBlob.size} bytes`);
+                
+                // STEP 4: Show processing overlay and hide camera
+                const processingOverlay = document.getElementById(`${side}ProcessingOverlay`);
+                processingOverlay.style.display = 'flex';
+                simpleStatus.style.display = 'none'; // Hide bottom status
+                
+                // STEP 5: Start backend OCR processing
+                console.log(`🔍 [${side}] Starting backend OCR processing...`);
+                
+                const processingResult = await performBackendOCRProcessing(imageBlob, side);
+                
+                console.log(`✅ [${side}] OCR processing complete:`, processingResult);
+                
+                // STEP 6: Hide overlay and show results
+                processingOverlay.style.display = 'none';
+                
+                if (processingResult.success) {
+                    // Show the results
+                    showClearScanResults(side, processingResult);
+                    
+                    // Store results globally
+                    if (side === 'front') {
+                        frontCardData = processingResult.data;
+                        console.log('✅ Front card data stored:', frontCardData);
+                    } else {
+                        backCardData = processingResult.data;
+                        console.log('✅ Back card data stored:', backCardData);
+                    }
+                    
+                    // Check if we should proceed to next step
+                    if (side === 'front') {
+                        // Show back side scanning
+                        setTimeout(() => {
+                            document.getElementById('frontSideCard').style.display = 'none';
+                            document.getElementById('backSideCard').style.display = 'block';
+                            setupCamera('back');
+                        }, 2000);
+                    } else {
+                        // Both sides complete - show final results
+                        setTimeout(() => {
+                            showFinalCardResults();
+                        }, 2000);
+                    }
+                } else {
+                    throw new Error(processingResult.error || 'OCR processing failed');
+                }
+                
+            } catch (error) {
+                console.error(`❌ [${side}] Clear scan error:`, error);
+                
+                // Hide overlay
+                const processingOverlay = document.getElementById(`${side}ProcessingOverlay`);
+                processingOverlay.style.display = 'none';
+                
+                // Show error and reset
+                const simpleStatus = document.getElementById(`${side}SimpleStatus`);
+                simpleStatus.style.display = 'block';
+                simpleStatus.innerHTML = `❌ Fehler: ${error.message} - Bitte erneut versuchen`;
+                
+                // Reset button
+                const button = document.getElementById(`${side}ScanButton`);
+                button.disabled = false;
+                button.innerHTML = '🎯 Countdown starten (5 Sek.)';
+            }
+        }
+        
+        // CLEAR: Show scan results properly
+        function showClearScanResults(side, result) {
+            console.log(`📋 [${side}] Showing clear scan results:`, result);
+            
+            const resultsDiv = document.getElementById(`${side}Results`);
+            const resultsDataDiv = document.getElementById(`${side}ResultsData`);
+            
+            if (!resultsDiv || !resultsDataDiv) {
+                console.error(`❌ Results divs not found for ${side} side`);
+                return;
+            }
+            
+            // Build results HTML
+            let resultsHTML = '';
+            
+            if (side === 'front' && result.data) {
+                resultsHTML = `
+                    <strong>Name:</strong> ${result.data.name || 'Nicht erkannt'}<br>
+                    <strong>Versichertennummer:</strong> ${result.data.insurance_number || 'Nicht erkannt'}<br>
+                    <strong>Krankenkasse:</strong> ${result.data.insurance_company || 'Nicht erkannt'}
+                `;
+            } else if (side === 'back' && result.data) {
+                resultsHTML = `
+                    <strong>Gültig bis:</strong> ${result.data.valid_until || 'Nicht erkannt'}<br>
+                    <strong>Geburtsdatum:</strong> ${result.data.birth_date || 'Nicht erkannt'}
+                `;
+            }
+            
+            if (resultsHTML) {
+                resultsDataDiv.innerHTML = resultsHTML;
+                resultsDiv.style.display = 'block';
+                console.log(`✅ [${side}] Results displayed successfully`);
+            } else {
+                console.error(`❌ [${side}] No valid data to display`);
+                resultsDataDiv.innerHTML = '<em>Keine Daten erkannt - bitte erneut versuchen</em>';
+                resultsDiv.style.display = 'block';
+            }
+        }
+        
+        // CLEAR: Show final combined results
+        function showFinalCardResults() {
+            console.log('🎉 Showing final combined card results');
+            console.log('Front data:', frontCardData);
+            console.log('Back data:', backCardData);
+            
+            // Hide back side scanning
+            document.getElementById('backSideCard').style.display = 'none';
+            
+            // Prepare combined data
+            const combinedData = {
+                name: frontCardData?.name || 'Nicht erkannt',
+                insuranceNumber: frontCardData?.insurance_number || 'Nicht erkannt',
+                insuranceCompany: frontCardData?.insurance_company || 'Nicht erkannt',
+                validUntil: backCardData?.valid_until || 'Nicht erkannt',
+                birthDate: backCardData?.birth_date || frontCardData?.birth_date || 'Nicht erkannt'
+            };
+            
+            // Store globally
+            extractedCardData = combinedData;
+            console.log('✅ Final combined data:', extractedCardData);
+            
+            // Show confirmation
+            showDataConfirmation();
         }
     </script>
 </body>
