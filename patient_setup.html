@@ -2613,11 +2613,15 @@
                     console.log(`🔄 [${side}] Processing attempt ${i + 1}/3 (${config.lang})...`);
                     
                     try {
+                        // FIX: Configure Tesseract to not use workers to avoid SecurityError
                         const result = await Tesseract.recognize(preprocessedBlob || imageBlob, config.lang, {
                             logger: () => {}, // Silent processing
                             tessedit_pageseg_mode: config.psm,
                             tessedit_ocr_engine_mode: config.oem,
                             user_defined_dpi: config.dpi,
+                            // CRITICAL: Disable workers to fix SecurityError
+                            workerPath: false,
+                            corePath: false,
                             ...config.options
                         });
                         
@@ -2909,12 +2913,15 @@
                     throw new Error('Tesseract.js nicht verfügbar');
                 }
                 
-                // Simple OCR with German language, no complex configurations
+                // FIX: Configure Tesseract to not use workers to avoid SecurityError
                 const result = await Tesseract.recognize(imageBlob, 'deu', {
                     logger: () => {}, // Disable all progress logging
                     tessedit_pageseg_mode: '6', // Uniform block of text
                     tessedit_ocr_engine_mode: '1', // Neural net LSTM engine
-                    preserve_interword_spaces: '1'
+                    preserve_interword_spaces: '1',
+                    // CRITICAL: Disable workers to fix SecurityError
+                    workerPath: false,
+                    corePath: false
                 });
                 
                 console.log(`📝 OCR raw text (${result.data.text.length} chars):`, result.data.text);
@@ -3431,6 +3438,9 @@
                                         updateScanStatus(side, 'loading', `OCR ${i + 1}/3: ${progress}% (${config.lang})`);
                                     }
                                 },
+                                // CRITICAL: Disable workers to fix SecurityError
+                                workerPath: false,
+                                corePath: false,
                                 ...config.options
                             }
                         );
