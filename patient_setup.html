@@ -3063,7 +3063,7 @@
                 processingOverlay.style.display = 'none';
                 simpleStatus.style.display = 'block';
                 
-                // STEP 6: Show results
+                // STEP 6: Show results OR handle failure properly
                 if (processingResult.success) {
                     showClearScanResults(side, processingResult);
                     
@@ -3095,10 +3095,26 @@
                     }
                     
                 } else {
-                    // DEBUGGING: Show OCR method and error details
+                    // LIVE SYSTEM: Real OCR failure - show retry option
                     console.error(`❌ OCR Processing failed:`, processingResult);
-                    alert(`OCR PROCESSING FAILED:\nMethod: ${processingResult.method}\nError: ${processingResult.error}\nSide: ${side}`);
-                    throw new Error(processingResult.error || 'OCR processing failed');
+                    
+                    simpleStatus.innerHTML = `
+                        <div style="color: #dc3545; padding: 10px; border: 2px solid #dc3545; border-radius: 8px; background: #f8d7da;">
+                            <div style="font-weight: bold; margin-bottom: 8px;">❌ OCR-Scan fehlgeschlagen</div>
+                            <div style="font-size: 14px; margin-bottom: 8px;">${processingResult.error}</div>
+                            <div style="font-size: 12px; color: #721c24;">
+                                Verarbeitungszeit: ${processingResult.processing_time_ms}ms<br>
+                                Fehlertyp: ${processingResult.error_type}
+                            </div>
+                        </div>
+                    `;
+                    
+                    // Reset button for retry
+                    button.disabled = false;
+                    button.innerHTML = '🔄 Erneut scannen';
+                    
+                    // Don't throw error - just show failure state for user to retry
+                    return;
                 }
                 
             } catch (error) {
@@ -3109,13 +3125,21 @@
                 processingOverlay.style.display = 'none';
                 hideLoadingPopup();
                 
-                // Show error message
+                // Show detailed error message for live system
                 simpleStatus.style.display = 'block';
-                simpleStatus.innerHTML = `❌ Fehler: ${error.message} - Bitte erneut versuchen`;
+                simpleStatus.innerHTML = `
+                    <div style="color: #dc3545; padding: 10px; border: 2px solid #dc3545; border-radius: 8px; background: #f8d7da;">
+                        <div style="font-weight: bold; margin-bottom: 8px;">❌ Scan-Fehler</div>
+                        <div style="font-size: 14px; margin-bottom: 8px;">${error.message}</div>
+                        <div style="font-size: 12px; color: #721c24;">
+                            LIVE-SYSTEM: Kein Fallback verwendet - echter Fehler
+                        </div>
+                    </div>
+                `;
                 
-                // Reset button
+                // Reset button for retry
                 button.disabled = false;
-                button.innerHTML = '📸 Scan Start';
+                button.innerHTML = '🔄 Erneut versuchen';
             }
         }
         
@@ -5918,40 +5942,22 @@
                     errorType = 'server_error';
                 }
                 
-                // IMPORTANT: Always return SUCCESS with realistic data to not block user workflow
-                console.log(`🔄 [${side}] Providing high-quality fallback data after ${finalElapsedTime}ms processing...`);
+                // LIVE SYSTEM: Return REAL ERROR - no fake success with fallback data
+                console.error(`❌ [${side}] OCR FAILED after ${finalElapsedTime}ms processing - returning real error`);
                 
                 return {
-                    success: true, // Always success to continue workflow
-                    data: createHighQualityFallbackData(side),
-                    confidence: 0.85, // High confidence for realistic fallback
-                    raw_text: `Premium-Verarbeitung nach ${finalElapsedTime}ms: ${userMessage}`,
+                    success: false, // REAL FAILURE - no fake success for live system
+                    error: userMessage,
                     processing_time_ms: finalElapsedTime,
-                    method: 'premium_fallback_after_processing',
+                    method: 'premium_ocr_failed',
                     original_error: error.message,
-                    error_type: errorType
+                    error_type: errorType,
+                    data: null
                 };
             }
         }
 
-        // HIGH-QUALITY: Realistic fallback data that looks like real OCR results
-        function createHighQualityFallbackData(side) {
-            const timestamp = new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-            
-            if (side === 'front') {
-                return {
-                    name: 'Leonhard Pöppel',  // Use the actual name from the card we saw
-                    insurance_number: 'S506292578',  // Use the actual number that was visible
-                    insurance_company: 'AOK BAYERN',  // Use the actual insurance company
-                    birth_date: '' // Leave empty as typical for front side
-                };
-            } else {
-                return {
-                    valid_until: '12/2025',
-                    birth_date: '15.03.1990'
-                };
-            }
-        }
+        // REMOVED: No fallback data for live system - OCR must work or fail properly
 
     </script>
 </body>
