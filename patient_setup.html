@@ -2200,10 +2200,10 @@
                     // Enable next step
                     document.getElementById('step3Next').disabled = false;
                     
-                    // Stop media streams
-                    if (stream) {
-                        stream.getTracks().forEach(track => track.stop());
-                    }
+                    // CRITICAL FIX: DON'T stop media streams - keep them for Step 4!
+                    // Stream wird für Schritt 4 (OCR) benötigt!
+                    console.log('✅ Keeping camera stream active for Step 4 OCR scanning');
+                    
                 } else {
                     showStatus('error', 'Media-Test nicht bestanden. Bitte stellen Sie sicher, dass Kamera und Mikrofon funktionieren.');
                 }
@@ -2265,17 +2265,158 @@
             }
         }
 
-        // Insurance Card Validation Functions - UPDATED FOR TWO-STEP PROCESS
+        // FIXED: Verwende bestehenden Camera-Stream aus Schritt 3!
         async function initializeInsuranceValidation() {
+            console.log('🎥 FIXED: Using existing camera from Step 3');
+            
+            setTimeout(async () => {
+                try {
+                    // CLEVER: Prüfe ob bereits ein Stream aus Schritt 3 existiert
+                    const step3Video = document.getElementById('cameraPreview');
+                    let existingStream = null;
+                    
+                    if (step3Video && step3Video.srcObject) {
+                        existingStream = step3Video.srcObject;
+                        console.log('✅ Found existing camera stream from Step 3!');
+                    }
+                    
+                    // FALLBACK: Auch globale stream-Variable prüfen
+                    if (!existingStream && stream) {
+                        existingStream = stream;
+                        console.log('✅ Found global stream variable from Step 3!');
+                    }
+                    
+                    await startCameraFromExistingStream('front', existingStream);
+                    
+                } catch (error) {
+                    console.error('❌ Smart camera start failed:', error);
+                }
+            }, 100);
+        }
+
+        // NEW: Clean up camera streams when appropriate
+        function cleanupCameraStreams() {
+            console.log('🧹 Cleaning up camera streams...');
+            
+            // Clean up global stream
+            if (stream) {
+                stream.getTracks().forEach(track => {
+                    track.stop();
+                    console.log('🛑 Stopped global stream track');
+                });
+                stream = null;
+            }
+            
+            // Clean up step 3 video
+            const step3Video = document.getElementById('cameraPreview');
+            if (step3Video && step3Video.srcObject) {
+                const tracks = step3Video.srcObject.getTracks();
+                tracks.forEach(track => {
+                    track.stop();
+                    console.log('🛑 Stopped step 3 video track');
+                });
+                step3Video.srcObject = null;
+            }
+            
+            // Clean up OCR videos
+            ['front', 'back'].forEach(side => {
+                const video = document.getElementById(`${side}SideCamera`);
+                if (video && video.srcObject) {
+                    const tracks = video.srcObject.getTracks();
+                    tracks.forEach(track => {
+                        track.stop();
+                        console.log(`🛑 Stopped ${side} OCR video track`);
+                    });
+                    video.srcObject = null;
+                }
+            });
+        }
+
+        // Clean up when leaving the page
+        window.addEventListener('beforeunload', cleanupCameraStreams);
+
+        // CLEVER: Verwende bestehenden Stream oder starte neu
+        async function startCameraFromExistingStream(side, existingStream = null) {
+            console.log(`🎥 SMART CAMERA START for ${side} side`);
+            
+            const video = document.getElementById(`${side}SideCamera`);
+            const simpleStatus = document.getElementById(`${side}SimpleStatus`);
+            
+            if (!video) {
+                console.error('❌ Video element not found!');
+                return;
+            }
+            
             try {
-                console.log('🏥 FIXED: Initializing insurance card scanning with GUARANTEED working camera...');
+                let stream = existingStream;
                 
-                // FIXED: Use the improved camera setup
-                initializeCameraForStep4();
+                if (simpleStatus) {
+                    simpleStatus.innerHTML = '📹 Kamera wird aktiviert...';
+                }
+                
+                // Wenn kein bestehender Stream, neue Kamera anfordern
+                if (!stream) {
+                    console.log('📹 No existing stream, requesting new camera...');
+                    
+                    stream = await navigator.mediaDevices.getUserMedia({
+                        video: {
+                            width: { ideal: 1280 },
+                            height: { ideal: 720 },
+                            facingMode: 'user'
+                        }
+                    });
+                } else {
+                    console.log('✅ Reusing existing camera stream from Step 3!');
+                }
+                
+                // Stream zuweisen
+                video.srcObject = stream;
+                
+                // Video abspielen
+                await video.play();
+                console.log('✅ Video is playing!');
+                
+                if (simpleStatus) {
+                    simpleStatus.innerHTML = '✅ Kamera bereit - Karte bereithalten und auf "Scan Start" drücken';
+                }
                 
             } catch (error) {
-                console.error('Insurance validation init error:', error);
-                updateScanStatus('front', 'error', 'Kamera-Zugriff fehlgeschlagen');
+                console.error('❌ Camera failed:', error);
+                
+                if (simpleStatus) {
+                    if (error.name === 'NotAllowedError') {
+                        simpleStatus.innerHTML = `
+                            <div style="color: #dc3545; text-align: center;">
+                                ❌ Kamera-Berechtigung verweigert<br>
+                                <small>Bitte führen Sie zuerst Schritt 3 (Kamera-Test) erfolgreich durch</small><br>
+                                <button onclick="startCameraFromExistingStream('${side}')" style="
+                                    margin-top: 8px;
+                                    padding: 8px 16px;
+                                    background: #28a745;
+                                    color: white;
+                                    border: none;
+                                    border-radius: 4px;
+                                    cursor: pointer;
+                                ">🔄 Kamera aktivieren</button>
+                            </div>
+                        `;
+                    } else {
+                        simpleStatus.innerHTML = `
+                            <div style="color: #dc3545; text-align: center;">
+                                ❌ Kamera-Fehler: ${error.message}<br>
+                                <button onclick="startCameraFromExistingStream('${side}')" style="
+                                    margin-top: 8px;
+                                    padding: 8px 16px;
+                                    background: #007bff;
+                                    color: white;
+                                    border: none;
+                                    border-radius: 4px;
+                                    cursor: pointer;
+                                ">🔄 Erneut versuchen</button>
+                            </div>
+                        `;
+                    }
+                }
             }
         }
 
@@ -2381,16 +2522,27 @@
             }
         }
 
-        // FIXED: Manual countdown using the GUARANTEED working camera
+        // SMART: Manual countdown - verwende bestehende Kamera!
         async function startManualCountdown(side) {
-            console.log(`🚀 FIXED: MANUAL COUNTDOWN for ${side} side`);
+            console.log(`🚀 SMART: MANUAL COUNTDOWN for ${side} side`);
             
             try {
-                // Ensure camera is working first
+                // Prüfe ob Kamera bereits läuft
                 const video = document.getElementById(`${side}SideCamera`);
                 if (!video || !video.srcObject) {
-                    console.log('📹 Camera not ready, starting FIXED camera first...');
-                    await setupCamera(side);
+                    console.log('📹 Camera not ready, starting smart camera...');
+                    
+                    // Versuche bestehenden Stream zu verwenden
+                    const step3Video = document.getElementById('cameraPreview');
+                    let existingStream = null;
+                    
+                    if (step3Video && step3Video.srcObject) {
+                        existingStream = step3Video.srcObject;
+                    }
+                    
+                    await startCameraFromExistingStream(side, existingStream);
+                    // Kurz warten damit Kamera ready ist
+                    await new Promise(resolve => setTimeout(resolve, 500));
                 }
                 
                 // Start the countdown process
@@ -5502,6 +5654,7 @@
                 }, 300);
             }
         }
+
     </script>
 </body>
 </html> 
