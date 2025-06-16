@@ -2642,13 +2642,13 @@ async def process_card_ocr(
         
         logger.info(f"Processing OCR for meeting {meeting_id}, side: {side}, image size: {len(image_bytes)} bytes")
         
-        # Process with OCR
-        ocr_result = insurance_service._process_with_ocr(image_bytes)
+        # Process with NEW intelligent OCR (Vision API + OCR fallback)
+        ocr_result = insurance_service.extract_card_data(image_bytes)
         
         if ocr_result.get("success"):
             extracted_data = ocr_result.get("data", {})
             confidence = ocr_result.get("confidence", 0.0)
-            raw_text = ocr_result.get("raw_text", "")
+            raw_text = ocr_result.get("raw_ocr", "")
             
             # Filter data based on card side
             if side == 'front':
