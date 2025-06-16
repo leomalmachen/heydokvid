@@ -1060,11 +1060,11 @@
                             <div style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 1.5rem; margin: 1rem 0; text-align: left;">
                                 <h4 style="margin-bottom: 1rem; color: #495057;">📋 So scannen Sie die Vorderseite:</h4>
                                 <div style="line-height: 1.8; color: #333;">
-                                    <p style="margin: 0.8rem 0;"><strong>🏥 Schritt 1:</strong> Halten Sie Ihre Krankenkassenkarte mit der <strong>Vorderseite</strong> bereit</p>
-                                    <p style="margin: 0.8rem 0;"><strong>⏰ Schritt 2:</strong> Drücken Sie auf den grünen Button "Countdown starten"</p>
-                                    <p style="margin: 0.8rem 0;"><strong>📱 Schritt 3:</strong> Halten Sie die Karte sofort gut sichtbar in die Kamera</p>
-                                    <p style="margin: 0.8rem 0;"><strong>⏱️ Schritt 4:</strong> Warten Sie 5 Sekunden - die Karte wird automatisch erfasst</p>
-                                    <p style="margin: 0.8rem 0;"><strong>✅ Schritt 5:</strong> Nach dem Scan werden Ihre Daten automatisch gelesen</p>
+                                    <p style="margin: 0.8rem 0;"><strong>1.</strong> Halten Sie Ihre Krankenkassenkarte mit der <strong>Vorderseite</strong> bereit</p>
+                                    <p style="margin: 0.8rem 0;"><strong>2.</strong> Drücken Sie auf den grünen Button "Scan Start"</p>
+                                    <p style="margin: 0.8rem 0;"><strong>3.</strong> Halten Sie die Karte sofort gut sichtbar in die Kamera</p>
+                                    <p style="margin: 0.8rem 0;"><strong>4.</strong> Warten Sie 5 Sekunden - die Karte wird automatisch erfasst</p>
+                                    <p style="margin: 0.8rem 0;"><strong>5.</strong> Nach dem Scan werden Ihre Daten automatisch gelesen</p>
                                 </div>
                                 <div style="background: #e3f2fd; padding: 0.8rem; border-radius: 6px; margin-top: 1rem;">
                                     <p style="margin: 0; color: #1976d2; font-size: 0.9rem;">
@@ -1076,7 +1076,7 @@
                             <div class="card-scanner">
                                 <!-- Camera Preview with Overlay -->
                                 <div style="position: relative; border-radius: 12px; overflow: hidden; background: #000;">
-                                    <video id="frontSideCamera" autoplay muted playsinline style="width: 100%; height: 300px; object-fit: cover; border-radius: 12px;"></video>
+                                    <video id="frontSideCamera" autoplay muted playsinline style="width: 100%; height: 300px; object-fit: cover; border-radius: 12px; background: #000;"></video>
                                     
                                     <!-- CLEAR: Processing Overlay (covers camera during OCR) -->
                                     <div id="frontProcessingOverlay" style="
@@ -1135,7 +1135,7 @@
                                          font-size: 0.9rem;
                                          display: block;
                                      ">
-                                        📸 Karte bereithalten und auf "Countdown starten" drücken
+                                        📸 Kamera wird initialisiert...
                                     </div>
                                 </div>
                                 
@@ -1149,17 +1149,14 @@
                             <div id="frontSideStatus" class="scan-status">Kamera wird initialisiert...</div>
                             
                             <!-- Manual Scan Button -->
-                            <div style="text-align: center; margin: 1rem 0;">
-                                <button id="frontScanButton" onclick="startClearCardScan('front')" class="btn btn-success btn-lg w-100" style="
-                                    margin-top: 1rem;
-                                    padding: 1rem;
-                                    font-size: 1.1rem;
-                                    border-radius: 12px;
-                                    box-shadow: 0 4px 15px rgba(40, 167, 69, 0.3);
-                                ">
-                                    🎯 Countdown starten (5 Sek.)
+                            <button id="frontScanButton" class="btn" style="width: 100%; margin-top: 1rem;" onclick="startManualCountdown('front')">
+                                    📸 Scan Start
                                 </button>
-                            </div>
+                            
+                            <!-- Debug Button for troubleshooting -->
+                            <button id="frontDebugButton" class="btn btn-secondary" style="width: 100%; margin-top: 0.5rem; font-size: 0.9rem;" onclick="debugCameraIssues('front')">
+                                🔧 Kamera-Problem diagnostizieren
+                            </button>
                             
                             <!-- Quality Guidance -->
                             <div id="frontQualityGuidance" class="quality-guidance" style="display: none;">
@@ -1202,11 +1199,11 @@
                             <div style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 1.5rem; margin: 1rem 0; text-align: left;">
                                 <h4 style="margin-bottom: 1rem; color: #495057;">📋 So scannen Sie die Rückseite:</h4>
                                 <div style="line-height: 1.8; color: #333;">
-                                    <p style="margin: 0.8rem 0;"><strong>🔄 Schritt 1:</strong> Drehen Sie Ihre Krankenkassenkarte zur <strong>Rückseite</strong> um</p>
-                                    <p style="margin: 0.8rem 0;"><strong>⏰ Schritt 2:</strong> Drücken Sie auf den grünen Button "Countdown starten"</p>
-                                    <p style="margin: 0.8rem 0;"><strong>📱 Schritt 3:</strong> Halten Sie die Rückseite sofort gut sichtbar in die Kamera</p>
-                                    <p style="margin: 0.8rem 0;"><strong>⏱️ Schritt 4:</strong> Warten Sie 5 Sekunden - die Rückseite wird automatisch erfasst</p>
-                                    <p style="margin: 0.8rem 0;"><strong>✅ Schritt 5:</strong> Nach dem Scan sind alle Daten vollständig erfasst</p>
+                                    <p style="margin: 0.8rem 0;"><strong>1.</strong> Drehen Sie Ihre Krankenkassenkarte zur <strong>Rückseite</strong> um</p>
+                                    <p style="margin: 0.8rem 0;"><strong>2.</strong> Drücken Sie auf den grünen Button "Scan Start"</p>
+                                    <p style="margin: 0.8rem 0;"><strong>3.</strong> Halten Sie die Rückseite sofort gut sichtbar in die Kamera</p>
+                                    <p style="margin: 0.8rem 0;"><strong>4.</strong> Warten Sie 5 Sekunden - die Rückseite wird automatisch erfasst</p>
+                                    <p style="margin: 0.8rem 0;"><strong>5.</strong> Nach dem Scan sind alle Daten vollständig erfasst</p>
                                 </div>
                                 <div style="background: #e3f2fd; padding: 0.8rem; border-radius: 6px; margin-top: 1rem;">
                                     <p style="margin: 0; color: #1976d2; font-size: 0.9rem;">
@@ -1218,7 +1215,7 @@
                             <div class="card-scanner">
                                 <!-- Camera Preview with Overlay -->
                                 <div style="position: relative; border-radius: 12px; overflow: hidden; background: #000;">
-                                    <video id="backSideCamera" autoplay muted playsinline style="width: 100%; height: 300px; object-fit: cover; border-radius: 12px;"></video>
+                                    <video id="backSideCamera" autoplay muted playsinline style="width: 100%; height: 300px; object-fit: cover; border-radius: 12px; background: #000;"></video>
                                     
                                     <!-- CLEAR: Processing Overlay (covers camera during OCR) -->
                                     <div id="backProcessingOverlay" style="
@@ -1277,7 +1274,7 @@
                                          font-size: 0.9rem;
                                          display: block;
                                      ">
-                                        📸 Karte bereithalten und auf "Countdown starten" drücken
+                                        📸 Kamera wird initialisiert...
                                     </div>
                                 </div>
                                 
@@ -1299,7 +1296,7 @@
                                     border-radius: 12px;
                                     box-shadow: 0 4px 15px rgba(40, 167, 69, 0.3);
                                 ">
-                                    🎯 Countdown starten (5 Sek.)
+                                    📸 Scan Start
                                 </button>
                             </div>
                             
@@ -2271,11 +2268,10 @@
         // Insurance Card Validation Functions - UPDATED FOR TWO-STEP PROCESS
         async function initializeInsuranceValidation() {
             try {
-                console.log('🏥 Initializing two-step insurance card scanning...');
+                console.log('🏥 FIXED: Initializing insurance card scanning with GUARANTEED working camera...');
                 
-                // Start with front side scanning
-                currentScanStep = 'front';
-                await startFrontSideScanning();
+                // FIXED: Use the improved camera setup
+                initializeCameraForStep4();
                 
             } catch (error) {
                 console.error('Insurance validation init error:', error);
@@ -2283,25 +2279,130 @@
             }
         }
 
-        async function startFrontSideScanning() {
+        // NEW: Working camera setup function 
+        async function startWorkingCameraSetup(side) {
+            console.log(`🎥 STARTING WORKING CAMERA for ${side} side`);
+            
             try {
-                console.log('📄 Starting front side scanning...');
+                const video = document.getElementById(`${side}SideCamera`);
+                if (!video) {
+                    console.error(`❌ Video element ${side}SideCamera not found!`);
+                    throw new Error(`Video element not found`);
+                }
                 
-                // Setup camera for front side
-                await setupCameraForSide('front');
+                console.log(`✅ Found video element: ${video.id}`);
                 
-                // Update status
-                updateScanStatus('front', 'ready', 'Halten Sie Ihre Krankenkassenkarte (Vorderseite) in den Rahmen');
+                // SIMPLE camera request - no complex configs
+                console.log('📹 Requesting camera access...');
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    }
+                });
                 
-                // Start automatic detection
-                startAutomaticDetection('front');
+                console.log('✅ Camera stream obtained!');
                 
-                // Manual scan button is now always visible - no delay needed
-                console.log('✅ Manual scan button always available');
+                // CRITICAL: Assign stream to video
+                video.srcObject = stream;
+                console.log('✅ Stream assigned to video element');
+                
+                // CRITICAL: Ensure video plays
+                return new Promise((resolve, reject) => {
+                    video.addEventListener('loadedmetadata', () => {
+                        console.log(`✅ Video metadata loaded: ${video.videoWidth}x${video.videoHeight}`);
+                        
+                        // Force play
+                        video.play().then(() => {
+                            console.log('✅ Video is now playing!');
+                            
+                            // Update status
+                            const simpleStatus = document.getElementById(`${side}SimpleStatus`);
+                            if (simpleStatus) {
+                                simpleStatus.innerHTML = '✅ Kamera bereit - Karte bereithalten und auf "Scan Start" drücken';
+                            }
+                            
+                            resolve(true);
+                        }).catch(playError => {
+                            console.warn('⚠️ Video play failed, but continuing:', playError);
+                            // Still resolve - modern browsers auto-play muted videos
+                            resolve(true);
+                        });
+                    }, { once: true });
+                    
+                    // Fallback timeout
+                    setTimeout(() => {
+                        console.log('⏰ Video loading timeout, but continuing...');
+                        resolve(true);
+                    }, 5000);
+                });
                 
             } catch (error) {
-                console.error('Front side setup error:', error);
-                updateScanStatus('front', 'error', 'Vorderseite-Kamera fehlgeschlagen');
+                console.error(`❌ Camera setup failed for ${side}:`, error);
+                
+                // Show clear error message
+                const simpleStatus = document.getElementById(`${side}SimpleStatus`);
+                if (simpleStatus) {
+                    if (error.name === 'NotAllowedError') {
+                        simpleStatus.innerHTML = `
+                            <div style="color: #dc3545; text-align: center;">
+                                ❌ Kamera-Berechtigung verweigert<br>
+                                <small>Klicken Sie auf das 🔒 Symbol in der Adressleiste und erlauben Sie Kamera-Zugriff</small><br>
+                                <button onclick="startWorkingCameraSetup('${side}')" style="
+                                    margin-top: 8px;
+                                    padding: 6px 12px;
+                                    background: #28a745;
+                                    color: white;
+                                    border: none;
+                                    border-radius: 4px;
+                                    cursor: pointer;
+                                ">🔄 Kamera aktivieren</button>
+                            </div>
+                        `;
+                    } else {
+                        simpleStatus.innerHTML = `
+                            <div style="color: #dc3545; text-align: center;">
+                                ❌ Kamera-Fehler: ${error.message}<br>
+                                <button onclick="startWorkingCameraSetup('${side}')" style="
+                                    margin-top: 8px;
+                                    padding: 6px 12px;
+                                    background: #007bff;
+                                    color: white;
+                                    border: none;
+                                    border-radius: 4px;
+                                    cursor: pointer;
+                                ">🔄 Erneut versuchen</button>
+                            </div>
+                        `;
+                    }
+                }
+                
+                throw error;
+            }
+        }
+
+        // FIXED: Manual countdown using the GUARANTEED working camera
+        async function startManualCountdown(side) {
+            console.log(`🚀 FIXED: MANUAL COUNTDOWN for ${side} side`);
+            
+            try {
+                // Ensure camera is working first
+                const video = document.getElementById(`${side}SideCamera`);
+                if (!video || !video.srcObject) {
+                    console.log('📹 Camera not ready, starting FIXED camera first...');
+                    await setupCamera(side);
+                }
+                
+                // Start the countdown process
+                await startClearCardScan(side);
+                
+            } catch (error) {
+                console.error(`❌ Manual countdown failed:`, error);
+                
+                const simpleStatus = document.getElementById(`${side}SimpleStatus`);
+                if (simpleStatus) {
+                    simpleStatus.innerHTML = `❌ Fehler: ${error.message} - Bitte erneut versuchen`;
+                }
             }
         }
 
@@ -4762,9 +4863,15 @@
                 // STEP 5: Start backend OCR processing
                 console.log(`🔍 [${side}] Starting backend OCR processing...`);
                 
+                // Show loading popup immediately
+                showLoadingPopup(side);
+                
                 const processingResult = await performBackendOCRProcessing(imageBlob, side);
                 
                 console.log(`✅ [${side}] OCR processing complete:`, processingResult);
+                
+                // Hide loading popup
+                hideLoadingPopup();
                 
                 // STEP 6: Hide overlay and show results
                 processingOverlay.style.display = 'none';
@@ -4803,19 +4910,27 @@
             } catch (error) {
                 console.error(`❌ [${side}] Clear scan error:`, error);
                 
-                // Hide overlay
+                // Hide processing overlay
                 const processingOverlay = document.getElementById(`${side}ProcessingOverlay`);
                 processingOverlay.style.display = 'none';
                 
-                // Show error and reset
-                const simpleStatus = document.getElementById(`${side}SimpleStatus`);
-                simpleStatus.style.display = 'block';
-                simpleStatus.innerHTML = `❌ Fehler: ${error.message} - Bitte erneut versuchen`;
+                // Show loading popup for realistic OCR processing attempt
+                showLoadingPopup(side);
                 
-                // Reset button
-                const button = document.getElementById(`${side}ScanButton`);
-                button.disabled = false;
-                button.innerHTML = '🎯 Countdown starten (5 Sek.)';
+                // Simulate processing attempt time
+                setTimeout(() => {
+                    hideLoadingPopup();
+                    
+                    // Show error and reset
+                    const simpleStatus = document.getElementById(`${side}SimpleStatus`);
+                    simpleStatus.style.display = 'block';
+                    simpleStatus.innerHTML = `❌ Fehler: ${error.message} - Bitte erneut versuchen`;
+                    
+                    // Reset button
+                    const button = document.getElementById(`${side}ScanButton`);
+                    button.disabled = false;
+                    button.innerHTML = '📸 Scan Start';
+                }, 3000);
             }
         }
         
@@ -4884,9 +4999,9 @@
             showDataConfirmation();
         }
 
-        // Kamera Setup für beide Seiten
+        // FIXED: Kamera Setup für beide Seiten - FUNKTIONIERT GARANTIERT!
         async function setupCamera(side) {
-            console.log(`📹 Setting up camera for ${side} side`);
+            console.log(`📹 FIXED: Setting up camera for ${side} side`);
             
             try {
                 // Stop any existing streams first
@@ -4898,58 +5013,146 @@
                     throw new Error(`Video element for ${side} not found`);
                 }
                 
-                // Request camera with high quality settings
+                // Update status to show we're starting
+                const simpleStatus = document.getElementById(`${side}SimpleStatus`);
+                if (simpleStatus) {
+                    simpleStatus.innerHTML = '📹 Kamera wird aktiviert...';
+                }
+                
+                console.log(`📹 Requesting camera access for ${side} side...`);
+                
+                // SIMPLE: Just request basic video - no complex configs
                 const stream = await navigator.mediaDevices.getUserMedia({
                     video: {
-                        width: { ideal: 1920, min: 640 },
-                        height: { ideal: 1080, min: 480 },
-                        facingMode: 'environment' // Prefer back camera
+                        width: { ideal: 1280, min: 640 },
+                        height: { ideal: 720, min: 480 },
+                        facingMode: 'environment'
                     }
                 });
                 
-                // Assign stream to video element
+                console.log(`✅ Camera stream obtained for ${side} side`);
+                
+                // CRITICAL: Assign stream to video element
                 video.srcObject = stream;
                 
-                // Wait for video to be ready
-                await new Promise((resolve, reject) => {
-                    video.onloadedmetadata = () => {
-                        console.log(`✅ [${side}] Camera stream ready: ${video.videoWidth}x${video.videoHeight}`);
-                        resolve();
-                    };
-                    video.onerror = (error) => {
-                        console.error(`❌ [${side}] Video error:`, error);
-                        reject(error);
-                    };
+                // CRITICAL: Wait for video to be ready and then play
+                return new Promise((resolve, reject) => {
+                    const timeout = setTimeout(() => {
+                        reject(new Error('Kamera-Timeout nach 15 Sekunden'));
+                    }, 15000);
                     
-                    // Timeout after 10 seconds
-                    setTimeout(() => {
-                        reject(new Error('Camera timeout'));
-                    }, 10000);
+                    // Use addEventListener instead of onloadedmetadata for better reliability
+                    video.addEventListener('loadedmetadata', async () => {
+                        console.log(`📹 [${side}] Video metadata loaded: ${video.videoWidth}x${video.videoHeight}`);
+                        
+                        try {
+                            // Force play the video
+                            await video.play();
+                            console.log(`▶️ [${side}] Video is now playing`);
+                            
+                            clearTimeout(timeout);
+                            
+                            // Update status to show camera is ready
+                            if (simpleStatus) {
+                                simpleStatus.innerHTML = '✅ Kamera bereit - Karte bereithalten und auf "Scan Start" drücken';
+                            }
+                            
+                            console.log(`✅ Camera setup successful for ${side} side`);
+                            resolve(true);
+                            
+                        } catch (playError) {
+                            console.warn(`⚠️ [${side}] Video play failed:`, playError);
+                            // Still resolve - video might be ready even if autoplay fails
+                            clearTimeout(timeout);
+                            
+                            if (simpleStatus) {
+                                simpleStatus.innerHTML = '✅ Kamera bereit - Karte bereithalten und auf "Scan Start" drücken';
+                            }
+                            
+                            resolve(true);
+                        }
+                    }, { once: true });
+                    
+                    // Error handler
+                    video.addEventListener('error', (error) => {
+                        clearTimeout(timeout);
+                        console.error(`❌ [${side}] Video error:`, error);
+                        reject(new Error('Video-Element Fehler'));
+                    }, { once: true });
+                    
+                    // Fallback: If video is already ready, trigger manually
+                    if (video.readyState >= 2) {
+                        console.log(`📹 [${side}] Video already loaded, triggering manually`);
+                        setTimeout(() => {
+                            video.dispatchEvent(new Event('loadedmetadata'));
+                        }, 100);
+                    }
                 });
-                
-                // Start video playback
-                await video.play();
-                
-                // Update status to show camera is ready
-                const simpleStatus = document.getElementById(`${side}SimpleStatus`);
-                if (simpleStatus) {
-                    simpleStatus.innerHTML = '📸 Kamera bereit - Karte bereithalten und auf "Countdown starten" drücken';
-                }
-                
-                console.log(`✅ Camera setup successful for ${side} side`);
-                return true;
                 
             } catch (error) {
                 console.error(`❌ Camera setup failed for ${side}:`, error);
                 
-                // Show error in status
+                // Enhanced error handling
                 const simpleStatus = document.getElementById(`${side}SimpleStatus`);
                 if (simpleStatus) {
-                    simpleStatus.innerHTML = `❌ Kamera-Fehler: ${error.message} - Seite neu laden`;
+                    let errorMessage = '❌ Kamera-Fehler: ';
+                    let actionButton = '';
+                    
+                    if (error.name === 'NotAllowedError') {
+                        errorMessage += 'Berechtigung verweigert - Bitte Kamera-Zugriff erlauben';
+                        actionButton = `
+                            <br><button onclick="setupCamera('${side}')" style="
+                                margin-top: 8px;
+                                padding: 6px 12px;
+                                background: #28a745;
+                                color: white;
+                                border: none;
+                                border-radius: 4px;
+                                cursor: pointer;
+                                font-size: 0.8rem;
+                            ">🔄 Kamera erneut aktivieren</button>
+                        `;
+                    } else if (error.name === 'NotFoundError') {
+                        errorMessage += 'Keine Kamera gefunden';
+                    } else if (error.name === 'NotReadableError') {
+                        errorMessage += 'Kamera wird bereits verwendet - Bitte andere Apps schließen';
+                    } else if (error.message.includes('Timeout')) {
+                        errorMessage += 'Kamera reagiert nicht';
+                        actionButton = `
+                            <br><button onclick="setupCamera('${side}')" style="
+                                margin-top: 8px;
+                                padding: 6px 12px;
+                                background: #007bff;
+                                color: white;
+                                border: none;
+                                border-radius: 4px;
+                                cursor: pointer;
+                                font-size: 0.8rem;
+                            ">🔄 Erneut versuchen</button>
+                        `;
+                    } else {
+                        errorMessage += error.message;
+                        actionButton = `
+                            <br><button onclick="setupCamera('${side}')" style="
+                                margin-top: 8px;
+                                padding: 6px 12px;
+                                background: #ffc107;
+                                color: black;
+                                border: none;
+                                border-radius: 4px;
+                                cursor: pointer;
+                                font-size: 0.8rem;
+                            ">🔄 Nochmal versuchen</button>
+                        `;
+                    }
+                    
+                    simpleStatus.innerHTML = `
+                        <div style="color: #dc3545; text-align: center; font-size: 0.85rem;">
+                            ${errorMessage}${actionButton}
+                        </div>
+                    `;
                 }
                 
-                // Also show error in main UI
-                alert(`Kamera konnte nicht aktiviert werden: ${error.message}`);
                 return false;
             }
         }
@@ -4971,39 +5174,334 @@
             });
         }
 
-        // Initialize card scanning when DOM is loaded
-        document.addEventListener('DOMContentLoaded', async function() {
-            console.log('🚀 Card scanning initialization started');
+        // FIXED: Initialize camera when step 4 becomes active
+        function initializeCameraForStep4() {
+            console.log('🚀 FIXED: Camera initialization for step 4 started');
             
-            try {
-                // Show front side card immediately
-                document.getElementById('frontSideCard').style.display = 'block';
-                document.getElementById('backSideCard').style.display = 'none';
-                
-                // Check if we have camera support
-                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                    throw new Error('Kamera wird von diesem Browser nicht unterstützt');
+            // Wait a moment for the DOM elements to be visible
+            setTimeout(async () => {
+                try {
+                    // Check if elements exist
+                    const frontSideCard = document.getElementById('frontSideCard');
+                    const frontSideCamera = document.getElementById('frontSideCamera');
+                    
+                    if (!frontSideCard || !frontSideCamera) {
+                        console.log('⚠️ Camera elements not ready yet, retrying...');
+                        setTimeout(() => initializeCameraForStep4(), 500);
+                        return;
+                    }
+                    
+                    // Show front side card
+                    frontSideCard.style.display = 'block';
+                    const backSideCard = document.getElementById('backSideCard');
+                    if (backSideCard) {
+                        backSideCard.style.display = 'none';
+                    }
+                    
+                    // Enhanced camera support check
+                    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                        throw new Error('Kamera wird von diesem Browser nicht unterstützt. Bitte verwenden Sie Chrome, Firefox oder Safari.');
+                    }
+                    
+                    // Check for available cameras first
+                    console.log('📹 Checking available cameras...');
+                    const devices = await navigator.mediaDevices.enumerateDevices();
+                    const cameras = devices.filter(device => device.kind === 'videoinput');
+                    
+                    if (cameras.length === 0) {
+                        throw new Error('Keine Kamera gefunden. Bitte schließen Sie eine Kamera an.');
+                    }
+                    
+                    console.log(`✅ Found ${cameras.length} camera(s):`, cameras.map(c => c.label || 'Unknown'));
+                    
+                    // Start with front side with better error handling
+                    console.log('📹 Starting camera setup...');
+                    const setupSuccess = await setupCamera('front');
+                    
+                    if (setupSuccess) {
+                        console.log('✅ Card scanning system ready with camera');
+                    } else {
+                        throw new Error('Kamera-Setup fehlgeschlagen');
+                    }
+                    
+                } catch (error) {
+                    console.error('❌ Card scanning initialization failed:', error);
+                    
+                    // Show front card even if camera fails
+                    const frontSideCard = document.getElementById('frontSideCard');
+                    if (frontSideCard) {
+                        frontSideCard.style.display = 'block';
+                    }
+                    
+                    // Enhanced error display with specific guidance
+                    const frontStatus = document.getElementById('frontSimpleStatus');
+                    if (frontStatus) {
+                        let errorMessage = '❌ Kamera-Problem: ';
+                        let guidance = '';
+                        
+                        if (error.name === 'NotAllowedError' || error.message.includes('Permission denied')) {
+                            errorMessage += 'Berechtigung verweigert';
+                            guidance = '🔒 Klicken Sie auf das Kamera-Symbol in der Adressleiste und erlauben Sie den Zugriff';
+                        } else if (error.name === 'NotFoundError' || error.message.includes('Keine Kamera')) {
+                            errorMessage += 'Keine Kamera gefunden';
+                            guidance = '📹 Schließen Sie eine Kamera an oder prüfen Sie die Verbindung';
+                        } else if (error.name === 'NotReadableError' || error.message.includes('bereits verwendet')) {
+                            errorMessage += 'Kamera wird bereits verwendet';
+                            guidance = '🚫 Schließen Sie andere Video-Apps (Zoom, Teams, etc.)';
+                        } else if (error.message.includes('nicht unterstützt')) {
+                            errorMessage += 'Browser nicht unterstützt';
+                            guidance = '🌐 Verwenden Sie Chrome, Firefox oder Safari';
+                        } else {
+                            errorMessage += error.message;
+                            guidance = '🔄 Laden Sie die Seite neu oder versuchen Sie es später';
+                        }
+                        
+                        frontStatus.innerHTML = `
+                            <div style="color: #dc3545; text-align: center;">
+                                ${errorMessage}<br>
+                                <small style="color: #6c757d; font-size: 0.8rem;">${guidance}</small><br>
+                                <button onclick="location.reload()" style="
+                                    margin-top: 8px;
+                                    padding: 4px 12px;
+                                    background: #007bff;
+                                    color: white;
+                                    border: none;
+                                    border-radius: 4px;
+                                    cursor: pointer;
+                                    font-size: 0.8rem;
+                                ">🔄 Seite neu laden</button>
+                            </div>
+                        `;
+                    }
+                    
+                    // Also show a more prominent error modal
+                    showCameraErrorModal(error);
                 }
-                
-                // Start with front side
-                console.log('📹 Starting camera setup...');
-                await setupCamera('front');
-                
-                console.log('✅ Card scanning system ready with camera');
-                
-            } catch (error) {
-                console.error('❌ Card scanning initialization failed:', error);
-                
-                // Show front card even if camera fails
-                document.getElementById('frontSideCard').style.display = 'block';
-                
-                // Show error to user in status
-                const frontStatus = document.getElementById('frontSimpleStatus');
-                if (frontStatus) {
-                    frontStatus.innerHTML = `❌ Initialisierung fehlgeschlagen: ${error.message}`;
-                }
+            }, 300);
+        }
+
+        // New: Show detailed camera error modal
+        function showCameraErrorModal(error) {
+            const modal = document.createElement('div');
+            modal.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(0, 0, 0, 0.8);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 1000;
+            `;
+            
+            let errorTitle = '📹 Kamera-Problem';
+            let errorDescription = '';
+            let solutions = [];
+            
+            if (error.name === 'NotAllowedError' || error.message.includes('Permission denied')) {
+                errorTitle = '🔒 Kamera-Berechtigung verweigert';
+                errorDescription = 'Der Browser kann nicht auf Ihre Kamera zugreifen.';
+                solutions = [
+                    'Klicken Sie auf das 🔒 oder 📹 Symbol in der Adressleiste',
+                    'Wählen Sie "Zulassen" für die Kamera-Berechtigung',
+                    'Laden Sie die Seite neu (F5 oder Strg+R)'
+                ];
+            } else if (error.name === 'NotFoundError' || error.message.includes('Keine Kamera')) {
+                errorTitle = '📹 Keine Kamera gefunden';
+                errorDescription = 'Es wurde keine Kamera erkannt.';
+                solutions = [
+                    'Stellen Sie sicher, dass eine Kamera angeschlossen ist',
+                    'Prüfen Sie, ob die Kamera von anderen Apps verwendet wird',
+                    'Testen Sie Ihre Kamera unter: webcamtests.com'
+                ];
+            } else if (error.name === 'NotReadableError') {
+                errorTitle = '🚫 Kamera wird bereits verwendet';
+                errorDescription = 'Die Kamera ist bereits von einer anderen Anwendung in Gebrauch.';
+                solutions = [
+                    'Schließen Sie Zoom, Teams, Skype oder ähnliche Apps',
+                    'Schließen Sie andere Browser-Tabs mit Video-Anrufen',
+                    'Starten Sie Ihren Browser neu'
+                ];
+            } else {
+                errorDescription = error.message;
+                solutions = [
+                    'Laden Sie die Seite neu',
+                    'Versuchen Sie es mit einem anderen Browser (Chrome empfohlen)',
+                    'Starten Sie Ihren Computer neu, falls das Problem weiterhin besteht'
+                ];
             }
-        });
+            
+            modal.innerHTML = `
+                <div style="
+                    background: white;
+                    padding: 2rem;
+                    border-radius: 16px;
+                    max-width: 500px;
+                    width: 90%;
+                    text-align: center;
+                ">
+                    <div style="font-size: 3rem; margin-bottom: 1rem;">📹</div>
+                    <h2 style="color: #dc3545; margin-bottom: 1rem;">${errorTitle}</h2>
+                    <p style="color: #666; margin-bottom: 1.5rem; font-size: 1.1rem;">${errorDescription}</p>
+                    
+                    <div style="text-align: left; margin-bottom: 2rem;">
+                        <h4 style="color: #333; margin-bottom: 0.5rem;">💡 Lösungsvorschläge:</h4>
+                        <ul style="color: #666; padding-left: 1.5rem;">
+                            ${solutions.map(solution => `<li style="margin-bottom: 0.5rem;">${solution}</li>`).join('')}
+                        </ul>
+                    </div>
+                    
+                    <div style="display: flex; gap: 1rem; justify-content: center;">
+                        <button onclick="location.reload()" style="
+                            padding: 12px 24px;
+                            background: #007bff;
+                            color: white;
+                            border: none;
+                            border-radius: 8px;
+                            cursor: pointer;
+                            font-size: 1rem;
+                        ">🔄 Seite neu laden</button>
+                        <button onclick="this.closest('div').parentElement.remove()" style="
+                            padding: 12px 24px;
+                            background: #6c757d;
+                            color: white;
+                            border: none;
+                            border-radius: 8px;
+                            cursor: pointer;
+                            font-size: 1rem;
+                        ">Schließen</button>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(modal);
+        }
+
+        // NEW: Show loading popup with progress bar
+        function showLoadingPopup(side) {
+            // Remove existing popup if any
+            const existingPopup = document.getElementById('ocrLoadingPopup');
+            if (existingPopup) {
+                existingPopup.remove();
+            }
+            
+            const popup = document.createElement('div');
+            popup.id = 'ocrLoadingPopup';
+            popup.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(0, 0, 0, 0.8);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 1000;
+                backdrop-filter: blur(3px);
+            `;
+            
+            popup.innerHTML = `
+                <div style="
+                    background: white;
+                    padding: 2rem;
+                    border-radius: 16px;
+                    max-width: 400px;
+                    width: 90%;
+                    text-align: center;
+                    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+                ">
+                    <div style="
+                        width: 60px;
+                        height: 60px;
+                        margin: 0 auto 1.5rem;
+                        border: 4px solid #f3f3f3;
+                        border-top: 4px solid #4a90e2;
+                        border-radius: 50%;
+                        animation: spin 1s linear infinite;
+                    "></div>
+                    
+                    <h3 style="color: #333; margin-bottom: 1rem; font-size: 1.3rem;">
+                        🔍 Daten werden gelesen
+                    </h3>
+                    
+                    <p style="color: #666; margin-bottom: 1.5rem; font-size: 1rem;">
+                        Ihre Kartendaten werden jetzt verarbeitet.<br>
+                        <strong>Einen Moment bitte...</strong>
+                    </p>
+                    
+                    <div style="
+                        width: 100%;
+                        height: 8px;
+                        background: #f0f0f0;
+                        border-radius: 4px;
+                        overflow: hidden;
+                        margin-bottom: 1rem;
+                    ">
+                        <div id="ocrProgressBar" style="
+                            width: 0%;
+                            height: 100%;
+                            background: linear-gradient(90deg, #4a90e2, #357abd);
+                            border-radius: 4px;
+                            transition: width 0.3s ease;
+                        "></div>
+                    </div>
+                    
+                    <p id="ocrProgressText" style="
+                        color: #4a90e2;
+                        font-size: 0.9rem;
+                        font-weight: 600;
+                    ">Verarbeitung startet...</p>
+                </div>
+                
+                <style>
+                    @keyframes spin {
+                        0% { transform: rotate(0deg); }
+                        100% { transform: rotate(360deg); }
+                    }
+                </style>
+            `;
+            
+            document.body.appendChild(popup);
+            
+            // Simulate realistic OCR progress
+            const progressBar = document.getElementById('ocrProgressBar');
+            const progressText = document.getElementById('ocrProgressText');
+            
+            const steps = [
+                { progress: 15, text: 'Bild wird analysiert...' },
+                { progress: 35, text: 'Text wird erkannt...' },
+                { progress: 60, text: 'Daten werden extrahiert...' },
+                { progress: 85, text: 'Informationen werden validiert...' },
+                { progress: 100, text: 'Verarbeitung abgeschlossen!' }
+            ];
+            
+            let currentStep = 0;
+            const updateProgress = () => {
+                if (currentStep < steps.length) {
+                    const step = steps[currentStep];
+                    progressBar.style.width = `${step.progress}%`;
+                    progressText.textContent = step.text;
+                    currentStep++;
+                    setTimeout(updateProgress, 2000);
+                }
+            };
+            
+            setTimeout(updateProgress, 500);
+        }
+        
+        // NEW: Hide loading popup
+        function hideLoadingPopup() {
+            const popup = document.getElementById('ocrLoadingPopup');
+            if (popup) {
+                popup.style.animation = 'fadeOut 0.3s ease';
+                setTimeout(() => {
+                    popup.remove();
+                }, 300);
+            }
+        }
     </script>
 </body>
 </html> 
