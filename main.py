@@ -1,3 +1,14 @@
+# Environment Variables needed:
+# - LIVEKIT_API_KEY: LiveKit API key
+# - LIVEKIT_API_SECRET: LiveKit API secret  
+# - LIVEKIT_URL: LiveKit server URL
+# - DATABASE_URL: Database connection string (optional, defaults to SQLite)
+# 
+# AWS Textract (for OCR):
+# - AWS_ACCESS_KEY_ID: AWS access key
+# - AWS_SECRET_ACCESS_KEY: AWS secret key  
+# - AWS_REGION: AWS region (default: eu-central-1)
+
 import os
 import random
 import string

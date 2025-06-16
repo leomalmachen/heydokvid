@@ -38,7 +38,9 @@ phonenumbers==8.13.26
 Pillow==10.1.0
 numpy==1.24.4
 opencv-python-headless==4.8.1.78
-# Real OCR processing for insurance cards
+# AWS Textract for professional OCR
+boto3==1.34.0
+# Fallback OCR
 pytesseract==0.3.10
 
 # Development & Testing (optional)

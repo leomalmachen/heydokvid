@@ -1109,16 +1109,18 @@
                                         </div>
                                     </div>
                                     
-                                    <!-- Green Detection Frame -->
+                                    <!-- Green Detection Frame - Card Size -->
                                     <div id="frontDetectionFrame" style="
                                         position: absolute;
-                                        top: 20px;
-                                        left: 20px;
-                                        right: 20px;
-                                        bottom: 20px;
+                                        top: 50%;
+                                        left: 50%;
+                                        transform: translate(-50%, -50%);
+                                        width: 85mm;
+                                        height: 54mm;
                                         border: 3px solid #28a745;
                                         border-radius: 8px;
                                         pointer-events: none;
+                                        box-shadow: 0 0 20px rgba(40, 167, 69, 0.3);
                                     "></div>
                                     
                                     <!-- CLEAR: Simple Status Messages -->
@@ -1135,7 +1137,7 @@
                                          font-size: 0.9rem;
                                          display: block;
                                      ">
-                                        📸 Kamera wird initialisiert...
+                                        ✅ Kamera bereit - Karte bereithalten und auf "Scan Start" drücken
                                     </div>
                                 </div>
                                 
@@ -1146,7 +1148,7 @@
                                 </div>
                             </div>
 
-                            <div id="frontSideStatus" class="scan-status">Kamera wird initialisiert...</div>
+                            <div id="frontSideStatus" class="scan-status">Kamera bereit</div>
                             
                             <!-- Manual Scan Button -->
                             <button id="frontScanButton" class="btn" style="width: 100%; margin-top: 1rem;" onclick="startClearCardScan('front')">
@@ -1163,10 +1165,7 @@
                                 </div>
                             </div>
                             
-                            <!-- Debug Button for troubleshooting -->
-                            <button id="frontDebugButton" class="btn btn-secondary" style="width: 100%; margin-top: 0.5rem; font-size: 0.9rem;" onclick="debugCameraIssues('front')">
-                                🔧 Kamera-Problem diagnostizieren
-                            </button>
+
                             
                             <!-- Quality Guidance -->
                             <div id="frontQualityGuidance" class="quality-guidance" style="display: none;">
@@ -1258,16 +1257,18 @@
                                         </div>
                                     </div>
                                     
-                                    <!-- Green Detection Frame -->
+                                    <!-- Green Detection Frame - Card Size -->
                                     <div id="backDetectionFrame" style="
                                         position: absolute;
-                                        top: 20px;
-                                        left: 20px;
-                                        right: 20px;
-                                        bottom: 20px;
+                                        top: 50%;
+                                        left: 50%;
+                                        transform: translate(-50%, -50%);
+                                        width: 85mm;
+                                        height: 54mm;
                                         border: 3px solid #28a745;
                                         border-radius: 8px;
                                         pointer-events: none;
+                                        box-shadow: 0 0 20px rgba(40, 167, 69, 0.3);
                                     "></div>
                                     
                                     <!-- CLEAR: Simple Status Messages -->
@@ -1284,7 +1285,7 @@
                                          font-size: 0.9rem;
                                          display: block;
                                      ">
-                                        📸 Kamera wird initialisiert...
+                                        ✅ Kamera bereit - Karte bereithalten und auf "Scan Start" drücken
                                     </div>
                                 </div>
                                 
@@ -1295,7 +1296,7 @@
                                 </div>
                             </div>
 
-                            <div id="backSideStatus" class="scan-status">Kamera wird initialisiert...</div>
+                            <div id="backSideStatus" class="scan-status">Kamera bereit</div>
                             
                             <!-- Manual Scan Button -->
                             <div style="text-align: center; margin: 1rem 0;">
@@ -2994,11 +2995,19 @@
                 }
                 
             } catch (error) {
-                console.warn(`⚠️ [${side}] Backend OCR failed: ${error.message}`);
-                console.log(`🔄 [${side}] Using GUARANTEED fallback system...`);
+                console.error(`❌ [${side}] Backend OCR FAILED: ${error.message}`);
+                console.error(`❌ [${side}] Full error:`, error);
                 
-                // GUARANTEED FALLBACK: Always works!
-                return createGuaranteedFallbackData(side);
+                // DEBUGGING: Show actual error to user
+                alert(`OCR Debug Info:\nError: ${error.message}\nSide: ${side}\nCheck console for details`);
+                
+                // Return error instead of fallback for debugging
+                return {
+                    success: false,
+                    error: `OCR FAILED: ${error.message}`,
+                    data: null,
+                    method: 'error_no_fallback'
+                };
             }
         }
         
@@ -3032,6 +3041,47 @@
                     method: 'guaranteed_fallback',
                     message: `Demo-Daten generiert (${timestamp})`
                 };
+            }
+        }
+        
+        // DEBUG: Test backend OCR endpoint
+        async function testBackendOCR() {
+            console.log('🧪 Testing backend OCR endpoint...');
+            
+            try {
+                // Create a small test image (1x1 pixel)
+                const canvas = document.createElement('canvas');
+                canvas.width = 1;
+                canvas.height = 1;
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = 'white';
+                ctx.fillRect(0, 0, 1, 1);
+                
+                // Convert to blob
+                const testBlob = await new Promise(resolve => {
+                    canvas.toBlob(resolve, 'image/jpeg', 0.5);
+                });
+                
+                const formData = new FormData();
+                formData.append('image', testBlob, 'test.jpg');
+                formData.append('meeting_id', meetingId || 'test');
+                formData.append('side', 'front');
+                
+                console.log('🧪 Sending test request...');
+                const response = await fetch('/api/ocr/process-card', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                console.log(`🧪 Response status: ${response.status}`);
+                const result = await response.json();
+                console.log(`🧪 Response data:`, result);
+                
+                alert(`Backend Test Result:\nStatus: ${response.status}\nSuccess: ${result.success}\nError: ${result.error || 'None'}`);
+                
+            } catch (error) {
+                console.error('🧪 Backend test failed:', error);
+                alert(`Backend Test FAILED:\n${error.message}`);
             }
         }
         
@@ -3107,6 +3157,9 @@
                     }
                     
                 } else {
+                    // DEBUGGING: Show OCR method and error details
+                    console.error(`❌ OCR Processing failed:`, processingResult);
+                    alert(`OCR PROCESSING FAILED:\nMethod: ${processingResult.method}\nError: ${processingResult.error}\nSide: ${side}`);
                     throw new Error(processingResult.error || 'OCR processing failed');
                 }
                 
@@ -5312,7 +5365,7 @@
                 // Update status to show we're starting
                 const simpleStatus = document.getElementById(`${side}SimpleStatus`);
                 if (simpleStatus) {
-                    simpleStatus.innerHTML = '📹 Kamera wird aktiviert...';
+                    simpleStatus.innerHTML = '📹 Kamera startet...';
                 }
                 
                 console.log(`📹 Requesting camera access for ${side} side...`);
