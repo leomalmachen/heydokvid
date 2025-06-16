@@ -40,7 +40,8 @@ numpy==1.24.4
 opencv-python-headless==4.8.1.78
 # AWS Textract for professional OCR
 boto3==1.34.0
-# Fallback OCR
+# Modern OCR Solutions
+easyocr==1.7.0
 pytesseract==0.3.10
 # OpenAI Vision API for intelligent text recognition
 openai>=1.0.0
