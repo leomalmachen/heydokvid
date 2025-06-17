@@ -34,18 +34,12 @@ class InsuranceCardService:
             # Convert to OpenCV format for preprocessing
             image_cv = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
             
-            # Preprocess image for better OCR
-            processed_image = self._preprocess_image(image_cv)
-            
             logger.info(f"Processing image with pytesseract: {image.size}")
             
-            # Configure pytesseract for German
-            custom_config = r'--oem 3 --psm 6 -l deu'
+            # Try multiple OCR approaches for better name recognition
+            extracted_data = self._multi_approach_ocr(image_cv)
             
-            # Extract text with pytesseract
-            extracted_text = pytesseract.image_to_string(processed_image, config=custom_config)
-            
-            if not extracted_text or len(extracted_text.strip()) < 10:
+            if not extracted_data:
                 return {
                     "success": False,
                     "error": "Kein Text erkannt - bitte Bildqualität verbessern und erneut scannen",
@@ -54,7 +48,7 @@ class InsuranceCardService:
                 }
             
             # Parse German insurance card data
-            parsed_data = self._parse_german_insurance_card(extracted_text)
+            parsed_data = self._parse_german_insurance_card(extracted_data['text'])
             
             # Check if we found meaningful data
             meaningful_data = any([
@@ -69,7 +63,7 @@ class InsuranceCardService:
                     "error": "Kartendaten nicht lesbar - bitte Karte besser positionieren und erneut scannen",
                     "data": {},
                     "confidence": 0.6,
-                    "raw_ocr": extracted_text
+                    "raw_ocr": extracted_data['text']
                 }
             
             logger.info(f"Pytesseract success: {list(parsed_data.keys())}")
@@ -77,8 +71,8 @@ class InsuranceCardService:
             return {
                 "success": True,
                 "data": parsed_data,
-                "confidence": 0.8,
-                "raw_ocr": extracted_text
+                "confidence": extracted_data['confidence'],
+                "raw_ocr": extracted_data['text']
             }
             
         except Exception as e:
@@ -89,6 +83,123 @@ class InsuranceCardService:
                 "data": {},
                 "confidence": 0.0
             }
+    
+    def _multi_approach_ocr(self, image_cv):
+        """Try multiple OCR approaches and return the best result"""
+        approaches = [
+            # Approach 1: Gentle preprocessing for names
+            {
+                'preprocessing': self._preprocess_for_text,
+                'config': r'--oem 3 --psm 6 -l deu',
+                'weight': 1.0
+            },
+            # Approach 2: High contrast for numbers  
+            {
+                'preprocessing': self._preprocess_for_numbers,
+                'config': r'--oem 3 --psm 7 -l deu',
+                'weight': 0.8
+            },
+            # Approach 3: Original image with minimal processing
+            {
+                'preprocessing': self._minimal_preprocess,
+                'config': r'--oem 3 --psm 6 -l deu+eng',
+                'weight': 0.9
+            }
+        ]
+        
+        best_result = None
+        best_score = 0
+        all_texts = []
+        
+        for approach in approaches:
+            try:
+                processed_img = approach['preprocessing'](image_cv)
+                text = pytesseract.image_to_string(processed_img, config=approach['config'])
+                
+                if text and len(text.strip()) > 5:
+                    # Simple scoring based on text length and expected patterns
+                    score = len(text.strip()) * approach['weight']
+                    
+                    # Bonus for finding name patterns
+                    if re.search(r'[A-ZÄÖÜ][a-zäöüß]+\s+[A-ZÄÖÜ][a-zäöüß]+', text):
+                        score += 20
+                    
+                    # Bonus for finding insurance numbers
+                    if re.search(r'[A-Z]?\d{8,10}', text):
+                        score += 15
+                        
+                    all_texts.append(text)
+                    
+                    if score > best_score:
+                        best_score = score
+                        best_result = {
+                            'text': text,
+                            'confidence': min(score / 100, 0.95)
+                        }
+                        
+            except Exception as e:
+                logger.warning(f"OCR approach failed: {e}")
+                continue
+        
+        # If we have multiple texts, try to combine them
+        if len(all_texts) > 1:
+            combined_text = self._combine_ocr_results(all_texts)
+            if combined_text and len(combined_text) > (best_result['text'] if best_result else ''):
+                best_result = {
+                    'text': combined_text,
+                    'confidence': 0.85
+                }
+        
+        return best_result
+    
+    def _preprocess_for_text(self, image_cv):
+        """Gentle preprocessing optimized for text/names"""
+        gray = cv2.cvtColor(image_cv, cv2.COLOR_BGR2GRAY)
+        
+        # Very gentle blur to reduce noise
+        blurred = cv2.GaussianBlur(gray, (1, 1), 0)
+        
+        # Adaptive threshold with larger block size for text
+        thresh = cv2.adaptiveThreshold(
+            blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 15, 4
+        )
+        
+        return thresh
+    
+    def _preprocess_for_numbers(self, image_cv):
+        """More aggressive preprocessing for numbers"""
+        gray = cv2.cvtColor(image_cv, cv2.COLOR_BGR2GRAY)
+        
+        # Sharpen for numbers
+        kernel = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
+        sharpened = cv2.filter2D(gray, -1, kernel)
+        
+        # High contrast threshold
+        _, thresh = cv2.threshold(sharpened, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        
+        return thresh
+    
+    def _minimal_preprocess(self, image_cv):
+        """Minimal preprocessing - just grayscale"""
+        return cv2.cvtColor(image_cv, cv2.COLOR_BGR2GRAY)
+    
+    def _combine_ocr_results(self, texts):
+        """Combine multiple OCR results to get the best parts"""
+        combined_lines = []
+        
+        for text in texts:
+            lines = [line.strip() for line in text.split('\n') if line.strip()]
+            combined_lines.extend(lines)
+        
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_lines = []
+        for line in combined_lines:
+            if line not in seen:
+                seen.add(line)
+                unique_lines.append(line)
+        
+        return '\n'.join(unique_lines)
     
     def _preprocess_image(self, image_cv):
         """Preprocess image for better OCR results"""
