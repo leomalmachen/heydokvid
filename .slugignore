@@ -1,0 +1,85 @@
+# Slug size optimization for Heroku deployment
+# Remove unnecessary files to reduce slug size under 500MB
+
+# Development and testing files
+/test
+/tests
+*.test.py
+pytest_cache/
+.pytest_cache/
+
+# Documentation and media files
+*.md
+*.pdf
+*.psd
+*.ai
+*.sketch
+docs/
+README.md
+CHANGELOG.md
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git and version control
+.git/
+.gitignore
+.gitattributes
+
+# Python cache and temporary files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.coverage
+.tox/
+.cache/
+
+# Environment and config files
+.env.example
+.env.local
+.env.development
+.env.testing
+
+# Node.js (if any)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Large media and asset files
+*.mp4
+*.avi
+*.mov
+*.wav
+*.mp3
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+
+# Backup and temporary files
+*.bak
+*.tmp
+*.temp
+*.log
+
+# Development uploads folder content (keep structure but not content)
+uploads/*
+!uploads/.gitkeep 

@@ -1690,6 +1690,10 @@ async def patient_join_meeting(
         logger.error(f"Fehler beim Token-Generieren für Patient {request.patient_name}: {e}")
         raise HTTPException(status_code=500, detail="Fehler beim Meeting-Beitritt")
 
+    # Hier integration an heydok backend
+    # 1. Meeting-ID an heydok backend senden
+    
+
 @app.get("/api/meetings/{meeting_id}/status", response_model=MeetingStatusResponse)
 async def get_meeting_status(meeting_id: str, meeting_service: MeetingService = Depends(get_meeting_service), document_service: DocumentService = Depends(get_document_service)):
     """Get detailed meeting status for role-based UI updates"""

@@ -1,43 +1,58 @@
 """
-Insurance Card Service - Minimal Pillow-Only Implementation
-Lightweight OCR service for German insurance cards using Tesseract with Pillow preprocessing
+Enhanced Insurance Card Service - EasyOCR Implementation
+Advanced OCR service for German insurance cards using EasyOCR with optimized preprocessing
 """
-import pytesseract
+import easyocr
+import cv2
+import numpy as np
 import logging
 import uuid
+import io
+import re
 from datetime import datetime
 from typing import Dict, Any, Optional, List, Tuple
 from sqlalchemy.orm import Session
-import re
-from PIL import Image, ImageEnhance, ImageFilter
-import io
+from PIL import Image, ImageEnhance, ImageFilter, ImageOps
 
 logger = logging.getLogger(__name__)
 
 class InsuranceCardService:
-    """Service for processing German insurance cards with Pillow-only preprocessing"""
+    """Enhanced service for processing German insurance cards with EasyOCR"""
     
     def __init__(self, db: Session):
         self.db = db
-        logger.info("Minimal Tesseract OCR initialized with Pillow-only preprocessing")
+        # Initialize EasyOCR with German and English support, CPU-only for Heroku
+        try:
+            self.reader = easyocr.Reader(['de', 'en'], gpu=False, verbose=False)
+            logger.info("EasyOCR initialized successfully with German + English support (CPU-only)")
+        except Exception as e:
+            logger.error(f"Failed to initialize EasyOCR: {e}")
+            self.reader = None
     
     def extract_card_data(self, image_bytes: bytes) -> Dict[str, Any]:
         """
-        Extract data from insurance card image using Tesseract with Pillow preprocessing
-        Minimal implementation optimized for Heroku size constraints
+        Extract data from insurance card image using EasyOCR with advanced preprocessing
         """
+        if not self.reader:
+            return {
+                "success": False,
+                "error": "EasyOCR nicht verfügbar - Service-Initialisierung fehlgeschlagen",
+                "data": {},
+                "confidence": 0.0
+            }
+
         try:
-            logger.info(f"Starting minimal Tesseract processing, image size: {len(image_bytes)} bytes")
+            logger.info(f"Starting EasyOCR processing, image size: {len(image_bytes)} bytes")
             
             # Convert bytes to PIL Image
             image = Image.open(io.BytesIO(image_bytes))
             logger.info(f"PIL Image loaded: {image.size}, mode: {image.mode}")
             
-            # Try multiple Pillow-based approaches
-            extracted_data = self._multi_approach_pillow_tesseract(image)
+            # Apply multi-approach EasyOCR processing
+            results = self._multi_approach_easyocr(image)
             
-            if not extracted_data:
-                logger.warning("No OCR data extracted from any Pillow approach")
+            if not results:
+                logger.warning("No OCR results from any approach")
                 return {
                     "success": False,
                     "error": "Kein Text erkannt - bitte Bildqualität verbessern und erneut scannen",
@@ -45,40 +60,37 @@ class InsuranceCardService:
                     "confidence": 0.0
                 }
             
-            logger.info(f"Minimal Tesseract extraction successful, text length: {len(extracted_data.get('text', ''))}")
+            # Get best result based on confidence
+            best_result = max(results, key=lambda x: x['avg_confidence'])
+            logger.info(f"Best approach: {best_result['approach']} with confidence: {best_result['avg_confidence']:.3f}")
             
-            # Parse German insurance card data
-            parsed_data = self._parse_german_insurance_card_simple(extracted_data['text'])
-            logger.info(f"Parsed data keys: {list(parsed_data.keys())}")
+            # Combine and parse all text findings
+            combined_text = self._combine_all_text(results)
+            parsed_data = self._parse_german_insurance_card(combined_text, best_result['detections'])
             
-            # Check if we found meaningful data
-            meaningful_data = any([
-                parsed_data.get('name'),
-                parsed_data.get('insurance_number'),
-                parsed_data.get('insurance_company')
-            ])
-            
-            if not meaningful_data:
-                logger.warning(f"No meaningful data found, raw text: {extracted_data['text'][:200]}")
+            # Validate extracted data
+            if not self._has_meaningful_data(parsed_data):
+                logger.warning(f"No meaningful insurance data found")
                 return {
                     "success": False,
                     "error": "Kartendaten nicht lesbar - bitte Karte besser positionieren und erneut scannen",
                     "data": {},
-                    "confidence": 0.6,
-                    "raw_ocr": extracted_data['text']
+                    "confidence": best_result['avg_confidence'],
+                    "raw_text": combined_text[:200]
                 }
             
-            logger.info(f"Minimal Tesseract success: {list(parsed_data.keys())}")
+            logger.info(f"EasyOCR extraction successful: {list(parsed_data.keys())}")
             
             return {
                 "success": True,
                 "data": parsed_data,
-                "confidence": extracted_data['confidence'],
-                "raw_ocr": extracted_data['text']
+                "confidence": best_result['avg_confidence'],
+                "raw_text": combined_text,
+                "approach_used": best_result['approach']
             }
             
         except Exception as e:
-            logger.error(f"Minimal Tesseract processing error: {e}", exc_info=True)
+            logger.error(f"EasyOCR processing error: {e}", exc_info=True)
             return {
                 "success": False,
                 "error": f"OCR-Verarbeitung fehlgeschlagen: {str(e)[:100]} - bitte erneut versuchen",
@@ -86,313 +98,169 @@ class InsuranceCardService:
                 "confidence": 0.0
             }
     
-    def _multi_approach_pillow_tesseract(self, image) -> Optional[Dict[str, Any]]:
-        """Ultra-aggressive OCR with specialized German insurance card processing"""
+    def _multi_approach_easyocr(self, image: Image.Image) -> List[Dict[str, Any]]:
+        """Apply multiple preprocessing approaches for optimal results"""
         approaches = [
-            # Approach 1: Ultra-high resolution German names
             {
-                'name': 'ultra_german_names',
-                'preprocessing': self._preprocess_ultra_german_names,
-                'config': r'--oem 1 --psm 8 -l deu -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÜßabcdefghijklmnopqrstuvwxyzäöüß ',
-                'weight': 2.0
+                'name': 'enhanced_contrast',
+                'method': self._preprocess_enhanced_contrast,
+                'description': 'High contrast for clear text'
             },
-            # Approach 2: Extreme contrast for AOK
             {
-                'name': 'extreme_aok_detection',
-                'preprocessing': self._preprocess_extreme_aok,
-                'config': r'--oem 1 --psm 7 -l deu -c tessedit_char_whitelist=AOKBAYERN ',
-                'weight': 1.9
+                'name': 'gaussian_smooth',
+                'method': self._preprocess_gaussian_smooth,
+                'description': 'Gaussian blur for noise reduction'
             },
-            # Approach 3: Number isolation 
             {
-                'name': 'isolated_numbers',
-                'preprocessing': self._preprocess_isolate_numbers,
-                'config': r'--oem 1 --psm 13 -l eng -c tessedit_char_whitelist=0123456789',
-                'weight': 1.8
+                'name': 'adaptive_sharp',
+                'method': self._preprocess_adaptive_sharp,
+                'description': 'Adaptive sharpening for text clarity'
             },
-            # Approach 4: Region-based scanning
             {
-                'name': 'region_based',
-                'preprocessing': self._preprocess_region_based,
-                'config': r'--oem 1 --psm 6 -l deu+eng',
-                'weight': 1.7
-            },
-            # Approach 5: Maximum sharpness
-            {
-                'name': 'maximum_sharp',
-                'preprocessing': self._preprocess_maximum_sharp,
-                'config': r'--oem 1 --psm 6 -l deu -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÜßabcdefghijklmnopqrstuvwxyzäöüß0123456789 ',
-                'weight': 1.6
+                'name': 'high_resolution',
+                'method': self._preprocess_high_resolution,
+                'description': 'Resolution enhancement for small text'
             }
         ]
         
-        best_result = None
-        best_score = 0
-        all_results = []
+        results = []
         
-        for i, approach in enumerate(approaches):
+        for approach in approaches:
             try:
-                logger.info(f"Trying ULTRA approach {i+1}: {approach['name']}")
-                processed_img = approach['preprocessing'](image)
+                logger.info(f"Applying EasyOCR approach: {approach['name']}")
                 
-                # Run Tesseract with ultra config
-                text = pytesseract.image_to_string(processed_img, config=approach['config'])
+                # Apply preprocessing
+                processed_image = approach['method'](image)
                 
-                if not text or len(text.strip()) < 1:
-                    logger.warning(f"Ultra approach {i+1} extracted minimal text")
-                    continue
+                # Convert PIL to numpy array for EasyOCR
+                img_array = np.array(processed_image)
                 
-                logger.info(f"Ultra approach {i+1} extracted: {text[:100]}...")
+                # Run EasyOCR
+                detections = self.reader.readtext(img_array, detail=1)
                 
-                # Calculate ULTRA scoring
-                score = self._calculate_ultra_score(text, approach['weight'])
-                
-                text_data = {
-                    'text': text,
-                    'confidence': min(score / 100, 0.98),
-                    'approach': approach['name']
-                }
-                all_results.append(text_data)
-                
-                if score > best_score:
-                    best_score = score
-                    best_result = text_data
-                    logger.info(f"NEW ULTRA BEST from {approach['name']}, score: {score}")
+                if detections:
+                    # Calculate average confidence
+                    confidences = [det[2] for det in detections if det[2] > 0.1]
+                    avg_confidence = sum(confidences) / len(confidences) if confidences else 0.0
+                    
+                    # Extract all text
+                    extracted_text = ' '.join([det[1] for det in detections if det[2] > 0.1])
+                    
+                    result = {
+                        'approach': approach['name'],
+                        'detections': detections,
+                        'extracted_text': extracted_text,
+                        'avg_confidence': avg_confidence,
+                        'text_count': len([det for det in detections if det[2] > 0.1])
+                    }
+                    
+                    results.append(result)
+                    logger.info(f"Approach {approach['name']}: {len(detections)} detections, "
+                              f"avg confidence: {avg_confidence:.3f}")
+                else:
+                    logger.warning(f"No detections from approach: {approach['name']}")
                     
             except Exception as e:
-                logger.warning(f"Ultra approach {i+1} failed: {e}")
+                logger.warning(f"Approach {approach['name']} failed: {e}")
                 continue
         
-        # ULTRA combination with pattern forcing
-        if all_results:
-            forced_result = self._force_pattern_extraction(all_results, image)
-            if forced_result and len(forced_result) > 10:
-                best_result = {
-                    'text': forced_result,
-                    'confidence': 0.98,
-                    'approach': 'ultra_forced_pattern'
-                }
-                logger.info("Using ULTRA FORCED pattern result")
-        
-        return best_result
+        return results
     
-    def _preprocess_ultra_german_names(self, image):
-        """Ultra-aggressive preprocessing for German names"""
+    def _preprocess_enhanced_contrast(self, image: Image.Image) -> Image.Image:
+        """Enhanced contrast preprocessing for clear text recognition"""
         # Convert to grayscale
         if image.mode != 'L':
-            gray = image.convert('L')
-        else:
-            gray = image
+            image = image.convert('L')
         
-        # MASSIVE resolution increase
-        width, height = gray.size
-        new_size = (width * 8, height * 8)
-        resized = gray.resize(new_size, Image.Resampling.LANCZOS)
+        # Increase resolution for better recognition
+        width, height = image.size
+        image = image.resize((width * 2, height * 2), Image.LANCZOS)
         
-        # Extreme contrast
-        enhancer = ImageEnhance.Contrast(resized)
-        ultra_contrast = enhancer.enhance(4.0)
+        # Enhance contrast significantly
+        enhancer = ImageEnhance.Contrast(image)
+        image = enhancer.enhance(2.5)
         
-        # Multiple sharpening passes
-        ultra_sharp = ultra_contrast
-        for _ in range(3):
-            ultra_sharp = ultra_sharp.filter(ImageFilter.UnsharpMask(radius=3, percent=300, threshold=1))
+        # Apply slight sharpening
+        image = image.filter(ImageFilter.UnsharpMask(radius=1, percent=150, threshold=1))
         
-        # Final brightness boost
-        brightness_enhancer = ImageEnhance.Brightness(ultra_sharp)
-        final = brightness_enhancer.enhance(1.3)
-        
-        return final
+        return image
     
-    def _preprocess_extreme_aok(self, image):
-        """Extreme preprocessing specifically for AOK text"""
-        # Focus on green areas where AOK typically appears
-        if image.mode != 'RGB':
-            rgb_image = image.convert('RGB')
-        else:
-            rgb_image = image
-        
-        # Convert to grayscale with green channel emphasis
-        gray = rgb_image.split()[1]  # Green channel
-        
-        # Ultra high resolution
-        width, height = gray.size
-        new_size = (width * 10, height * 10)
-        resized = gray.resize(new_size, Image.Resampling.LANCZOS)
-        
-        # Extreme contrast for AOK
-        enhancer = ImageEnhance.Contrast(resized)
-        extreme_contrast = enhancer.enhance(5.0)
-        
-        # Ultra sharpening
-        for _ in range(4):
-            extreme_contrast = extreme_contrast.filter(ImageFilter.UnsharpMask(radius=4, percent=400, threshold=0))
-        
-        return extreme_contrast
-    
-    def _preprocess_isolate_numbers(self, image):
-        """Isolate and enhance numbers specifically"""
+    def _preprocess_gaussian_smooth(self, image: Image.Image) -> Image.Image:
+        """Gaussian smoothing for noise reduction"""
         # Convert to grayscale
         if image.mode != 'L':
-            gray = image.convert('L')
-        else:
-            gray = image
+            image = image.convert('L')
         
-        # Ultra resolution for number precision
-        width, height = gray.size
-        new_size = (width * 6, height * 6)
-        resized = gray.resize(new_size, Image.Resampling.LANCZOS)
+        # Moderate resolution increase
+        width, height = image.size
+        image = image.resize((width * 1.5, height * 1.5), Image.LANCZOS)
         
-        # High contrast for numbers
-        enhancer = ImageEnhance.Contrast(resized)
-        high_contrast = enhancer.enhance(3.5)
+        # Apply Gaussian blur to reduce noise
+        image = image.filter(ImageFilter.GaussianBlur(radius=0.5))
         
-        # Edge enhancement for number clarity
-        edge_enhanced = high_contrast.filter(ImageFilter.EDGE_ENHANCE_MORE)
-        edge_enhanced = edge_enhanced.filter(ImageFilter.EDGE_ENHANCE_MORE)
+        # Moderate contrast enhancement
+        enhancer = ImageEnhance.Contrast(image)
+        image = enhancer.enhance(1.8)
         
-        return edge_enhanced
+        return image
     
-    def _preprocess_region_based(self, image):
-        """Split image into regions and process separately"""
+    def _preprocess_adaptive_sharp(self, image: Image.Image) -> Image.Image:
+        """Adaptive sharpening for text clarity"""
         # Convert to grayscale
         if image.mode != 'L':
-            gray = image.convert('L')
-        else:
-            gray = image
+            image = image.convert('L')
         
-        # High resolution
-        width, height = gray.size
-        new_size = (width * 4, height * 4)
-        resized = gray.resize(new_size, Image.Resampling.LANCZOS)
+        # Standard resolution increase
+        width, height = image.size
+        image = image.resize((width * 2, height * 2), Image.LANCZOS)
         
-        # Strong preprocessing
-        enhancer = ImageEnhance.Contrast(resized)
-        contrast = enhancer.enhance(2.8)
+        # Apply adaptive sharpening
+        image = image.filter(ImageFilter.UnsharpMask(radius=2, percent=200, threshold=2))
         
-        sharpness_enhancer = ImageEnhance.Sharpness(contrast)
-        sharp = sharpness_enhancer.enhance(3.5)
-        
-        return sharp
-    
-    def _preprocess_maximum_sharp(self, image):
-        """Maximum possible sharpening"""
-        # Convert to grayscale
-        if image.mode != 'L':
-            gray = image.convert('L')
-        else:
-            gray = image
-        
-        # High resolution
-        width, height = gray.size
-        new_size = (width * 7, height * 7)
-        resized = gray.resize(new_size, Image.Resampling.LANCZOS)
-        
-        # Apply multiple filters
-        processed = resized
-        for _ in range(5):
-            processed = processed.filter(ImageFilter.UnsharpMask(radius=2, percent=250, threshold=1))
-            processed = processed.filter(ImageFilter.SHARPEN)
+        # Enhance sharpness
+        enhancer = ImageEnhance.Sharpness(image)
+        image = enhancer.enhance(2.0)
         
         # Final contrast boost
-        enhancer = ImageEnhance.Contrast(processed)
-        final = enhancer.enhance(3.0)
+        enhancer = ImageEnhance.Contrast(image)
+        image = enhancer.enhance(1.6)
         
-        return final
+        return image
     
-    def _calculate_ultra_score(self, text: str, base_weight: float) -> float:
-        """Ultra-aggressive scoring for German insurance cards"""
-        score = len(text.strip()) * base_weight * 0.3
+    def _preprocess_high_resolution(self, image: Image.Image) -> Image.Image:
+        """High resolution enhancement for small text"""
+        # Convert to grayscale
+        if image.mode != 'L':
+            image = image.convert('L')
         
-        # DIRECT pattern matching for known content
-        if 'Leonhard' in text or 'leonhard' in text.lower():
-            score += 200
-            logger.info("FOUND: Leonhard in text!")
+        # Significant resolution increase
+        width, height = image.size
+        image = image.resize((width * 3, height * 3), Image.LANCZOS)
         
-        if 'Pöppel' in text or 'pöppel' in text.lower() or 'Poeppel' in text or 'Ppel' in text:
-            score += 150
-            logger.info("FOUND: Pöppel (or variant) in text!")
+        # Brightness adjustment
+        enhancer = ImageEnhance.Brightness(image)
+        image = enhancer.enhance(1.1)
         
-        if 'AOK' in text.upper():
-            score += 180
-            logger.info("FOUND: AOK in text!")
+        # Moderate contrast
+        enhancer = ImageEnhance.Contrast(image)
+        image = enhancer.enhance(1.5)
         
-        if 'BAYERN' in text.upper() or 'Bayern' in text:
-            score += 120
-            logger.info("FOUND: Bayern in text!")
-        
-        if '108310400' in text:
-            score += 250
-            logger.info("FOUND: Complete insurance number!")
-        
-        # Partial number matches
-        if '10831' in text or '310400' in text:
-            score += 100
-            logger.info("FOUND: Partial insurance number!")
-        
-        # Any 10-digit number
-        numbers = re.findall(r'\d{10}', text)
-        if numbers:
-            score += 80 * len(numbers)
-            logger.info(f"FOUND: 10-digit numbers: {numbers}")
-        
-        # German names pattern
-        german_names = re.findall(r'[A-ZÄÖÜ][a-zäöüß]+\s+[A-ZÄÖÜ][a-zäöüß]+', text)
-        if german_names:
-            score += 120 * len(german_names)
-            logger.info(f"FOUND: German name patterns: {german_names}")
-        
-        return score
+        return image
     
-    def _force_pattern_extraction(self, results: List[Dict], original_image) -> str:
-        """Force extraction of known patterns using all available data"""
-        all_text = ""
+    def _combine_all_text(self, results: List[Dict[str, Any]]) -> str:
+        """Combine text from all approaches for comprehensive parsing"""
+        all_text_parts = []
+        
         for result in results:
-            all_text += " " + result.get('text', '')
+            if result.get('extracted_text'):
+                all_text_parts.append(result['extracted_text'])
         
-        logger.info(f"FORCE EXTRACTION from combined text: {all_text[:200]}")
-        
-        # Force construct the result we expect
-        forced_parts = []
-        
-        # Force name extraction
-        name_found = False
-        for pattern in ['Leonhard', 'leonhard', 'Leon']:
-            if pattern.lower() in all_text.lower():
-                forced_parts.append("Leonhard Pöppel")
-                name_found = True
-                logger.info("FORCED: Name to Leonhard Pöppel")
-                break
-        
-        if not name_found:
-            # Look for any capital letters that might be name parts
-            caps = re.findall(r'[A-Z][a-z]+', all_text)
-            if len(caps) >= 2:
-                forced_parts.append(f"{caps[0]} {caps[1]}")
-                logger.info(f"FORCED: Name from capitals: {caps[0]} {caps[1]}")
-        
-        # Force AOK extraction
-        if 'aok' in all_text.lower() or 'AOK' in all_text:
-            forced_parts.append("AOK BAYERN")
-            logger.info("FORCED: Company to AOK BAYERN")
-        
-        # Force number extraction
-        if '108310400' in all_text:
-            forced_parts.append("108310400")
-            logger.info("FORCED: Complete number found")
-        else:
-            # Look for any long number
-            numbers = re.findall(r'\d{8,}', all_text)
-            if numbers:
-                forced_parts.append(numbers[0])
-                logger.info(f"FORCED: Number to {numbers[0]}")
-        
-        result = '\n'.join(forced_parts)
-        logger.info(f"FINAL FORCED RESULT: {result}")
-        return result
+        combined = ' '.join(all_text_parts)
+        logger.info(f"Combined text length: {len(combined)} characters")
+        return combined
     
-    def _parse_german_insurance_card_simple(self, text: str) -> Dict[str, str]:
-        """Enhanced German insurance card parsing with precision focus"""
+    def _parse_german_insurance_card(self, combined_text: str, best_detections: List) -> Dict[str, str]:
+        """Parse German insurance card data with enhanced pattern recognition"""
         data = {
             'name': '',
             'insurance_number': '',
@@ -401,75 +269,102 @@ class InsuranceCardService:
             'valid_until': ''
         }
         
-        if not text or not text.strip():
+        if not combined_text:
             return data
         
-        lines = text.split('\n') if '\n' in text else [text]
-        text_clean = ' '.join(lines).strip()
+        # Clean and prepare text
+        text_clean = re.sub(r'\s+', ' ', combined_text).strip()
         
-        # Enhanced name extraction with multiple patterns
+        # Enhanced name extraction with German patterns
         name_patterns = [
-            r'(Leonhard\s+Pöppel)',  # Specific for this card
-            r'([A-ZÄÖÜ][a-zäöüß]+\s+[A-ZÄÖÜ][a-zäöüß]+)',  # Standard German names
-            r'([A-Z][a-z]+\s+[A-Z][a-z]+)',  # Without umlauts
+            r'([A-ZÄÖÜ][a-zäöüß]+(?:\s+[a-zäöüß]+)?\s+[A-ZÄÖÜ][a-zäöüß]+)',  # German names with optional middle names
+            r'([A-Z][a-z]+(?:\s+[a-z]+)?\s+[A-Z][a-z]+)',  # Without umlauts
         ]
         
         for pattern in name_patterns:
-            name_match = re.search(pattern, text_clean)
-            if name_match:
-                potential_name = name_match.group(1).strip()
-                # Validate it's a real name
-                if (len(potential_name.split()) >= 2 and 
-                    not any(company in potential_name.upper() for company in ['AOK', 'TK', 'BARMER', 'DAK']) and
-                    len(potential_name) <= 50 and
-                    not re.search(r'\d', potential_name)):
-                    data['name'] = potential_name
+            matches = re.findall(pattern, text_clean)
+            for match in matches:
+                # Validate it's a real name (not company, etc.)
+                if (len(match.split()) >= 2 and 
+                    len(match) <= 50 and 
+                    not re.search(r'\d', match) and
+                    not any(company.lower() in match.lower() for company in 
+                           ['aok', 'tk', 'barmer', 'dak', 'ikkk', 'techniker', 'knappschaft'])):
+                    data['name'] = match.strip()
                     break
+            if data['name']:
+                break
         
         # Enhanced insurance number extraction
         number_patterns = [
-            r'(108310400)',  # Specific number from the card
-            r'([A-Z]?\d{9,10})',  # General pattern
+            r'\b([A-Z]?\d{10})\b',  # 10-digit with optional prefix
+            r'\b(\d{10})\b',        # Exactly 10 digits
+            r'\b([A-Z]\d{9})\b',    # Letter + 9 digits
         ]
         
         for pattern in number_patterns:
-            number_match = re.search(pattern, text_clean)
-            if number_match:
-                data['insurance_number'] = number_match.group(1)
-                break
+            match = re.search(pattern, text_clean)
+            if match:
+                number = match.group(1)
+                # Validate it looks like an insurance number
+                if len(number) >= 9:
+                    data['insurance_number'] = number
+                    break
         
-        # Enhanced company detection with AOK focus
+        # Enhanced German insurance company detection
         company_patterns = [
-            ('AOK', r'(?:AOK|A\s*O\s*K|aok)'),
-            ('TK', r'(?:TK|Techniker|TECHNIKER)'),
-            ('Barmer', r'(?:BARMER|Barmer)'),
-            ('DAK', r'(?:DAK|dak)'),
+            (r'(?:AOK|A\.O\.K\.?)', 'AOK'),
+            (r'(?:TK|Techniker|TECHNIKER)', 'Techniker Krankenkasse'),
+            (r'(?:BARMER|Barmer)', 'Barmer'),
+            (r'(?:DAK|DAK-Gesundheit)', 'DAK-Gesundheit'),
+            (r'(?:IKK|Innungskrankenkasse)', 'IKK'),
+            (r'(?:HEK|Hanseatische)', 'HEK'),
+            (r'(?:KKH|Kaufmännische)', 'KKH'),
+            (r'(?:Knappschaft)', 'Knappschaft'),
         ]
         
-        for company_name, pattern in company_patterns:
+        for pattern, name in company_patterns:
             if re.search(pattern, text_clean, re.IGNORECASE):
-                data['insurance_company'] = company_name
+                data['insurance_company'] = name
                 break
         
-        # Extract dates
-        dates = re.findall(r'(\d{1,2}[\/\.]\d{2,4})', text_clean)
-        if dates:
-            data['valid_until'] = dates[-1]
-            if len(dates) > 1:
-                data['birth_date'] = dates[0]
+        # Date extraction
+        date_patterns = [
+            r'\b(\d{2}[\.\/]\d{2}[\.\/]\d{4})\b',  # DD.MM.YYYY or DD/MM/YYYY
+            r'\b(\d{2}[\.\/]\d{4})\b',             # MM.YYYY or MM/YYYY
+            r'\b(\d{1,2}[\.\/]\d{1,2}[\.\/]\d{2,4})\b'  # Flexible date
+        ]
         
-        # Log what we extracted
-        found = {k: v for k, v in data.items() if v}
-        logger.info(f"Precision parsing found: {found}")
+        dates_found = []
+        for pattern in date_patterns:
+            dates_found.extend(re.findall(pattern, text_clean))
+        
+        if dates_found:
+            # Assume last date is valid_until, first might be birth_date
+            data['valid_until'] = dates_found[-1]
+            if len(dates_found) > 1:
+                data['birth_date'] = dates_found[0]
+        
+        # Log extraction results
+        found_fields = {k: v for k, v in data.items() if v}
+        logger.info(f"Extracted insurance data: {found_fields}")
         
         return data
+    
+    def _has_meaningful_data(self, data: Dict[str, str]) -> bool:
+        """Check if extracted data contains meaningful insurance information"""
+        essential_fields = ['name', 'insurance_number', 'insurance_company']
+        found_essential = sum(1 for field in essential_fields if data.get(field))
+        
+        # At least 2 out of 3 essential fields should be found
+        return found_essential >= 2
     
     def validate_card_type(self, image_bytes: bytes) -> Dict[str, Any]:
         """Simple card validation"""
         return {
             "is_insurance_card": True,
             "card_type": "insurance",
-            "confidence": 0.8,
+            "confidence": 0.85,
             "success": True
         }
     

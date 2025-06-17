@@ -1,6 +1,8 @@
-tesseract-ocr
-tesseract-ocr-deu
-tesseract-ocr-eng
-tesseract-ocr-osd
-libtesseract-dev
-libleptonica-dev 
+# EasyOCR system dependencies for Heroku
+libglib2.0-0
+libsm6
+libxext6
+libxrender-dev
+libgomp1
+libgthread-2.0-0
+libglib2.0-dev 
