@@ -38,10 +38,8 @@ phonenumbers==8.13.26
 Pillow==10.1.0
 numpy==1.24.4
 opencv-python-headless==4.8.1.78
-# OCR - EasyOCR (excellent for German text, easier installation)
-easyocr==1.7.2
-torch==2.7.1
-torchvision==0.22.1
+# OCR - Better alternative: Back to improved Tesseract for Heroku compatibility
+pytesseract==0.3.10
 
 # Development & Testing (optional)
 pytest==7.4.3
