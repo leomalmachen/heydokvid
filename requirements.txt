@@ -34,16 +34,12 @@ httpx==0.25.2
 email-validator>=1.3.0,<3.0.0
 phonenumbers==8.13.26
 
-# Image Processing & OCR (NEW: for insurance card detection)
+# Image Processing & OCR - LIGHTWEIGHT VERSION
 Pillow==10.1.0
 numpy==1.24.4
 opencv-python-headless==4.8.1.78
-# AWS Textract for professional OCR
-boto3==1.34.0
-# Modern OCR Solutions
-easyocr==1.7.0
+# OCR - Only Tesseract (lightweight)
 pytesseract==0.3.10
-
 
 # Development & Testing (optional)
 pytest==7.4.3

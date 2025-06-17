@@ -1,8 +1,8 @@
 """
-Insurance Card Service - EasyOCR Only Implementation
-Simple OCR service for German insurance cards using EasyOCR
+Insurance Card Service - Pytesseract Only Implementation
+Lightweight OCR service for German insurance cards using pytesseract
 """
-import easyocr
+import pytesseract
 import logging
 import uuid
 from datetime import datetime
@@ -12,50 +12,40 @@ import re
 from PIL import Image
 import io
 import numpy as np
+import cv2
 
 logger = logging.getLogger(__name__)
 
 class InsuranceCardService:
-    """Service for processing German insurance cards with EasyOCR only"""
+    """Service for processing German insurance cards with pytesseract only"""
     
     def __init__(self, db: Session):
         self.db = db
-        self.reader = None
-        self._init_ocr()
-    
-    def _init_ocr(self):
-        """Initialize EasyOCR reader"""
-        try:
-            self.reader = easyocr.Reader(['de', 'en'], gpu=False)
-            logger.info("EasyOCR initialized successfully")
-        except Exception as e:
-            logger.error(f"Failed to initialize EasyOCR: {e}")
-            self.reader = None
     
     def extract_card_data(self, image_bytes: bytes) -> Dict[str, Any]:
         """
-        Extract data from insurance card image using EasyOCR only
+        Extract data from insurance card image using pytesseract only
         No fallbacks - if it fails, user must retry
         """
         try:
-            if not self.reader:
-                return {
-                    "success": False,
-                    "error": "OCR-System nicht verfügbar - bitte erneut versuchen",
-                    "data": {},
-                    "confidence": 0.0
-                }
-            
             # Convert bytes to PIL Image
             image = Image.open(io.BytesIO(image_bytes))
-            image_array = np.array(image)
             
-            logger.info(f"Processing image with EasyOCR: {image.size}")
+            # Convert to OpenCV format for preprocessing
+            image_cv = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
             
-            # Extract text with EasyOCR
-            results = self.reader.readtext(image_array)
+            # Preprocess image for better OCR
+            processed_image = self._preprocess_image(image_cv)
             
-            if not results:
+            logger.info(f"Processing image with pytesseract: {image.size}")
+            
+            # Configure pytesseract for German
+            custom_config = r'--oem 3 --psm 6 -l deu'
+            
+            # Extract text with pytesseract
+            extracted_text = pytesseract.image_to_string(processed_image, config=custom_config)
+            
+            if not extracted_text or len(extracted_text.strip()) < 10:
                 return {
                     "success": False,
                     "error": "Kein Text erkannt - bitte Bildqualität verbessern und erneut scannen",
@@ -63,28 +53,8 @@ class InsuranceCardService:
                     "confidence": 0.0
                 }
             
-            # Extract text and confidence
-            extracted_texts = []
-            total_confidence = 0
-            
-            for (bbox, text, confidence) in results:
-                if confidence > 0.3:  # Only texts with reasonable confidence
-                    extracted_texts.append(text.strip())
-                    total_confidence += confidence
-            
-            if not extracted_texts:
-                return {
-                    "success": False,
-                    "error": "Text zu unscharf erkannt - bitte erneut scannen",
-                    "data": {},
-                    "confidence": 0.0
-                }
-            
             # Parse German insurance card data
-            all_text = ' '.join(extracted_texts)
-            parsed_data = self._parse_german_insurance_card(all_text)
-            
-            avg_confidence = total_confidence / len(results) if results else 0.0
+            parsed_data = self._parse_german_insurance_card(extracted_text)
             
             # Check if we found meaningful data
             meaningful_data = any([
@@ -98,27 +68,51 @@ class InsuranceCardService:
                     "success": False,
                     "error": "Kartendaten nicht lesbar - bitte Karte besser positionieren und erneut scannen",
                     "data": {},
-                    "confidence": avg_confidence,
-                    "raw_ocr": all_text
+                    "confidence": 0.6,
+                    "raw_ocr": extracted_text
                 }
             
-            logger.info(f"EasyOCR success: {list(parsed_data.keys())}")
+            logger.info(f"Pytesseract success: {list(parsed_data.keys())}")
             
             return {
                 "success": True,
                 "data": parsed_data,
-                "confidence": avg_confidence,
-                "raw_ocr": all_text
+                "confidence": 0.8,
+                "raw_ocr": extracted_text
             }
             
         except Exception as e:
-            logger.error(f"EasyOCR processing error: {e}")
+            logger.error(f"Pytesseract processing error: {e}")
             return {
                 "success": False,
                 "error": "OCR-Verarbeitung fehlgeschlagen - bitte erneut versuchen",
                 "data": {},
                 "confidence": 0.0
             }
+    
+    def _preprocess_image(self, image_cv):
+        """Preprocess image for better OCR results"""
+        try:
+            # Convert to grayscale
+            gray = cv2.cvtColor(image_cv, cv2.COLOR_BGR2GRAY)
+            
+            # Apply slight Gaussian blur to reduce noise
+            blurred = cv2.GaussianBlur(gray, (3, 3), 0)
+            
+            # Apply adaptive threshold
+            thresh = cv2.adaptiveThreshold(
+                blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
+            )
+            
+            # Dilate to make text thicker
+            kernel = np.ones((2, 2), np.uint8)
+            processed = cv2.dilate(thresh, kernel, iterations=1)
+            
+            return processed
+            
+        except Exception as e:
+            logger.warning(f"Image preprocessing failed: {e}, using original")
+            return cv2.cvtColor(image_cv, cv2.COLOR_BGR2GRAY)
     
     def _parse_german_insurance_card(self, text: str) -> Dict[str, str]:
         """Parse German insurance card text - simple extraction"""
