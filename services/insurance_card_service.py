@@ -28,18 +28,40 @@ class InsuranceCardService:
         No fallbacks - if it fails, user must retry
         """
         try:
+            logger.info(f"Starting OCR processing, image size: {len(image_bytes)} bytes")
+            
             # Convert bytes to PIL Image
             image = Image.open(io.BytesIO(image_bytes))
+            logger.info(f"PIL Image loaded: {image.size}, mode: {image.mode}")
             
             # Convert to OpenCV format for preprocessing
             image_cv = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+            logger.info(f"Converted to OpenCV format: {image_cv.shape}")
             
-            logger.info(f"Processing image with pytesseract: {image.size}")
+            # Test basic pytesseract functionality first
+            try:
+                # Simple test
+                gray = cv2.cvtColor(image_cv, cv2.COLOR_BGR2GRAY)
+                simple_text = pytesseract.image_to_string(gray, config='--psm 6')
+                logger.info(f"Basic OCR test successful, found text length: {len(simple_text)}")
+                
+                if simple_text.strip():
+                    logger.info(f"Sample text: {simple_text[:100]}...")
+                
+            except Exception as e:
+                logger.error(f"Basic pytesseract test failed: {e}")
+                return {
+                    "success": False,
+                    "error": f"OCR-Engine nicht verfügbar: {str(e)[:100]}",
+                    "data": {},
+                    "confidence": 0.0
+                }
             
             # Try multiple OCR approaches for better name recognition
             extracted_data = self._multi_approach_ocr(image_cv)
             
             if not extracted_data:
+                logger.warning("No OCR data extracted from any approach")
                 return {
                     "success": False,
                     "error": "Kein Text erkannt - bitte Bildqualität verbessern und erneut scannen",
@@ -47,8 +69,11 @@ class InsuranceCardService:
                     "confidence": 0.0
                 }
             
+            logger.info(f"OCR extraction successful, text length: {len(extracted_data.get('text', ''))}")
+            
             # Parse German insurance card data
             parsed_data = self._parse_german_insurance_card(extracted_data['text'])
+            logger.info(f"Parsed data keys: {list(parsed_data.keys())}")
             
             # Check if we found meaningful data
             meaningful_data = any([
@@ -58,6 +83,7 @@ class InsuranceCardService:
             ])
             
             if not meaningful_data:
+                logger.warning(f"No meaningful data found, raw text: {extracted_data['text'][:200]}")
                 return {
                     "success": False,
                     "error": "Kartendaten nicht lesbar - bitte Karte besser positionieren und erneut scannen",
@@ -76,10 +102,10 @@ class InsuranceCardService:
             }
             
         except Exception as e:
-            logger.error(f"Pytesseract processing error: {e}")
+            logger.error(f"Pytesseract processing error: {e}", exc_info=True)
             return {
                 "success": False,
-                "error": "OCR-Verarbeitung fehlgeschlagen - bitte erneut versuchen",
+                "error": f"OCR-Verarbeitung fehlgeschlagen: {str(e)[:100]} - bitte erneut versuchen",
                 "data": {},
                 "confidence": 0.0
             }

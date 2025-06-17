@@ -525,7 +525,7 @@ async def security_headers_middleware(request: Request, call_next):
     # Content Security Policy for WebRTC
     csp_policy = (
         "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdn.jsdelivr.net; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdn.jsdelivr.net https://docs.opencv.org; "
         "style-src 'self' 'unsafe-inline'; "
         "media-src 'self' blob: data: https:; "
         "connect-src 'self' https: wss: blob:; "
