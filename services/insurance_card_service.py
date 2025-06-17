@@ -250,6 +250,56 @@ class InsuranceCardService:
         
         return final
     
+    def _preprocess_high_contrast(self, image):
+        """High contrast preprocessing optimized for numbers"""
+        # Convert to grayscale
+        if image.mode != 'L':
+            gray = image.convert('L')
+        else:
+            gray = image
+        
+        # High resolution for number recognition
+        width, height = gray.size
+        new_size = (width * 3, height * 3)
+        resized = gray.resize(new_size, Image.Resampling.LANCZOS)
+        
+        # Very high contrast for numbers
+        enhancer = ImageEnhance.Contrast(resized)
+        high_contrast = enhancer.enhance(2.8)
+        
+        # Sharp enhancement for crisp numbers
+        sharpness_enhancer = ImageEnhance.Sharpness(high_contrast)
+        sharpened = sharpness_enhancer.enhance(2.2)
+        
+        return sharpened
+    
+    def _preprocess_enhanced(self, image):
+        """Enhanced preprocessing for dual language recognition"""
+        # Convert to grayscale
+        if image.mode != 'L':
+            gray = image.convert('L')
+        else:
+            gray = image
+        
+        # Moderate resolution for balanced processing
+        width, height = gray.size
+        new_size = (width * 2, height * 2)
+        resized = gray.resize(new_size, Image.Resampling.LANCZOS)
+        
+        # Balanced contrast
+        enhancer = ImageEnhance.Contrast(resized)
+        contrast_enhanced = enhancer.enhance(1.6)
+        
+        # Moderate sharpening
+        sharpness_enhancer = ImageEnhance.Sharpness(contrast_enhanced)
+        sharpened = sharpness_enhancer.enhance(1.8)
+        
+        # Slight brightness boost
+        brightness_enhancer = ImageEnhance.Brightness(sharpened)
+        final = brightness_enhancer.enhance(1.05)
+        
+        return final
+    
     def _calculate_precision_score(self, text: str, base_weight: float) -> float:
         """Enhanced precision scoring for German insurance cards"""
         score = len(text.strip()) * base_weight * 0.2
