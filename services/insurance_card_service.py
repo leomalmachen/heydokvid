@@ -113,23 +113,29 @@ class InsuranceCardService:
     def _multi_approach_ocr(self, image_cv) -> Optional[Dict[str, Any]]:
         """Try multiple OCR approaches and return the best result"""
         approaches = [
-            # Approach 1: Gentle preprocessing for names
+            # Approach 1: High-quality German OCR for names
             {
                 'preprocessing': self._preprocess_for_text,
-                'config': r'--oem 3 --psm 6 -l deu',
-                'weight': 1.0
+                'config': r'--oem 3 --psm 6 -l deu+eng -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÜßabcdefghijklmnopqrstuvwxyzäöüß0123456789 ',
+                'weight': 1.5
             },
-            # Approach 2: High contrast for numbers  
+            # Approach 2: Numbers and ID recognition
             {
                 'preprocessing': self._preprocess_for_numbers,
-                'config': r'--oem 3 --psm 7 -l deu',
-                'weight': 0.8
+                'config': r'--oem 3 --psm 8 -l eng -c tessedit_char_whitelist=0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ',
+                'weight': 1.2
             },
-            # Approach 3: Original image with minimal processing
+            # Approach 3: Large text blocks (company names)
             {
-                'preprocessing': self._minimal_preprocess,
+                'preprocessing': self._preprocess_for_companies,
+                'config': r'--oem 3 --psm 7 -l deu -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÜ ',
+                'weight': 1.0
+            },
+            # Approach 4: High DPI with better segmentation
+            {
+                'preprocessing': self._preprocess_high_quality,
                 'config': r'--oem 3 --psm 6 -l deu+eng',
-                'weight': 0.9
+                'weight': 1.3
             }
         ]
         
@@ -137,97 +143,221 @@ class InsuranceCardService:
         best_score = 0
         all_texts = []
         
-        for approach in approaches:
+        for i, approach in enumerate(approaches):
             try:
                 processed_img = approach['preprocessing'](image_cv)
                 text = pytesseract.image_to_string(processed_img, config=approach['config'])
                 
-                if text and len(text.strip()) > 5:
-                    # Simple scoring based on text length and expected patterns
-                    score = len(text.strip()) * approach['weight']
+                logger.info(f"Approach {i+1} result: {text[:100] if text else 'No text'}...")
+                
+                if text and len(text.strip()) > 3:
+                    # Advanced scoring based on expected patterns
+                    score = self._calculate_ocr_score(text, approach['weight'])
                     
-                    # Bonus for finding name patterns
-                    if re.search(r'[A-ZÄÖÜ][a-zäöüß]+\s+[A-ZÄÖÜ][a-zäöüß]+', text):
-                        score += 20
-                    
-                    # Bonus for finding insurance numbers
-                    if re.search(r'[A-Z]?\d{8,10}', text):
-                        score += 15
-                        
                     all_texts.append(text)
                     
                     if score > best_score:
                         best_score = score
                         best_result = {
                             'text': text,
-                            'confidence': min(score / 100, 0.95)
+                            'confidence': min(score / 100, 0.95),
+                            'approach': i+1
                         }
+                        logger.info(f"New best result from approach {i+1}, score: {score}")
                         
             except Exception as e:
-                logger.warning(f"OCR approach failed: {e}")
+                logger.warning(f"OCR approach {i+1} failed: {e}")
                 continue
         
-        # If we have multiple texts, try to combine them
+        # If we have multiple texts, try to combine them intelligently
         if len(all_texts) > 1 and best_result:
-            combined_text = self._combine_ocr_results(all_texts)
+            combined_text = self._intelligent_combine_ocr_results(all_texts)
             best_text_length = len(best_result.get('text', ''))
             if combined_text and len(combined_text) > best_text_length:
                 best_result = {
                     'text': combined_text,
-                    'confidence': 0.85
+                    'confidence': 0.9,
+                    'approach': 'combined'
                 }
+                logger.info("Using combined OCR result")
+        
+        if best_result:
+            logger.info(f"Final best result (approach {best_result.get('approach')}): {best_result['text'][:200]}")
         
         return best_result
-    
+
+    def _calculate_ocr_score(self, text: str, base_weight: float) -> float:
+        """Calculate OCR quality score based on expected patterns"""
+        score = len(text.strip()) * base_weight
+        
+        # German name patterns (very important)
+        german_names = re.findall(r'[A-ZÄÖÜ][a-zäöüß]+(?:\s+[A-ZÄÖÜ][a-zäöüß]+)+', text)
+        if german_names:
+            score += 50 * len(german_names)
+            logger.info(f"Found German names: {german_names}")
+        
+        # Insurance numbers (10 digits, sometimes with letter)
+        insurance_numbers = re.findall(r'[A-Z]?\d{9,10}', text)
+        if insurance_numbers:
+            score += 40 * len(insurance_numbers)
+            logger.info(f"Found insurance numbers: {insurance_numbers}")
+        
+        # German insurance companies
+        companies = ['AOK', 'TECHNIKER', 'TK', 'BARMER', 'DAK', 'KKH', 'HEK', 'BKK', 'IKK', 'BAYERN']
+        for company in companies:
+            if company in text.upper():
+                score += 30
+                logger.info(f"Found insurance company: {company}")
+        
+        # Date patterns
+        dates = re.findall(r'\d{1,2}[\/\.]\d{2,4}', text)
+        if dates:
+            score += 15 * len(dates)
+        
+        return score
+
     def _preprocess_for_text(self, image_cv) -> np.ndarray:
-        """Gentle preprocessing optimized for text/names"""
+        """Enhanced preprocessing for German text/names"""
         gray = cv2.cvtColor(image_cv, cv2.COLOR_BGR2GRAY)
         
-        # Very gentle blur to reduce noise
-        blurred = cv2.GaussianBlur(gray, (1, 1), 0)
+        # Resize image for better OCR (make it bigger)
+        height, width = gray.shape
+        scale_factor = 3.0
+        new_width = int(width * scale_factor)
+        new_height = int(height * scale_factor)
+        resized = cv2.resize(gray, (new_width, new_height), interpolation=cv2.INTER_CUBIC)
         
-        # Adaptive threshold with larger block size for text
+        # Apply Gaussian blur
+        blurred = cv2.GaussianBlur(resized, (3, 3), 0)
+        
+        # Enhanced adaptive threshold
         thresh = cv2.adaptiveThreshold(
-            blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 15, 4
+            blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 21, 10
         )
         
-        return thresh
+        # Morphological operations to clean up
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
+        cleaned = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
+        
+        return cleaned
     
     def _preprocess_for_numbers(self, image_cv) -> np.ndarray:
-        """More aggressive preprocessing for numbers"""
+        """Aggressive preprocessing optimized for numbers"""
         gray = cv2.cvtColor(image_cv, cv2.COLOR_BGR2GRAY)
         
-        # Sharpen for numbers
-        kernel = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
-        sharpened = cv2.filter2D(gray, -1, kernel)
+        # Resize for better number recognition
+        height, width = gray.shape
+        resized = cv2.resize(gray, (width * 4, height * 4), interpolation=cv2.INTER_CUBIC)
+        
+        # Sharpen the image
+        kernel = np.array([[-1,-1,-1,-1,-1],
+                          [-1, 2, 2, 2,-1],
+                          [-1, 2, 8, 2,-1],
+                          [-1, 2, 2, 2,-1],
+                          [-1,-1,-1,-1,-1]]) / 8.0
+        sharpened = cv2.filter2D(resized, -1, kernel)
         
         # High contrast threshold
         _, thresh = cv2.threshold(sharpened, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
         
+        # Remove small noise
+        kernel = np.ones((2,2), np.uint8)
+        cleaned = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
+        
+        return cleaned
+
+    def _preprocess_for_companies(self, image_cv) -> np.ndarray:
+        """Preprocessing for company names (AOK, etc.)"""
+        gray = cv2.cvtColor(image_cv, cv2.COLOR_BGR2GRAY)
+        
+        # Resize
+        height, width = gray.shape
+        resized = cv2.resize(gray, (width * 3, height * 3), interpolation=cv2.INTER_LANCZOS4)
+        
+        # Contrast enhancement
+        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8,8))
+        enhanced = clahe.apply(resized)
+        
+        # Threshold
+        _, thresh = cv2.threshold(enhanced, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        
+        return thresh
+
+    def _preprocess_high_quality(self, image_cv) -> np.ndarray:
+        """High-quality preprocessing with multiple steps"""
+        gray = cv2.cvtColor(image_cv, cv2.COLOR_BGR2GRAY)
+        
+        # Large upscale for very high quality
+        height, width = gray.shape
+        resized = cv2.resize(gray, (width * 5, height * 5), interpolation=cv2.INTER_LANCZOS4)
+        
+        # Noise reduction
+        denoised = cv2.fastNlMeansDenoising(resized)
+        
+        # Contrast enhancement
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+        enhanced = clahe.apply(denoised)
+        
+        # Adaptive threshold with larger block
+        thresh = cv2.adaptiveThreshold(
+            enhanced, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 31, 15
+        )
+        
         return thresh
     
     def _minimal_preprocess(self, image_cv) -> np.ndarray:
-        """Minimal preprocessing - just grayscale"""
-        return cv2.cvtColor(image_cv, cv2.COLOR_BGR2GRAY)
+        """Minimal preprocessing - just grayscale and resize"""
+        gray = cv2.cvtColor(image_cv, cv2.COLOR_BGR2GRAY)
+        height, width = gray.shape
+        return cv2.resize(gray, (width * 2, height * 2), interpolation=cv2.INTER_CUBIC)
     
-    def _combine_ocr_results(self, texts) -> str:
-        """Combine multiple OCR results to get the best parts"""
-        combined_lines = []
+    def _intelligent_combine_ocr_results(self, texts) -> str:
+        """Intelligently combine OCR results by extracting best parts"""
+        combined_data = {
+            'names': [],
+            'numbers': [],
+            'companies': [],
+            'other_lines': []
+        }
         
         for text in texts:
-            if text:  # Add null check
-                lines = [line.strip() for line in text.split('\n') if line.strip()]
-                combined_lines.extend(lines)
+            if not text:
+                continue
+                
+            lines = [line.strip() for line in text.split('\n') if line.strip()]
+            
+            for line in lines:
+                # Classify each line
+                if re.search(r'[A-ZÄÖÜ][a-zäöüß]+(?:\s+[A-ZÄÖÜ][a-zäöüß]+)+', line):
+                    combined_data['names'].append(line)
+                elif re.search(r'\d{8,10}', line):
+                    combined_data['numbers'].append(line)
+                elif any(company in line.upper() for company in ['AOK', 'TK', 'BARMER', 'DAK']):
+                    combined_data['companies'].append(line)
+                else:
+                    combined_data['other_lines'].append(line)
         
-        # Remove duplicates while preserving order
-        seen = set()
-        unique_lines = []
-        for line in combined_lines:
-            if line not in seen:
-                seen.add(line)
-                unique_lines.append(line)
+        # Build best combination
+        result_lines = []
         
-        return '\n'.join(unique_lines)
+        # Best name (longest valid name)
+        if combined_data['names']:
+            best_name = max(combined_data['names'], key=len)
+            result_lines.append(best_name)
+        
+        # Best company
+        if combined_data['companies']:
+            best_company = max(combined_data['companies'], key=len)
+            result_lines.append(best_company)
+        
+        # All unique numbers
+        unique_numbers = list(set(combined_data['numbers']))
+        result_lines.extend(unique_numbers)
+        
+        # Other important lines
+        result_lines.extend(combined_data['other_lines'][:3])  # Max 3 additional lines
+        
+        return '\n'.join(result_lines)
     
     def _parse_german_insurance_card(self, text: str) -> Dict[str, str]:
         """Parse German insurance card text - simple extraction"""
