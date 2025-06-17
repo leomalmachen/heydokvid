@@ -110,7 +110,7 @@ class InsuranceCardService:
                 "confidence": 0.0
             }
     
-    def _multi_approach_ocr(self, image_cv):
+    def _multi_approach_ocr(self, image_cv) -> Optional[Dict[str, Any]]:
         """Try multiple OCR approaches and return the best result"""
         approaches = [
             # Approach 1: Gentle preprocessing for names
@@ -168,9 +168,10 @@ class InsuranceCardService:
                 continue
         
         # If we have multiple texts, try to combine them
-        if len(all_texts) > 1:
+        if len(all_texts) > 1 and best_result:
             combined_text = self._combine_ocr_results(all_texts)
-            if combined_text and len(combined_text) > (best_result['text'] if best_result else ''):
+            best_text_length = len(best_result.get('text', ''))
+            if combined_text and len(combined_text) > best_text_length:
                 best_result = {
                     'text': combined_text,
                     'confidence': 0.85
@@ -178,7 +179,7 @@ class InsuranceCardService:
         
         return best_result
     
-    def _preprocess_for_text(self, image_cv):
+    def _preprocess_for_text(self, image_cv) -> np.ndarray:
         """Gentle preprocessing optimized for text/names"""
         gray = cv2.cvtColor(image_cv, cv2.COLOR_BGR2GRAY)
         
@@ -192,7 +193,7 @@ class InsuranceCardService:
         
         return thresh
     
-    def _preprocess_for_numbers(self, image_cv):
+    def _preprocess_for_numbers(self, image_cv) -> np.ndarray:
         """More aggressive preprocessing for numbers"""
         gray = cv2.cvtColor(image_cv, cv2.COLOR_BGR2GRAY)
         
@@ -205,17 +206,18 @@ class InsuranceCardService:
         
         return thresh
     
-    def _minimal_preprocess(self, image_cv):
+    def _minimal_preprocess(self, image_cv) -> np.ndarray:
         """Minimal preprocessing - just grayscale"""
         return cv2.cvtColor(image_cv, cv2.COLOR_BGR2GRAY)
     
-    def _combine_ocr_results(self, texts):
+    def _combine_ocr_results(self, texts) -> str:
         """Combine multiple OCR results to get the best parts"""
         combined_lines = []
         
         for text in texts:
-            lines = [line.strip() for line in text.split('\n') if line.strip()]
-            combined_lines.extend(lines)
+            if text:  # Add null check
+                lines = [line.strip() for line in text.split('\n') if line.strip()]
+                combined_lines.extend(lines)
         
         # Remove duplicates while preserving order
         seen = set()
@@ -227,30 +229,6 @@ class InsuranceCardService:
         
         return '\n'.join(unique_lines)
     
-    def _preprocess_image(self, image_cv):
-        """Preprocess image for better OCR results"""
-        try:
-            # Convert to grayscale
-            gray = cv2.cvtColor(image_cv, cv2.COLOR_BGR2GRAY)
-            
-            # Apply slight Gaussian blur to reduce noise
-            blurred = cv2.GaussianBlur(gray, (3, 3), 0)
-            
-            # Apply adaptive threshold
-            thresh = cv2.adaptiveThreshold(
-                blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
-            )
-            
-            # Dilate to make text thicker
-            kernel = np.ones((2, 2), np.uint8)
-            processed = cv2.dilate(thresh, kernel, iterations=1)
-            
-            return processed
-            
-        except Exception as e:
-            logger.warning(f"Image preprocessing failed: {e}, using original")
-            return cv2.cvtColor(image_cv, cv2.COLOR_BGR2GRAY)
-    
     def _parse_german_insurance_card(self, text: str) -> Dict[str, str]:
         """Parse German insurance card text - simple extraction"""
         data = {
@@ -260,6 +238,11 @@ class InsuranceCardService:
             'birth_date': '',
             'valid_until': ''
         }
+        
+        # Add null/empty check
+        if not text or not text.strip():
+            logger.warning("Empty text provided to parser")
+            return data
         
         lines = text.split('\n') if '\n' in text else text.split(' ')
         text_clean = ' '.join(lines).strip()
