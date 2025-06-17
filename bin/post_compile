@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Heroku post_compile hook - Preload EasyOCR models
+
+echo "🎯 === HEROKU POST-COMPILE: EasyOCR Model Preload ==="
+
+# Set build-time environment variable
+export BUILD_TIME=true
+
+echo "📦 Installing dependencies are complete, now preloading EasyOCR models..."
+
+# Run the model preloader
+echo "🚀 Executing EasyOCR model preload..."
+python preload_models.py
+
+# Check if preload was successful
+if [ $? -eq 0 ]; then
+    echo "✅ EasyOCR models preloaded successfully!"
+    echo "🎉 Ready for instant OCR processing!"
+else
+    echo "❌ EasyOCR model preload failed!"
+    echo "🔄 App will still start, but first OCR request may be slow"
+fi
+
+echo "🏁 === POST-COMPILE HOOK COMPLETED ===" 

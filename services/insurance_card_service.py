@@ -19,15 +19,24 @@ logger = logging.getLogger(__name__)
 class InsuranceCardService:
     """Enhanced service for processing German insurance cards with EasyOCR"""
     
+    # Class-level cached reader to avoid re-initialization
+    _cached_reader = None
+    
     def __init__(self, db: Session):
         self.db = db
-        # Initialize EasyOCR with German and English support, CPU-only for Heroku
-        try:
-            self.reader = easyocr.Reader(['de', 'en'], gpu=False, verbose=False)
-            logger.info("EasyOCR initialized successfully with German + English support (CPU-only)")
-        except Exception as e:
-            logger.error(f"Failed to initialize EasyOCR: {e}")
-            self.reader = None
+        # Use cached reader or initialize new one
+        if InsuranceCardService._cached_reader is None:
+            logger.info("🚀 Initializing EasyOCR Reader (first time)...")
+            try:
+                InsuranceCardService._cached_reader = easyocr.Reader(['de', 'en'], gpu=False, verbose=False)
+                logger.info("✅ EasyOCR Reader initialized and cached successfully")
+            except Exception as e:
+                logger.error(f"❌ Failed to initialize EasyOCR: {e}")
+                InsuranceCardService._cached_reader = None
+        else:
+            logger.info("⚡ Using cached EasyOCR Reader (fast startup)")
+        
+        self.reader = InsuranceCardService._cached_reader
     
     def extract_card_data(self, image_bytes: bytes) -> Dict[str, Any]:
         """
