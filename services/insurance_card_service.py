@@ -1,6 +1,6 @@
 """
-Insurance Card Service - Advanced Tesseract Implementation
-Optimized OCR service for German insurance cards using advanced Tesseract with EasyOCR-level preprocessing
+Insurance Card Service - Minimal Pillow-Only Implementation
+Lightweight OCR service for German insurance cards using Tesseract with Pillow preprocessing
 """
 import pytesseract
 import logging
@@ -9,41 +9,35 @@ from datetime import datetime
 from typing import Dict, Any, Optional, List, Tuple
 from sqlalchemy.orm import Session
 import re
-from PIL import Image
+from PIL import Image, ImageEnhance, ImageFilter
 import io
-import numpy as np
-import cv2
 
 logger = logging.getLogger(__name__)
 
 class InsuranceCardService:
-    """Service for processing German insurance cards with advanced Tesseract"""
+    """Service for processing German insurance cards with Pillow-only preprocessing"""
     
     def __init__(self, db: Session):
         self.db = db
-        logger.info("Advanced Tesseract OCR initialized for German insurance card processing")
+        logger.info("Minimal Tesseract OCR initialized with Pillow-only preprocessing")
     
     def extract_card_data(self, image_bytes: bytes) -> Dict[str, Any]:
         """
-        Extract data from insurance card image using advanced Tesseract preprocessing
-        Combines Tesseract reliability with EasyOCR-level preprocessing quality
+        Extract data from insurance card image using Tesseract with Pillow preprocessing
+        Minimal implementation optimized for Heroku size constraints
         """
         try:
-            logger.info(f"Starting advanced Tesseract processing, image size: {len(image_bytes)} bytes")
+            logger.info(f"Starting minimal Tesseract processing, image size: {len(image_bytes)} bytes")
             
             # Convert bytes to PIL Image
             image = Image.open(io.BytesIO(image_bytes))
             logger.info(f"PIL Image loaded: {image.size}, mode: {image.mode}")
             
-            # Convert to OpenCV format for advanced preprocessing
-            image_cv = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
-            logger.info(f"Converted to OpenCV format: {image_cv.shape}")
-            
-            # Try multiple advanced approaches
-            extracted_data = self._multi_approach_advanced_tesseract(image_cv)
+            # Try multiple Pillow-based approaches
+            extracted_data = self._multi_approach_pillow_tesseract(image)
             
             if not extracted_data:
-                logger.warning("No OCR data extracted from any advanced approach")
+                logger.warning("No OCR data extracted from any Pillow approach")
                 return {
                     "success": False,
                     "error": "Kein Text erkannt - bitte Bildqualität verbessern und erneut scannen",
@@ -51,10 +45,10 @@ class InsuranceCardService:
                     "confidence": 0.0
                 }
             
-            logger.info(f"Advanced Tesseract extraction successful, text length: {len(extracted_data.get('text', ''))}")
+            logger.info(f"Minimal Tesseract extraction successful, text length: {len(extracted_data.get('text', ''))}")
             
-            # Parse German insurance card data with enhanced patterns
-            parsed_data = self._parse_german_insurance_card_enhanced(extracted_data['text'])
+            # Parse German insurance card data
+            parsed_data = self._parse_german_insurance_card_simple(extracted_data['text'])
             logger.info(f"Parsed data keys: {list(parsed_data.keys())}")
             
             # Check if we found meaningful data
@@ -74,7 +68,7 @@ class InsuranceCardService:
                     "raw_ocr": extracted_data['text']
                 }
             
-            logger.info(f"Advanced Tesseract success: {list(parsed_data.keys())}")
+            logger.info(f"Minimal Tesseract success: {list(parsed_data.keys())}")
             
             return {
                 "success": True,
@@ -84,7 +78,7 @@ class InsuranceCardService:
             }
             
         except Exception as e:
-            logger.error(f"Advanced Tesseract processing error: {e}", exc_info=True)
+            logger.error(f"Minimal Tesseract processing error: {e}", exc_info=True)
             return {
                 "success": False,
                 "error": f"OCR-Verarbeitung fehlgeschlagen: {str(e)[:100]} - bitte erneut versuchen",
@@ -92,43 +86,36 @@ class InsuranceCardService:
                 "confidence": 0.0
             }
     
-    def _multi_approach_advanced_tesseract(self, image_cv) -> Optional[Dict[str, Any]]:
-        """Try multiple advanced preprocessing approaches with optimized Tesseract configs"""
+    def _multi_approach_pillow_tesseract(self, image) -> Optional[Dict[str, Any]]:
+        """Try multiple Pillow-based preprocessing approaches with Tesseract"""
         approaches = [
-            # Approach 1: German-optimized high quality
+            # Approach 1: Original image
             {
-                'name': 'german_optimized',
-                'preprocessing': self._preprocess_for_german_text,
+                'name': 'original',
+                'preprocessing': lambda img: img,
+                'config': r'--oem 1 --psm 6 -l deu+eng',
+                'weight': 1.0
+            },
+            # Approach 2: Enhanced contrast and sharpness
+            {
+                'name': 'enhanced',
+                'preprocessing': self._preprocess_enhanced,
                 'config': r'--oem 1 --psm 6 -l deu+eng -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÜßabcdefghijklmnopqrstuvwxyzäöüß0123456789 ./:,-',
-                'weight': 1.5
-            },
-            # Approach 2: Numbers and IDs specialized
-            {
-                'name': 'numbers_specialized',
-                'preprocessing': self._preprocess_for_numbers,
-                'config': r'--oem 1 --psm 8 -l eng -c tessedit_char_whitelist=0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ',
-                'weight': 1.3
-            },
-            # Approach 3: Company names and large text
-            {
-                'name': 'company_names',
-                'preprocessing': self._preprocess_for_companies,
-                'config': r'--oem 1 --psm 7 -l deu -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÜ ',
-                'weight': 1.2
-            },
-            # Approach 4: Ultra high quality preprocessing
-            {
-                'name': 'ultra_quality',
-                'preprocessing': self._preprocess_ultra_quality,
-                'config': r'--oem 1 --psm 6 -l deu+eng -c preserve_interword_spaces=1',
                 'weight': 1.4
             },
-            # Approach 5: Mixed case handling
+            # Approach 3: High contrast for numbers
             {
-                'name': 'mixed_case',
-                'preprocessing': self._preprocess_mixed_case,
+                'name': 'high_contrast',
+                'preprocessing': self._preprocess_high_contrast,
+                'config': r'--oem 1 --psm 8 -l eng -c tessedit_char_whitelist=0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ',
+                'weight': 1.2
+            },
+            # Approach 4: Grayscale with sharpening
+            {
+                'name': 'grayscale_sharp',
+                'preprocessing': self._preprocess_grayscale_sharp,
                 'config': r'--oem 1 --psm 6 -l deu+eng',
-                'weight': 1.1
+                'weight': 1.3
             }
         ]
         
@@ -138,10 +125,10 @@ class InsuranceCardService:
         
         for i, approach in enumerate(approaches):
             try:
-                logger.info(f"Trying advanced approach {i+1}: {approach['name']}")
-                processed_img = approach['preprocessing'](image_cv)
+                logger.info(f"Trying Pillow approach {i+1}: {approach['name']}")
+                processed_img = approach['preprocessing'](image)
                 
-                # Run Tesseract with optimized config
+                # Run Tesseract
                 text = pytesseract.image_to_string(processed_img, config=approach['config'])
                 
                 if not text or len(text.strip()) < 3:
@@ -150,8 +137,8 @@ class InsuranceCardService:
                 
                 logger.info(f"Approach {i+1} extracted: {text[:100]}...")
                 
-                # Calculate quality score with enhanced scoring
-                score = self._calculate_enhanced_score(text, approach['weight'])
+                # Calculate quality score
+                score = self._calculate_simple_score(text, approach['weight'])
                 
                 text_data = {
                     'text': text,
@@ -166,218 +153,131 @@ class InsuranceCardService:
                     logger.info(f"New best result from {approach['name']}, score: {score}")
                     
             except Exception as e:
-                logger.warning(f"Advanced approach {i+1} failed: {e}")
+                logger.warning(f"Pillow approach {i+1} failed: {e}")
                 continue
         
-        # Intelligent combination of results
+        # Simple combination if multiple results
         if len(all_results) > 1 and best_result:
-            combined_text = self._intelligent_combine_results(all_results)
+            combined_text = self._simple_combine_results(all_results)
             if combined_text and len(combined_text) > len(best_result.get('text', '')):
                 best_result = {
                     'text': combined_text,
                     'confidence': 0.9,
-                    'approach': 'combined_advanced'
+                    'approach': 'combined'
                 }
-                logger.info("Using combined advanced result")
-        
-        if best_result:
-            logger.info(f"Final best result ({best_result.get('approach')}): {best_result['text'][:200]}")
+                logger.info("Using combined result")
         
         return best_result
     
-    def _calculate_enhanced_score(self, text: str, base_weight: float) -> float:
-        """Enhanced scoring system inspired by EasyOCR approach"""
-        score = len(text.strip()) * base_weight * 0.1
+    def _preprocess_enhanced(self, image):
+        """Enhanced preprocessing using Pillow"""
+        # Convert to grayscale
+        if image.mode != 'L':
+            gray = image.convert('L')
+        else:
+            gray = image
         
-        # German name patterns (highest priority)
-        german_names = re.findall(r'[A-ZÄÖÜ][a-zäöüß]+(?:\s+[A-ZÄÖÜ][a-zäöüß]+)+', text)
-        if german_names:
-            score += 80 * len(german_names)
-            logger.info(f"Found German names: {german_names}")
+        # Resize for better OCR
+        width, height = gray.size
+        new_size = (width * 2, height * 2)
+        resized = gray.resize(new_size, Image.Resampling.LANCZOS)
         
-        # Insurance numbers (critical)
-        insurance_numbers = re.findall(r'[A-Z]?\d{9,10}', text)
-        if insurance_numbers:
-            score += 70 * len(insurance_numbers)
-            logger.info(f"Found insurance numbers: {insurance_numbers}")
+        # Enhance contrast
+        enhancer = ImageEnhance.Contrast(resized)
+        contrast_enhanced = enhancer.enhance(1.5)
         
-        # German insurance companies
-        companies = ['AOK', 'TECHNIKER', 'TK', 'BARMER', 'DAK', 'KKH', 'HEK', 'BKK', 'IKK', 'BAYERN']
-        for company in companies:
-            if company in text.upper():
-                score += 60
-                logger.info(f"Found insurance company: {company}")
-        
-        # Date patterns
-        dates = re.findall(r'\d{1,2}[\/\.\-]\d{2,4}', text)
-        if dates:
-            score += 30 * len(dates)
-            logger.info(f"Found dates: {dates}")
-        
-        # German umlauts (strong indicator)
-        umlauts = len(re.findall(r'[äöüÄÖÜß]', text))
-        if umlauts > 0:
-            score += umlauts * 4
-            logger.info(f"Found {umlauts} German umlauts")
-        
-        # Card-specific keywords
-        card_keywords = ['VERSICHERTENKARTE', 'KRANKENVERSICHERT', 'EUROPEAN', 'HEALTH', 'BUNDESREPUBLIK']
-        for keyword in card_keywords:
-            if keyword in text.upper():
-                score += 25
-                logger.info(f"Found card keyword: {keyword}")
-        
-        return score
-    
-    def _preprocess_for_german_text(self, image_cv) -> np.ndarray:
-        """Specialized preprocessing for German text and names"""
-        gray = cv2.cvtColor(image_cv, cv2.COLOR_BGR2GRAY)
-        
-        # Optimal scaling for German text
-        height, width = gray.shape
-        scale_factor = 2.5
-        resized = cv2.resize(gray, (int(width * scale_factor), int(height * scale_factor)), interpolation=cv2.INTER_CUBIC)
-        
-        # Advanced contrast enhancement
-        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
-        enhanced = clahe.apply(resized)
-        
-        # Gentle denoising
-        denoised = cv2.fastNlMeansDenoising(enhanced, None, 10, 7, 21)
-        
-        # Morphological operations for better character separation
-        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
-        cleaned = cv2.morphologyEx(denoised, cv2.MORPH_CLOSE, kernel)
-        
-        return cleaned
-    
-    def _preprocess_for_numbers(self, image_cv) -> np.ndarray:
-        """Specialized preprocessing for insurance numbers"""
-        gray = cv2.cvtColor(image_cv, cv2.COLOR_BGR2GRAY)
-        
-        # High resolution for small numbers
-        height, width = gray.shape
-        resized = cv2.resize(gray, (width * 4, height * 4), interpolation=cv2.INTER_CUBIC)
-        
-        # High contrast for crisp numbers
-        _, thresh = cv2.threshold(resized, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-        
-        # Clean up noise
-        kernel = np.ones((1,1), np.uint8)
-        cleaned = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
-        
-        return cleaned
-    
-    def _preprocess_for_companies(self, image_cv) -> np.ndarray:
-        """Specialized preprocessing for company names like AOK"""
-        gray = cv2.cvtColor(image_cv, cv2.COLOR_BGR2GRAY)
-        
-        # Medium scaling
-        height, width = gray.shape
-        resized = cv2.resize(gray, (width * 3, height * 3), interpolation=cv2.INTER_LANCZOS4)
-        
-        # Strong contrast enhancement
-        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8,8))
-        enhanced = clahe.apply(resized)
-        
-        # Binary threshold
-        _, thresh = cv2.threshold(enhanced, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-        
-        return thresh
-    
-    def _preprocess_ultra_quality(self, image_cv) -> np.ndarray:
-        """Ultra high quality preprocessing"""
-        gray = cv2.cvtColor(image_cv, cv2.COLOR_BGR2GRAY)
-        
-        # Very high resolution
-        height, width = gray.shape
-        resized = cv2.resize(gray, (width * 5, height * 5), interpolation=cv2.INTER_LANCZOS4)
-        
-        # Advanced denoising
-        denoised = cv2.fastNlMeansDenoising(resized, None, 8, 7, 21)
-        
-        # Adaptive enhancement
-        clahe = cv2.createCLAHE(clipLimit=1.5, tileGridSize=(8,8))
-        enhanced = clahe.apply(denoised)
-        
-        # Sharpening
-        kernel = np.array([[-1,-1,-1], [-1, 9,-1], [-1,-1,-1]])
-        sharpened = cv2.filter2D(enhanced, -1, kernel)
+        # Enhance sharpness
+        sharpness_enhancer = ImageEnhance.Sharpness(contrast_enhanced)
+        sharpened = sharpness_enhancer.enhance(2.0)
         
         return sharpened
     
-    def _preprocess_mixed_case(self, image_cv) -> np.ndarray:
-        """Preprocessing optimized for mixed case text"""
-        gray = cv2.cvtColor(image_cv, cv2.COLOR_BGR2GRAY)
+    def _preprocess_high_contrast(self, image):
+        """High contrast preprocessing for numbers"""
+        # Convert to grayscale
+        if image.mode != 'L':
+            gray = image.convert('L')
+        else:
+            gray = image
         
-        # Moderate scaling
-        height, width = gray.shape
-        resized = cv2.resize(gray, (width * 2, height * 2), interpolation=cv2.INTER_CUBIC)
+        # Resize
+        width, height = gray.size
+        new_size = (width * 3, height * 3)
+        resized = gray.resize(new_size, Image.Resampling.LANCZOS)
         
-        # Balanced contrast
-        clahe = cv2.createCLAHE(clipLimit=1.8, tileGridSize=(8,8))
-        enhanced = clahe.apply(resized)
+        # Very high contrast
+        enhancer = ImageEnhance.Contrast(resized)
+        high_contrast = enhancer.enhance(2.5)
         
-        return enhanced
+        return high_contrast
     
-    def _intelligent_combine_results(self, results: List[Dict]) -> str:
-        """Intelligently combine multiple OCR results"""
-        combined_data = {
-            'names': [],
-            'numbers': [],
-            'companies': [],
-            'dates': [],
-            'other_lines': []
-        }
+    def _preprocess_grayscale_sharp(self, image):
+        """Simple grayscale with sharpening"""
+        # Convert to grayscale
+        if image.mode != 'L':
+            gray = image.convert('L')
+        else:
+            gray = image
+        
+        # Resize moderately
+        width, height = gray.size
+        new_size = (int(width * 1.5), int(height * 1.5))
+        resized = gray.resize(new_size, Image.Resampling.LANCZOS)
+        
+        # Apply unsharp mask
+        sharpened = resized.filter(ImageFilter.UnsharpMask(radius=1, percent=150, threshold=3))
+        
+        return sharpened
+    
+    def _calculate_simple_score(self, text: str, base_weight: float) -> float:
+        """Simple scoring system"""
+        score = len(text.strip()) * base_weight * 0.1
+        
+        # German names
+        german_names = re.findall(r'[A-ZÄÖÜ][a-zäöüß]+(?:\s+[A-ZÄÖÜ][a-zäöüß]+)+', text)
+        if german_names:
+            score += 60 * len(german_names)
+        
+        # Insurance numbers
+        insurance_numbers = re.findall(r'[A-Z]?\d{9,10}', text)
+        if insurance_numbers:
+            score += 50 * len(insurance_numbers)
+        
+        # Insurance companies
+        companies = ['AOK', 'TECHNIKER', 'TK', 'BARMER', 'DAK', 'KKH']
+        for company in companies:
+            if company in text.upper():
+                score += 40
+        
+        # German umlauts
+        umlauts = len(re.findall(r'[äöüÄÖÜß]', text))
+        if umlauts > 0:
+            score += umlauts * 3
+        
+        return score
+    
+    def _simple_combine_results(self, results: List[Dict]) -> str:
+        """Simple result combination"""
+        all_lines = []
         
         for result in results:
             text = result.get('text', '')
-            if not text:
-                continue
-                
-            lines = [line.strip() for line in text.split('\n') if line.strip()]
-            
-            for line in lines:
-                # Classify and store best examples
-                if re.search(r'[A-ZÄÖÜ][a-zäöüß]+(?:\s+[A-ZÄÖÜ][a-zäöüß]+)+', line):
-                    combined_data['names'].append(line)
-                elif re.search(r'\d{8,10}', line):
-                    combined_data['numbers'].append(line)
-                elif any(company in line.upper() for company in ['AOK', 'TK', 'BARMER', 'DAK', 'TECHNIKER']):
-                    combined_data['companies'].append(line)
-                elif re.search(r'\d{1,2}[\/\.\-]\d{2,4}', line):
-                    combined_data['dates'].append(line)
-                elif len(line) > 3:
-                    combined_data['other_lines'].append(line)
+            if text:
+                lines = [line.strip() for line in text.split('\n') if line.strip()]
+                all_lines.extend(lines)
         
-        # Build optimal combination
-        result_lines = []
+        # Remove duplicates while preserving order
+        unique_lines = []
+        seen = set()
+        for line in all_lines:
+            if line not in seen and len(line) > 2:
+                unique_lines.append(line)
+                seen.add(line)
         
-        # Best name (longest and most complete)
-        if combined_data['names']:
-            best_name = max(combined_data['names'], key=lambda x: (len(x), x.count(' ')))
-            result_lines.append(best_name)
-        
-        # Best company
-        if combined_data['companies']:
-            best_company = max(combined_data['companies'], key=len)
-            result_lines.append(best_company)
-        
-        # All unique numbers
-        unique_numbers = list(set(combined_data['numbers']))
-        result_lines.extend(unique_numbers)
-        
-        # All dates
-        unique_dates = list(set(combined_data['dates']))
-        result_lines.extend(unique_dates)
-        
-        # Best additional lines
-        result_lines.extend(combined_data['other_lines'][:2])
-        
-        return '\n'.join(result_lines)
+        return '\n'.join(unique_lines[:10])  # Limit to top 10 lines
     
-    def _parse_german_insurance_card_enhanced(self, text: str) -> Dict[str, str]:
-        """Enhanced German insurance card parsing with better patterns"""
+    def _parse_german_insurance_card_simple(self, text: str) -> Dict[str, str]:
+        """Simplified German insurance card parsing"""
         data = {
             'name': '',
             'insurance_number': '',
@@ -387,87 +287,41 @@ class InsuranceCardService:
         }
         
         if not text or not text.strip():
-            logger.warning("Empty text provided to enhanced parser")
             return data
         
         lines = text.split('\n') if '\n' in text else [text]
         text_clean = ' '.join(lines).strip()
         
-        # Enhanced name extraction with multiple patterns
-        name_patterns = [
-            r'([A-ZÄÖÜ][a-zäöüß]+(?:\s+[A-ZÄÖÜ][a-zäöüß]+){1,3})',  # Standard German names
-            r'([A-ZÄÖÜ][A-ZÄÖÜ\s]+)',  # All caps names
-            r'([A-Za-zÄÖÜäöüß\-]+\s+[A-Za-zÄÖÜäöüß\-]+)',  # Mixed case with hyphens
-        ]
+        # Extract name (basic pattern)
+        name_match = re.search(r'([A-ZÄÖÜ][a-zäöüß]+\s+[A-ZÄÖÜ][a-zäöüß]+)', text_clean)
+        if name_match:
+            potential_name = name_match.group(1).strip()
+            if not any(company in potential_name.upper() for company in ['AOK', 'TK', 'BARMER', 'DAK']):
+                data['name'] = potential_name
         
-        for pattern in name_patterns:
-            name_matches = re.findall(pattern, text_clean)
-            for potential_name in name_matches:
-                potential_name = potential_name.strip()
-                # Enhanced validation
-                if (len(potential_name.split()) >= 2 and 
-                    not any(company in potential_name.upper() for company in ['AOK', 'TK', 'BARMER', 'DAK', 'TECHNIKER', 'KRANKENKASSE']) and
-                    len(potential_name) <= 50 and
-                    not re.search(r'\d', potential_name) and  # No digits in names
-                    not potential_name.upper() in ['VERSICHERTENKARTE', 'EUROPEAN HEALTH']):
-                    data['name'] = potential_name
-                    break
-            if data['name']:
-                break
+        # Extract insurance number
+        number_match = re.search(r'([A-Z]?\d{9,10})', text_clean)
+        if number_match:
+            data['insurance_number'] = number_match.group(1)
         
-        # Enhanced insurance number patterns
-        number_patterns = [
-            r'([A-Z]\d{9})',     # Letter + 9 digits (most common)
-            r'(\d{10})',         # 10 digits
-            r'([A-Z]\d{8})',     # Letter + 8 digits (some variations)
-        ]
+        # Extract dates
+        dates = re.findall(r'(\d{1,2}[\/\.]\d{2,4})', text_clean)
+        if dates:
+            data['valid_until'] = dates[-1]
+            if len(dates) > 1:
+                data['birth_date'] = dates[0]
         
-        for pattern in number_patterns:
-            number_match = re.search(pattern, text_clean)
-            if number_match:
-                data['insurance_number'] = number_match.group(1)
-                break
-        
-        # Enhanced date extraction
-        date_patterns = [
-            r'(\d{1,2}[\/\.]\d{2,4})',     # MM/YY or MM/YYYY
-            r'(\d{2}\.\d{2}\.\d{4})',      # DD.MM.YYYY
-            r'(\d{1,2}\-\d{2,4})',         # MM-YY
-        ]
-        
-        all_dates = []
-        for pattern in date_patterns:
-            dates = re.findall(pattern, text_clean)
-            all_dates.extend(dates)
-        
-        if all_dates:
-            # Smart date assignment
-            data['valid_until'] = all_dates[-1]  # Usually the last date is validity
-            if len(all_dates) > 1:
-                data['birth_date'] = all_dates[0]
-        
-        # Comprehensive insurance company detection
-        companies = [
-            'AOK', 'TK', 'Techniker', 'TECHNIKER KRANKENKASSE',
-            'Barmer', 'BARMER', 'DAK', 'DAK-GESUNDHEIT',
-            'KKH', 'HEK', 'Pronova', 'BKK', 'IKK',
-            'Knappschaft', 'SVLFG', 'BAYERN', 'SBK'
-        ]
-        
-        text_upper = text_clean.upper()
+        # Extract insurance company
+        companies = ['AOK', 'TK', 'Techniker', 'Barmer', 'DAK', 'KKH']
         for company in companies:
-            if company.upper() in text_upper:
+            if company.lower() in text_clean.lower():
                 data['insurance_company'] = company
                 break
-        
-        # Log successful extractions
-        found_fields = [k for k, v in data.items() if v]
-        logger.info(f"Enhanced parsing extracted: {found_fields}")
         
         return data
     
     def validate_card_type(self, image_bytes: bytes) -> Dict[str, Any]:
-        """Simple card validation - assume it's an insurance card"""
+        """Simple card validation"""
         return {
             "is_insurance_card": True,
             "card_type": "insurance",
@@ -476,13 +330,13 @@ class InsuranceCardService:
         }
     
     def create_validation_record(self, meeting_id: str, validation_data: Dict) -> str:
-        """Create a simple validation record"""
+        """Create validation record"""
         validation_id = f"val_{uuid.uuid4().hex[:8]}"
         logger.info(f"Created validation record {validation_id} for meeting {meeting_id}")
         return validation_id
     
     def get_validation_status(self, validation_id: str) -> Dict[str, Any]:
-        """Get validation status - simple implementation"""
+        """Get validation status"""
         return {
             "status": "completed",
             "created_at": datetime.utcnow().isoformat() + "Z",
